@@ -1,0 +1,14 @@
+{
+  "vaults": [
+    {
+      "slug": "my-vault",
+      "name": "My Vault",
+      "path": "C:\\Users\\me\\My Vault",
+      "description": "Notes about things.",
+      "homePage": "00_Index",
+      "coverImage": "assets/banner.png",
+      "titleProperty": null,
+      "coverProperty": "cover"
+    }
+  ]
+}

@@ -1,0 +1,586 @@
+@import "tailwindcss";
+@import "./vault-content.css";
+
+:root {
+  --bg: #ffffff;
+  --bg-rgb: 255 255 255;
+  --bg-secondary: #f8f8f8;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --accent: rgb(99, 102, 241);
+  --accent-bg: rgba(99, 102, 241, 0.1);
+}
+
+.dark {
+  --bg: #0f0f1a;
+  --bg-rgb: 15 15 26;
+  --bg-secondary: #13132a;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #e2e8f0;
+  --text-muted: rgba(255, 255, 255, 0.45);
+  --accent: rgb(99, 102, 241);
+  --accent-bg: rgba(99, 102, 241, 0.15);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ─── Vault Viewer Layout ───────────────────────────────────── */
+
+.vault-panels {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Mobile drawers */
+@media (max-width: 768px) {
+  .vault-sidebar {
+    position: fixed;
+    top: 50px;
+    bottom: 0;
+    left: 0;
+    z-index: 45;
+    width: 82%;
+    max-width: 320px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+  .vault-sidebar.is-open { transform: translateX(0); }
+
+  .vault-graph-panel {
+    position: fixed;
+    top: 50px;
+    bottom: 0;
+    right: 0;
+    z-index: 45;
+    width: 82%;
+    max-width: 340px;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+  .vault-graph-panel.is-open { transform: translateX(0); }
+
+  /* Ensure mobile drawers show when open even with Tailwind 'hidden' */
+  .vault-sidebar.is-open,
+  .vault-graph-panel.is-open {
+    display: flex !important;
+    flex-direction: column;
+  }
+}
+
+/* ─── Vault Content: Banner ──────────────────────────────────── */
+
+.vault-banner {
+  position: relative;
+  width: 100%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.vault-banner-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgb(var(--bg-rgb)) 0%,
+    rgb(var(--bg-rgb) / 0.55) 22%,
+    rgb(var(--bg-rgb) / 0) 58%
+  );
+}
+
+.vault-banner-title {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 2rem;
+  right: 2rem;
+  font-size: 3em;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0,0,0,.6);
+  z-index: 1;
+}
+
+/* ─── Vault Content: Typography ──────────────────────────────── */
+
+.vault-article {
+  padding: 2rem 2.5rem;
+  max-width: 72ch;
+  margin: 0 auto;
+  color: var(--text);
+  line-height: 1.75;
+}
+
+.vault-article.wide-page { max-width: 100%; }
+
+/* Banner renders outside .vault-article (its own segment), so it spans the full
+   content panel. .vault-banner already has width: 100%. */
+.vault-banner { max-height: 40vh; }
+.vault-banner-wrap { width: 100%; }
+
+/* Título da página (h1 especial em páginas sem banner) */
+.vault-article .vault-page-title {
+  font-size: 3em;
+  font-weight: 800;
+  line-height: 1.15;
+  margin: 0 0 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+/* So ToC anchor jumps don't sit flush at the top of the scroll container. */
+.vault-article :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: 1rem; }
+
+.vault-article h1 { font-size: 1.875rem; font-weight: 800; margin: 1.5rem 0 0.75rem; }
+.vault-article h2 { font-size: 1.5rem;   font-weight: 700; margin: 1.5rem 0 0.5rem; }
+.vault-article h3 { font-size: 1.25rem;  font-weight: 600; margin: 1.25rem 0 0.5rem; }
+.vault-article h4, .vault-article h5, .vault-article h6 { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+.vault-article p  { margin: 0.75rem 0; }
+.vault-article ul { list-style: disc; padding-left: 1.5rem; margin: 0.75rem 0; }
+.vault-article ol { list-style: decimal; padding-left: 1.5rem; margin: 0.75rem 0; }
+.vault-article li { margin: 0.25rem 0; }
+.vault-article blockquote { border-left: 3px solid var(--accent); padding: 0.5rem 1rem; color: var(--text-muted); margin: 1rem 0; font-style: italic; }
+.vault-blockquote { border-left: 3px solid var(--accent); padding: 0.5rem 1rem; color: var(--text-muted); margin: 1rem 0; font-style: italic; }
+.vault-blockquote .vault-callout { font-style: normal; }
+.vault-article code { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 3px; padding: 0.15em 0.4em; font-size: 0.88em; }
+.vault-article pre  { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 1rem 0; }
+.vault-article pre code { background: none; border: none; padding: 0; }
+.vault-article a { color: rgb(165, 168, 255); text-decoration: none; }
+.vault-article a:hover { text-decoration: underline; }
+.vault-article hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.vault-article table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+.vault-article th, .vault-article td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+.vault-article th { background: var(--bg-secondary); font-weight: 600; }
+.vault-article img { max-width: 100%; border-radius: 6px; margin: 0.5rem 0; }
+
+/* ─── Auto-generated folder index ───────────────────────────── */
+.vault-article ul.folder-index {
+  list-style: none;
+  padding-left: 0;
+  margin: 1rem 0;
+}
+.vault-article ul.folder-index li {
+  margin: 0;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.vault-article ul.folder-index li:last-child { border-bottom: none; }
+.vault-article ul.folder-index a {
+  display: inline-flex;
+  align-items: center;
+}
+.folder-index-icon { margin-right: 0.5rem; flex-shrink: 0; }
+
+/* ─── Image lightbox ────────────────────────────────────────── */
+.vault-article img, .canvas-image img { cursor: zoom-in; }
+/* Dataview navigation cards navigate on click — they don't lightbox. */
+.dv-card img { cursor: pointer; }
+/* Inline image galleries DO lightbox, keep zoom-in. */
+.dv-inline-gallery-card img { cursor: zoom-in; }
+.vault-lightbox {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out;
+  animation: lightbox-fade 0.15s ease;
+}
+.vault-lightbox img {
+  max-width: 92vw; max-height: 92vh;
+  object-fit: contain; border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  cursor: default;
+}
+@keyframes lightbox-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ─── Link hover preview ────────────────────────────────────── */
+.link-preview {
+  position: fixed; z-index: 70; width: 320px;
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  overflow: hidden; pointer-events: none;
+  animation: lightbox-fade 0.12s ease;
+}
+.link-preview-img { width: 100%; height: 130px; object-fit: cover; display: block; }
+.link-preview-body { padding: 0.65rem 0.85rem; }
+.link-preview-title { font-weight: 700; font-size: 0.92rem; color: var(--text); margin-bottom: 0.3rem; }
+.link-preview-snippet { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.link-preview-url { font-size: 0.78rem; color: var(--text-muted); word-break: break-all; }
+.link-preview-favicon-banner {
+  width: 100%; height: 72px;
+  display: flex; align-items: center; justify-content: center;
+}
+.link-preview-favicon { width: 56px; height: 56px; object-fit: contain; display: block; }
+.link-preview-desc {
+  font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; margin-bottom: 0.35rem;
+}
+.link-preview-domain { font-size: 0.74rem; color: var(--text-muted); word-break: break-all; }
+
+/* ─── Link preview skeleton ──────────────────────────────────── */
+.link-preview-skeleton .sk-img { width: 100%; height: 130px; background: rgba(127, 127, 140, 0.3); }
+.link-preview-skeleton .sk-line { height: 0.7rem; border-radius: 4px; background: rgba(127, 127, 140, 0.3); margin: 0.5rem 0.85rem; }
+.link-preview-skeleton .sk-line.short { width: 55%; }
+.link-preview-skeleton .sk-img, .link-preview-skeleton .sk-line { animation: sk-pulse 1.1s ease-in-out infinite; }
+@keyframes sk-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+/* ─── Gallery page-level filter bar (Notion-style) ───────────── */
+.dv-filterbar {
+  position: relative;
+  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+  margin: 1rem 0 1.25rem; padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-secondary);
+}
+.dv-filter-label {
+  font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-muted); margin-right: 0.1rem;
+}
+.dv-filter-chips { display: contents; }
+
+/* "+ Adicionar filtro" pill */
+.dv-filter-add {
+  font-size: 0.8rem; font-weight: 500;
+  color: var(--accent); cursor: pointer;
+  border: 1px dashed var(--accent); background: transparent;
+  border-radius: 999px; padding: 0.3rem 0.8rem;
+  transition: background 0.12s, color 0.12s;
+}
+.dv-filter-add:hover { background: var(--accent-bg); }
+
+/* Popover menu of available properties */
+.dv-filter-menu {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0.8rem;
+  display: none; flex-direction: column;
+  min-width: 180px; max-height: 280px; overflow-y: auto;
+  padding: 0.3rem; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.dv-filter-menu.is-open { display: flex; }
+.dv-filter-menu-item {
+  display: block; width: 100%; text-align: left;
+  font-size: 0.82rem; color: var(--text); cursor: pointer;
+  background: transparent; border: none; border-radius: 6px;
+  padding: 0.4rem 0.6rem; transition: background 0.1s;
+}
+.dv-filter-menu-item:hover { background: var(--bg-secondary); }
+
+/* Active filter chip */
+.dv-filter-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  border: 1px solid var(--accent); background: var(--accent-bg);
+  border-radius: 999px; padding: 0.2rem 0.35rem 0.2rem 0.7rem;
+}
+.dv-filter-chip-label {
+  font-size: 0.78rem; font-weight: 600; color: var(--accent);
+}
+.dv-filter-chip select {
+  appearance: none; -webkit-appearance: none;
+  padding: 0.2rem 1.5rem 0.2rem 0.55rem;
+  border-radius: 999px; font-size: 0.78rem; font-weight: 500;
+  border: 1px solid var(--border); background-color: var(--bg);
+  color: var(--text); cursor: pointer; max-width: 230px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.55rem center;
+  transition: border-color 0.12s;
+}
+.dv-filter-chip select:hover { border-color: var(--accent); }
+.dv-filter-chip select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dv-filter-chip select option { background: var(--bg); color: var(--text); }
+.dv-filter-chip-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.1rem; height: 1.1rem; font-size: 0.7rem; line-height: 1;
+  color: var(--text-muted); cursor: pointer;
+  background: transparent; border: none; border-radius: 999px;
+  transition: color 0.12s;
+}
+.dv-filter-chip-remove:hover { color: var(--accent); }
+
+.dv-filter-count { font-size: 0.78rem; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+.dv-filter-clear {
+  font-size: 0.78rem; font-weight: 600; color: var(--accent);
+  cursor: pointer; border: 1px solid var(--accent);
+  background: var(--accent-bg); border-radius: 999px;
+  padding: 0.25rem 0.8rem; transition: background 0.12s, color 0.12s;
+}
+.dv-filter-clear:hover { background: var(--accent); color: #fff; }
+
+/* ─── Vault Content: Custom elements ────────────────────────── */
+
+.vault-dead-link {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.vault-columns {
+  display: flex;
+  gap: 1.5rem;
+  margin: 1rem 0;
+  align-items: flex-start;
+}
+
+.vault-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.vault-figure {
+  margin: 1.25rem 0;
+  border: 1px solid var(--border);
+  display: table; /* shrink-wraps to image width, keeps caption same width */
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.vault-figure img {
+  display: block;
+  max-width: 100%;
+  border-radius: 0;
+  margin: 0;
+}
+
+.vault-figure figcaption {
+  display: table-caption;
+  caption-side: bottom;
+  border: 1px solid var(--border);
+  border-top: none;
+  text-align: center;
+  padding: 0.55rem 1rem;
+  font-size: 0.92rem;
+  color: var(--text);
+  font-style: normal;
+}
+
+.dark .vault-figure,
+.dark .vault-figure figcaption {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ─── Mermaid Diagrams ───────────────────────────────────────── */
+
+.mermaid-diagram {
+  margin: 1.25rem 0;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+.mermaid-diagram svg { max-width: 100%; height: auto; }
+
+/* ─── Dataview Components ────────────────────────────────────── */
+
+.dv-wrapper { margin: 1.25rem 0; }
+
+.dv-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.dv-search {
+  flex: 1;
+  min-width: 140px;
+  max-width: 300px;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.dv-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.dv-count { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.4rem; }
+
+.dv-table-scroll { overflow-x: auto; }
+
+.dv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.dv-table th {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--border);
+  background: var(--bg-secondary);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.dv-table th:hover { color: var(--accent); }
+
+.dv-table td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.dv-table tr:hover td { background: var(--bg-secondary); }
+
+.dv-table a { color: rgb(165,168,255); text-decoration: none; }
+.dv-table a:hover { text-decoration: underline; }
+
+.dv-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dv-list li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.dv-list li:last-child { border-bottom: none; }
+
+.dv-error {
+  padding: 0.75rem 1rem;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 6px;
+  color: #f87171;
+  font-size: 0.85rem;
+  font-family: monospace;
+}
+
+/* ─── External link marker ───────────────────────────────────── */
+
+.vault-article a[href^="http"]::after,
+.dv-table a[href^="http"]::after,
+.canvas-text a[href^="http"]::after {
+  content: '↗';
+  font-size: 0.75em;
+  margin-left: 0.15em;
+  opacity: 0.6;
+  display: inline-block;
+}
+
+/* ─── Graph Panel ────────────────────────────────────────────── */
+
+.graph-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+}
+
+/* ─── Global Graph (full-panel) ───────────────────────────────── */
+
+.global-graph-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.global-graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.global-graph-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.global-graph-close {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+
+.global-graph-close:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.global-graph-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.global-graph {
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── Global Graph trigger (sidebar) ──────────────────────────── */
+
+.global-graph-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+
+.global-graph-trigger:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+/* ─── File Tree ──────────────────────────────────────────────── */
+
+.filetree-node {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  width: 100%;
+}
+
+.filetree-node:hover { background: var(--bg-secondary); color: var(--text); }
+.filetree-node.active { color: var(--accent); background: var(--accent-bg); }
+.filetree-node.is-folder { font-weight: 500; }

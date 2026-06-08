@@ -1,0 +1,278 @@
+/* ─── Properties block (collapsible frontmatter) ──────────────────────────── */
+.vault-properties {
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.vault-properties-summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  user-select: none;
+}
+
+.vault-properties-summary::-webkit-details-marker { display: none; }
+
+.vault-properties-chevron {
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+}
+
+.vault-properties[open] .vault-properties-chevron { transform: rotate(90deg); }
+
+.vault-properties-body {
+  padding: 0.3rem 0.9rem 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.vault-prop {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  font-size: 0.88rem;
+}
+
+.vault-prop + .vault-prop { border-top: 1px solid var(--border); }
+
+.vault-prop-key {
+  flex: 0 0 30%;
+  max-width: 220px;
+  color: var(--text-muted);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.vault-prop-val {
+  flex: 1;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.vault-prop-val a { color: rgb(165, 168, 255); text-decoration: none; }
+.vault-prop-val a:hover { text-decoration: underline; }
+
+.vault-prop-thumb {
+  height: 56px;
+  width: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin: 0 0.35rem 0.35rem 0;
+  cursor: zoom-in;
+  vertical-align: middle;
+  display: inline-block;
+}
+
+/* ─── Vault Content: Callouts & Canvas ─── */
+
+/* ── Highlight (==texto==) ────────────────────────────────────────────────── */
+.vault-article mark, .vault-callout mark, .canvas-text mark {
+  background: rgba(255, 208, 0, 0.35);
+  color: inherit;
+  padding: 0 0.15em;
+  border-radius: 3px;
+}
+
+/* ── Callouts ───────────────────────────────────────────────────────────── */
+.vault-callout {
+  --callout-accent: #6366f1;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--callout-accent);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.vault-callout-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+  color: var(--callout-accent);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+summary.vault-callout-title {
+  cursor: pointer;
+  list-style: none;
+}
+
+summary.vault-callout-title::-webkit-details-marker {
+  display: none;
+}
+
+.vault-callout-fold {
+  margin-left: auto;
+  transition: transform 0.15s;
+}
+
+details.vault-callout:not([open]) .vault-callout-fold {
+  transform: rotate(-90deg);
+}
+
+.vault-callout-heading {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0;
+  display: inline;
+}
+
+.vault-callout-content {
+  font-size: 0.95rem;
+}
+
+.vault-callout-content > :first-child {
+  margin-top: 0;
+}
+
+.vault-callout-content > :last-child {
+  margin-bottom: 0;
+}
+
+/* Per-type accent colors */
+.vault-callout[data-callout="note"],
+.vault-callout[data-callout="info"],
+.vault-callout[data-callout="tip"],
+.vault-callout[data-callout="hint"] {
+  --callout-accent: #6366f1;
+}
+
+.vault-callout[data-callout="warning"],
+.vault-callout[data-callout="caution"] {
+  --callout-accent: #e9973f;
+}
+
+.vault-callout[data-callout="danger"],
+.vault-callout[data-callout="error"] {
+  --callout-accent: #fb464c;
+}
+
+.vault-callout[data-callout="success"],
+.vault-callout[data-callout="check"],
+.vault-callout[data-callout="done"] {
+  --callout-accent: #44cf6e;
+}
+
+.vault-callout[data-callout="quote"],
+.vault-callout[data-callout="cite"] {
+  --callout-accent: #8b8b8b;
+}
+
+.vault-callout[data-callout="question"],
+.vault-callout[data-callout="help"],
+.vault-callout[data-callout="faq"],
+.vault-callout[data-callout="example"] {
+  --callout-accent: #53dfdd;
+}
+
+/* userinput: caixa azulada, título só com ícone (texto oculto) */
+.vault-callout[data-callout="userinput"] {
+  background: rgba(45, 126, 255, 0.13);
+  border: 1px solid rgba(45, 126, 255, 0.28);
+}
+
+.vault-callout[data-callout="userinput"] .vault-callout-title-inner {
+  display: none;
+}
+
+.vault-callout[data-callout="userinput"] .vault-callout-icon {
+  color: rgb(45, 126, 255);
+}
+
+.vault-callout[data-callout="userinput"] .vault-callout-content {
+  padding: 0.7rem 1.5rem 1.25rem;
+}
+
+/* ── Canvas ─────────────────────────────────────────────────────────────── */
+.vault-canvas {
+  position: relative;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.canvas-node {
+  position: absolute;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  padding: 0.75rem 1rem;
+  font-size: clamp(0.6rem, 1.1vw, 0.95rem);
+  box-sizing: border-box;
+}
+
+.canvas-group {
+  background: transparent;
+  border: 2px dashed var(--border);
+  padding: 0;
+}
+
+.canvas-group-label {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.6rem;
+  font-weight: 700;
+  font-size: clamp(0.6rem, 1.2vw, 1rem);
+  color: var(--text);
+}
+
+.canvas-text {
+  overflow-y: auto;
+}
+
+.canvas-image {
+  padding: 0;
+}
+
+.canvas-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.canvas-card {
+  display: flex;
+  align-items: center;
+}
+
+/* Inner typography for canvas text nodes */
+.canvas-text h1,
+.canvas-text h2,
+.canvas-text h3 {
+  margin: 0 0 0.4rem 0;
+  line-height: 1.2;
+}
+
+.canvas-text p {
+  margin: 0 0 0.5rem 0;
+  line-height: 1.4;
+}
+
+.canvas-text a,
+.canvas-card a {
+  color: rgb(165, 168, 255);
+  text-decoration: none;
+}
+
+.canvas-text a:hover,
+.canvas-card a:hover {
+  text-decoration: underline;
+}
