@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from './ThemeToggle'
@@ -12,13 +13,24 @@ interface TopbarProps {
   vaultName?: string
   vaultSlug?: string
   pageName?: string
-  onSidebarToggle?: () => void
-  onGraphToggle?: () => void
 }
 
-export function Topbar({ username, isAdmin, vaultName, vaultSlug, pageName, onSidebarToggle, onGraphToggle }: TopbarProps) {
+export function Topbar({ username, isAdmin, vaultName, vaultSlug, pageName }: TopbarProps) {
   const router = useRouter()
   const { t } = useI18n()
+  const headerRef = useRef<HTMLElement>(null)
+
+  // Expose the header's actual height as --topbar-h so the mobile drawers can
+  // start below it (the header is taller on mobile, where it stacks into two rows).
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const apply = () => document.documentElement.style.setProperty('--topbar-h', `${el.offsetHeight}px`)
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -28,20 +40,10 @@ export function Topbar({ username, isAdmin, vaultName, vaultSlug, pageName, onSi
 
   return (
     <header
-      className="sticky top-0 z-20 flex h-[50px] shrink-0 items-center gap-2 border-b px-4 md:px-8"
+      ref={headerRef}
+      className="sticky top-0 z-20 flex shrink-0 flex-col gap-1 border-b px-4 py-2 md:h-[50px] md:flex-row md:items-center md:gap-2 md:py-0 md:px-8"
       style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', backdropFilter: 'blur(8px)' }}
     >
-      {/* Mobile: sidebar hamburger */}
-      {onSidebarToggle && (
-        <button
-          onClick={onSidebarToggle}
-          className="flex md:hidden h-8 w-8 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text)]"
-          aria-label={t('topbar.openSidebar')}
-        >
-          ☰
-        </button>
-      )}
-
       {/* Brand + breadcrumb */}
       <div className="flex min-w-0 items-center gap-1 text-[0.95rem] font-extrabold tracking-tight text-[var(--text)]">
         <Link href="/" className="shrink-0 hover:text-[var(--accent)]">Vault Viewer</Link>
@@ -64,32 +66,21 @@ export function Topbar({ username, isAdmin, vaultName, vaultSlug, pageName, onSi
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 md:ml-auto md:flex-nowrap md:justify-normal">
         <ThemeToggle />
         <LangToggle />
         {isAdmin && (
-          <a href="/admin" className="hidden md:block text-sm text-[var(--text-muted)] transition hover:text-[var(--text)]">
+          <a href="/admin" className="text-xs text-[var(--text-muted)] transition hover:text-[var(--text)] md:text-sm">
             {t('topbar.admin')}
           </a>
         )}
-        <span className="hidden md:block text-sm text-[var(--text-muted)]">{t('topbar.userBadge', { username })}</span>
+        <span className="text-xs text-[var(--text-muted)] md:text-sm">{t('topbar.userBadge', { username })}</span>
         <button
           onClick={handleLogout}
-          className="text-sm text-[var(--text-muted)] transition hover:text-[var(--text)]"
+          className="text-xs text-[var(--text-muted)] transition hover:text-[var(--text)] md:text-sm"
         >
           {t('topbar.logout')}
         </button>
-
-        {/* Mobile: graph button */}
-        {onGraphToggle && (
-          <button
-            onClick={onGraphToggle}
-            className="flex md:hidden h-8 w-8 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text)]"
-            aria-label={t('topbar.openGraph')}
-          >
-            ⬡
-          </button>
-        )}
       </div>
     </header>
   )

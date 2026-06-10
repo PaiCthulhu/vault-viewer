@@ -16,7 +16,7 @@ export function LangToggle({ className = '' }: { className?: string }) {
       onChange={e => setLocale(e.target.value)}
       aria-label={t('lang.toggle')}
       title={t('lang.toggle')}
-      className={`rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] px-2 py-1.5 text-sm text-[var(--text-muted)] transition hover:text-[var(--text)] ${className}`}
+      className={`rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] px-1.5 py-1 text-xs text-[var(--text-muted)] transition hover:text-[var(--text)] md:px-2 md:py-1.5 md:text-sm ${className}`}
     >
       {locales.map(l => (
         <option key={l.code} value={l.code}>

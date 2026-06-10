@@ -18,7 +18,7 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className={`rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-sm text-[var(--text-muted)] transition hover:text-[var(--text)] ${className}`}
+      className={`rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] px-2 py-1 text-xs text-[var(--text-muted)] transition hover:text-[var(--text)] md:px-3 md:py-1.5 md:text-sm ${className}`}
       aria-label={t('theme.toggle')}
     >
       {isDark ? t('theme.light') : t('theme.dark')}
