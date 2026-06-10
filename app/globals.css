@@ -41,7 +41,7 @@ body {
 @media (max-width: 768px) {
   .vault-sidebar {
     position: fixed;
-    top: 50px;
+    top: var(--topbar-h, 50px);
     bottom: 0;
     left: 0;
     z-index: 45;
@@ -53,11 +53,14 @@ body {
     border-right: 1px solid var(--border);
     background: var(--bg-secondary);
   }
-  .vault-sidebar.is-open { transform: translateX(0); }
+  /* `none` (not translateX(0)) so the open drawer stops being a containing
+     block for position:fixed descendants — e.g. the graph lightbox, which must
+     cover the whole viewport, not just the drawer. */
+  .vault-sidebar.is-open { transform: none; }
 
   .vault-graph-panel {
     position: fixed;
-    top: 50px;
+    top: var(--topbar-h, 50px);
     bottom: 0;
     right: 0;
     z-index: 45;
@@ -69,7 +72,7 @@ body {
     border-left: 1px solid var(--border);
     background: var(--bg-secondary);
   }
-  .vault-graph-panel.is-open { transform: translateX(0); }
+  .vault-graph-panel.is-open { transform: none; }
 
   /* Ensure mobile drawers show when open even with Tailwind 'hidden' */
   .vault-sidebar.is-open,
@@ -77,6 +80,156 @@ body {
     display: flex !important;
     flex-direction: column;
   }
+}
+
+/* Panel content wrapper: transparent to layout on mobile (drawer stays as
+   before), a flex column that the resizer/collapse logic targets on desktop. */
+.vault-panel-body { display: contents; }
+
+/* Collapsed-panel rail is desktop-only; hidden by default. */
+.vault-panel-rail { display: none; }
+
+/* Resize divider — a flex item sitting *between* two panels. Desktop-only:
+   display is toggled by our own (unlayered) media queries below, NOT by
+   Tailwind's `md:` variants — those live in @layer utilities and lose the
+   cascade against this unlayered rule. */
+.vault-resizer {
+  display: none;
+  flex: 0 0 6px;
+  align-self: stretch;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.vault-resizer:hover,
+.vault-resizer.is-dragging { background: var(--accent-bg); }
+/* Thin always-visible divider line so the grab area is discoverable. */
+.vault-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+  transition: background 0.15s ease;
+}
+.vault-resizer:hover::before,
+.vault-resizer.is-dragging::before { background: var(--accent); }
+
+/* Shared chevron pill — used by both the collapse button (on the divider) and
+   the expand button (on a collapsed panel's rail). */
+.vault-pill {
+  display: flex;
+  width: 20px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0.9;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.vault-pill:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
+
+/* Collapse button: position the pill centered on the divider strip. */
+.vault-resizer-collapse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+}
+.vault-resizer:hover .vault-resizer-collapse { opacity: 1; }
+
+/* Mobile floating edge buttons (FABs) — open the drawers. */
+.vault-fab {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30; /* above content, below the open drawer (45) + overlay (40) */
+  display: flex;
+  width: 38px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+.vault-fab-left { left: 0; border-left: none; border-radius: 0 10px 10px 0; }
+.vault-fab-right { right: 0; border-right: none; border-radius: 10px 0 0 10px; }
+.vault-fab:active { color: var(--text); }
+
+/* Desktop: resizable + collapsible side panels. */
+@media (min-width: 769px) {
+  /* Show the resize dividers, hide the mobile FABs. (Done here, unlayered,
+     instead of via Tailwind md:* variants — see note on .vault-resizer.) */
+  .vault-resizer { display: flex; }
+  .vault-fab { display: none; }
+
+  .vault-sidebar,
+  .vault-graph-panel {
+    flex-shrink: 0;
+    min-width: 0;
+  }
+  .vault-sidebar { width: var(--panel-w, 22%); }
+  .vault-graph-panel { width: var(--panel-w, 24%); }
+
+  .vault-panel-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Collapsed state: hide the panel content, show the clickable rail.
+     (The resize divider is a sibling and is simply not rendered when collapsed.) */
+  .is-collapsed .vault-panel-body { display: none; }
+  .vault-sidebar.is-collapsed { border-right: 1px solid var(--border); }
+  .vault-graph-panel.is-collapsed { border-left: 1px solid var(--border); }
+  .is-collapsed .vault-panel-rail {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    background: var(--bg-secondary);
+    border: none;
+    cursor: pointer;
+  }
+  .is-collapsed .vault-panel-rail:hover { background: var(--accent-bg); }
+  /* Expand pill anchored to the rail's inner edge so it never clips off-screen. */
+  .vault-panel-rail .vault-pill {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .vault-panel-rail-left .vault-pill { left: 0; }
+  .vault-panel-rail-right .vault-pill { right: 0; }
+  .vault-panel-rail:hover .vault-pill { color: var(--accent); border-color: var(--accent); opacity: 1; }
+}
+
+/* While dragging a resizer, lock the cursor and kill text selection. */
+body.vault-resizing,
+body.vault-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 /* ─── Vault Content: Banner ──────────────────────────────────── */
@@ -202,6 +355,21 @@ body {
   cursor: default;
 }
 @keyframes lightbox-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Expanded local-graph lightbox: windowed on desktop, full-screen on mobile
+   (a floating 88vw window only makes sense with desktop real estate). */
+.graph-lightbox-box {
+  width: 88vw;
+  height: 88vh;
+}
+@media (max-width: 768px) {
+  .graph-lightbox-box {
+    width: 100vw;
+    height: 100dvh;
+    border: none;
+    border-radius: 0;
+  }
+}
 
 /* ─── Link hover preview ────────────────────────────────────── */
 .link-preview {

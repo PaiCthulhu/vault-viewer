@@ -14,6 +14,13 @@ export const ptBR: Record<string, string> = {
   'topbar.openSidebar': 'Abrir sidebar',
   'topbar.openGraph': 'Abrir grafo',
 
+  // ── Side panels (resize / collapse) ──
+  'panel.resize': 'Arraste para redimensionar',
+  'panel.collapseSidebar': 'Recolher sidebar',
+  'panel.expandSidebar': 'Expandir sidebar',
+  'panel.collapseGraph': 'Recolher painel do grafo',
+  'panel.expandGraph': 'Expandir painel do grafo',
+
   // ── Theme toggle ──
   'theme.toggle': 'Alternar tema',
   'theme.light': '☀ Claro',

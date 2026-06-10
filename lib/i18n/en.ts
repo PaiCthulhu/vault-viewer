@@ -15,6 +15,13 @@ export const en: Record<string, string> = {
   'topbar.openSidebar': 'Open sidebar',
   'topbar.openGraph': 'Open graph',
 
+  // ── Side panels (resize / collapse) ──
+  'panel.resize': 'Drag to resize',
+  'panel.collapseSidebar': 'Collapse sidebar',
+  'panel.expandSidebar': 'Expand sidebar',
+  'panel.collapseGraph': 'Collapse graph panel',
+  'panel.expandGraph': 'Expand graph panel',
+
   // ── Theme toggle ──
   'theme.toggle': 'Toggle theme',
   'theme.light': '☀ Light',
