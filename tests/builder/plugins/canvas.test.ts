@@ -58,6 +58,49 @@ describe('renderCanvas', () => {
     const html = await renderCanvas(canvasJson, renderBody, resolveImage, linkResolver, 'myvault')
     expect(html).toContain('border-color: #a882ff') // color 6
   })
+
+  describe('ordem de leitura (order para o reflow mobile)', () => {
+    // Returns the `order` value of the canvas-node chunk containing `marker`.
+    function orderOf(html: string, marker: string): number {
+      const chunks = html.split('<div class="canvas-node')
+      const chunk = chunks.find(c => c.includes(marker))
+      expect(chunk, `node containing "${marker}"`).toBeDefined()
+      const m = chunk!.match(/order:\s*(\d+)/)
+      expect(m, `order in node containing "${marker}"`).toBeTruthy()
+      return Number(m![1])
+    }
+
+    it('atribui order top-to-bottom / left-to-right, com membros logo após seu grupo', async () => {
+      const json = JSON.stringify({
+        nodes: [
+          { id: 'top', type: 'text', text: 'MARK-topo', x: 0, y: 0, width: 100, height: 50 },
+          { id: 'g', type: 'group', x: 0, y: 100, width: 300, height: 200, label: 'MARK-grupo' },
+          { id: 'inRight', type: 'text', text: 'MARK-dentro-direita', x: 160, y: 120, width: 100, height: 50 },
+          { id: 'inLeft', type: 'text', text: 'MARK-dentro-esquerda', x: 10, y: 120, width: 100, height: 50 },
+          { id: 'bottom', type: 'text', text: 'MARK-fundo', x: 0, y: 400, width: 100, height: 50 },
+        ],
+        edges: [],
+      })
+      const html = await renderCanvas(json, renderBody, resolveImage, linkResolver, 'myvault')
+
+      expect(orderOf(html, 'MARK-topo')).toBe(0)
+      expect(orderOf(html, 'MARK-grupo')).toBe(1)
+      expect(orderOf(html, 'MARK-dentro-esquerda')).toBe(2)
+      expect(orderOf(html, 'MARK-dentro-direita')).toBe(3)
+      expect(orderOf(html, 'MARK-fundo')).toBe(4)
+    })
+
+    it('mantém grupos primeiro no DOM (z-index) mesmo com order presente', async () => {
+      const html = await renderCanvas(canvasJson, renderBody, resolveImage, linkResolver, 'myvault')
+      const groupIdx = html.indexOf('canvas-group')
+      const textIdx = html.indexOf('canvas-text')
+      expect(groupIdx).toBeLessThan(textIdx)
+      // image (y=-1080) reads first, text (y=-800) second, group (y=-300) last
+      expect(orderOf(html, 'canvas-image')).toBe(0)
+      expect(orderOf(html, '# Olá')).toBe(1)
+      expect(orderOf(html, 'canvas-group-label')).toBe(2)
+    })
+  })
 })
 
 describe('canvasTextSources', () => {

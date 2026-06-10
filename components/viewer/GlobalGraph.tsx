@@ -21,6 +21,12 @@ export function GlobalGraph({ slug, graphData, currentPath, onClose }: GlobalGra
   const { t } = useI18n()
   const [loading, setLoading] = useState(true)
 
+  // Keep the latest onClose without making it an effect dependency — otherwise
+  // every parent re-render (e.g. resizing the sidebar) would pass a new function
+  // reference and rebuild the whole graph from scratch (expensive cose relayout).
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -47,6 +53,7 @@ export function GlobalGraph({ slug, graphData, currentPath, onClose }: GlobalGra
     let cancelled = false
     let raf1 = 0
     let raf2 = 0
+    let observer: ResizeObserver | null = null
 
     function build() {
       import('cytoscape').then(({ default: cytoscape }) => {
@@ -121,9 +128,20 @@ export function GlobalGraph({ slug, graphData, currentPath, onClose }: GlobalGra
 
       cyRef.current.on('tap', 'node', (event: { target: { id: () => string } }) => {
         const id = event.target.id()
-        onClose()
+        onCloseRef.current()
         router.push(`/vault/${slug}/${id.split('/').map(encodeURIComponent).join('/')}`)
       })
+
+      // Sidebar/panel resizes change the container width without a window
+      // resize. Re-measure + re-center the camera (the same trick as the local
+      // graph) WITHOUT recomputing the layout.
+      observer = new ResizeObserver(() => {
+        const cy = cyRef.current
+        if (!cy) return
+        cy.resize()
+        cy.center()
+      })
+      observer.observe(containerRef.current)
       })
     }
 
@@ -139,12 +157,13 @@ export function GlobalGraph({ slug, graphData, currentPath, onClose }: GlobalGra
       cancelled = true
       cancelAnimationFrame(raf1)
       cancelAnimationFrame(raf2)
+      observer?.disconnect()
       if (cyRef.current) {
         cyRef.current.destroy()
         cyRef.current = null
       }
     }
-  }, [graphData, currentPath, slug, router, onClose])
+  }, [graphData, currentPath, slug, router])
 
   return (
     <div className="global-graph" style={{ position: 'relative' }}>

@@ -276,3 +276,59 @@ details.vault-callout:not([open]) .vault-callout-fold {
 .canvas-card a:hover {
   text-decoration: underline;
 }
+
+/* ─── Canvas: mobile reflow ──────────────────────────────────────
+   On narrow screens the desktop layout (absolute positions inside a fixed
+   aspect-ratio box) shrinks nodes beyond readability. Reflow to a vertical
+   stack in reading order — the builder emits `order: N` inline (top-to-bottom,
+   left-to-right; group members right after their group). The !importants are
+   needed to beat the builder's inline left/top/width/height/aspect-ratio. */
+@media (max-width: 768px) {
+  .vault-canvas {
+    aspect-ratio: auto !important;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.75rem;
+  }
+
+  .canvas-node {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    font-size: 0.85rem;
+    padding: 0.75rem 0.9rem;
+  }
+
+  /* Groups become section headers: just the label over a dashed divider.
+     (background !important kills the inline color tint; the inline
+     border-color survives, so the divider keeps the group's color.) */
+  .canvas-group {
+    border: none;
+    border-bottom: 2px dashed var(--border);
+    border-radius: 0;
+    background: transparent !important;
+    margin-top: 0.5rem;
+    padding: 0 0 0.35rem 0;
+    overflow: visible;
+  }
+  .canvas-group-label {
+    position: static;
+    font-size: 0.95rem;
+  }
+
+  .canvas-text {
+    overflow-y: visible;
+  }
+
+  .canvas-image img {
+    height: auto;
+    max-height: 45vh;
+    object-fit: contain;
+  }
+
+  /* Comfortable touch target for link cards. */
+  .canvas-card {
+    min-height: 44px;
+  }
+}

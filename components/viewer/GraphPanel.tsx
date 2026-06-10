@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useI18n } from '@/components/i18n/I18nProvider'
 import { GraphCanvas } from './GraphCanvas'
 import { BacklinksList } from './BacklinksList'
@@ -25,28 +25,32 @@ interface SectionHeaderProps {
   title: string
   open: boolean
   onToggle: () => void
+  /** Optional control rendered on the right of the header (e.g. the graph's expand button). */
+  action?: ReactNode
 }
 
-function SectionHeader({ title, open, onToggle }: SectionHeaderProps) {
+function SectionHeader({ title, open, onToggle, action }: SectionHeaderProps) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className="flex w-full items-center p-3 border-b shrink-0 text-left"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <span
-        className="mr-1.5 text-[0.7rem] leading-none"
-        style={{ color: 'var(--text-muted)' }}
-        aria-hidden
+    <div className="flex items-center border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex flex-1 items-center p-3 text-left"
       >
-        {open ? '▾' : '▸'}
-      </span>
-      <span className="text-[0.75rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-        {title}
-      </span>
-    </button>
+        <span
+          className="mr-1.5 text-[0.7rem] leading-none"
+          style={{ color: 'var(--text-muted)' }}
+          aria-hidden
+        >
+          {open ? '▾' : '▸'}
+        </span>
+        <span className="text-[0.75rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+          {title}
+        </span>
+      </button>
+      {action}
+    </div>
   )
 }
 
@@ -72,27 +76,35 @@ export function GraphPanel({ slug, graphData, currentPath, toc }: GraphPanelProp
 
   return (
     <div className="flex h-full flex-col" style={{ borderLeft: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
-      {/* Grafo local */}
-      <SectionHeader title={t('graph.local')} open={!collapsed.graph} onToggle={() => toggle('graph')} />
+      {/* Grafo local — expand (magnifier) button lives in the header so it works
+          on touch (mobile) too, not just on hover. */}
+      <SectionHeader
+        title={t('graph.local')}
+        open={!collapsed.graph}
+        onToggle={() => toggle('graph')}
+        action={
+          !collapsed.graph ? (
+            <button
+              onClick={() => setExpanded(true)}
+              title={t('graph.expand')}
+              aria-label={t('graph.expand')}
+              className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+            >
+              🔍
+            </button>
+          ) : undefined
+        }
+      />
       {!collapsed.graph && (
-        // Graph area — the expand (magnifier) button reveals on hover.
-        <div className="group relative shrink-0" style={{ height: '30%', minHeight: 180, maxHeight: '30%' }}>
+        <div className="shrink-0" style={{ height: '30%', minHeight: 180, maxHeight: '30%' }}>
           <GraphCanvas
             slug={slug}
             graphData={graphData}
             currentPath={currentPath}
           />
-          <button
-            onClick={() => setExpanded(true)}
-            title={t('graph.expand')}
-            aria-label={t('graph.expand')}
-            className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border opacity-0 transition group-hover:opacity-100"
-            style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-          >
-            🔍
-          </button>
         </div>
       )}
 
@@ -125,10 +137,8 @@ export function GraphPanel({ slug, graphData, currentPath, toc }: GraphPanelProp
           onClick={() => setExpanded(false)}
         >
           <div
-            className="relative flex flex-col overflow-hidden rounded-lg border"
+            className="graph-lightbox-box relative flex flex-col overflow-hidden rounded-lg border"
             style={{
-              width: '88vw',
-              height: '88vh',
               background: 'var(--bg)',
               borderColor: 'var(--border)',
               cursor: 'default',

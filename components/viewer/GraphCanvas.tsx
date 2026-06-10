@@ -46,6 +46,12 @@ export function GraphCanvas({ slug, graphData, currentPath }: GraphCanvasProps) 
   useEffect(() => {
     if (!containerRef.current || !local) return
 
+    // Keep the cytoscape viewport in sync when the panel is resized (the
+    // container changes size without a window resize, which cytoscape ignores).
+    // resize() re-measures the canvas keeping pan/zoom; center() re-anchors the
+    // small local graph so it stays roughly in place instead of drifting/clipping.
+    let observer: ResizeObserver | null = null
+
     const elements = [
       ...local.nodes.map(n => ({
         data: {
@@ -131,9 +137,18 @@ export function GraphCanvas({ slug, graphData, currentPath }: GraphCanvasProps) 
         const id = event.target.id()
         router.push(`/vault/${slug}/${id.split('/').map(encodeURIComponent).join('/')}`)
       })
+
+      observer = new ResizeObserver(() => {
+        const cy = cyRef.current
+        if (!cy) return
+        cy.resize()
+        cy.center()
+      })
+      observer.observe(containerRef.current)
     })
 
     return () => {
+      observer?.disconnect()
       if (cyRef.current) {
         cyRef.current.destroy()
         cyRef.current = null

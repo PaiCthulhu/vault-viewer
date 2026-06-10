@@ -46,6 +46,46 @@ function colorStyle(color: string | undefined): string {
   return `border-color: ${hex}; background-color: ${hex}1a;`
 }
 
+// Reading order for the mobile reflow: blocks (groups, or ungrouped nodes) are
+// sorted top-to-bottom then left-to-right; a group's members come right after
+// the group itself, themselves sorted top-to-bottom / left-to-right.
+function computeReadingOrder(nodes: CanvasNode[]): Map<string, number> {
+  const byPos = (a: CanvasNode, b: CanvasNode) => a.y - b.y || a.x - b.x
+  const groups = nodes.filter(n => n.type === 'group')
+  const others = nodes.filter(n => n.type !== 'group')
+
+  const containing = (n: CanvasNode): CanvasNode | undefined => {
+    const cx = n.x + n.width / 2
+    const cy = n.y + n.height / 2
+    return groups.find(
+      g => cx >= g.x && cx <= g.x + g.width && cy >= g.y && cy <= g.y + g.height,
+    )
+  }
+
+  interface Block { y: number; x: number; items: CanvasNode[] }
+  const blocks: Block[] = []
+  const groupBlock = new Map<CanvasNode, Block>()
+  for (const g of groups) {
+    const b: Block = { y: g.y, x: g.x, items: [g] }
+    blocks.push(b)
+    groupBlock.set(g, b)
+  }
+  for (const n of others) {
+    const g = containing(n)
+    if (g) groupBlock.get(g)!.items.push(n)
+    else blocks.push({ y: n.y, x: n.x, items: [n] })
+  }
+  for (const b of groupBlock.values()) {
+    b.items = [b.items[0], ...b.items.slice(1).sort(byPos)]
+  }
+  blocks.sort((a, b) => a.y - b.y || a.x - b.x)
+
+  const order = new Map<string, number>()
+  let i = 0
+  for (const b of blocks) for (const n of b.items) order.set(n.id, i++)
+  return order
+}
+
 export async function renderCanvas(
   jsonRaw: string,
   renderBody: (md: string) => Promise<string>,
@@ -88,6 +128,12 @@ export async function renderCanvas(
     ...nodes.filter(n => n.type !== 'group'),
   ]
 
+  // Ordem de leitura (top-to-bottom, left-to-right) emitida como `order` inline.
+  // No desktop o canvas é position:absolute e `order` é inerte; no mobile o CSS
+  // troca o container para flex-column e o `order` empilha os nós em ordem de
+  // leitura, com cada grupo virando um cabeçalho seguido de seus membros.
+  const readingOrder = computeReadingOrder(nodes)
+
   const parts: string[] = []
 
   for (const n of ordered) {
@@ -95,7 +141,7 @@ export async function renderCanvas(
     const top = pct(n.y - minY, H)
     const width = pct(n.width, W)
     const height = pct(n.height, H)
-    const posStyle = `left: ${left}; top: ${top}; width: ${width}; height: ${height};`
+    const posStyle = `left: ${left}; top: ${top}; width: ${width}; height: ${height}; order: ${readingOrder.get(n.id) ?? 0};`
     const clrStyle = colorStyle(n.color)
 
     if (n.type === 'group') {
