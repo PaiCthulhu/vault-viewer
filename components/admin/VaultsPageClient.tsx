@@ -5,6 +5,7 @@ import { Topbar } from '@/components/shared/Topbar'
 import { AdminSidebar } from './AdminSidebar'
 import { VaultsTable } from './VaultsTable'
 import { VaultDetailPanel } from './VaultDetailPanel'
+import { BuildAllModal } from './BuildAllModal'
 import { useI18n } from '@/components/i18n/I18nProvider'
 import type { VaultRow } from '@/lib/vault-admin'
 
@@ -18,6 +19,7 @@ export function VaultsPageClient({ initialVaults, currentUsername, isAdmin }: Pr
   const { t } = useI18n()
   const [vaults, setVaults] = useState(initialVaults)
   const [selected, setSelected] = useState<VaultRow | null | 'new'>(null)
+  const [showBuildAll, setShowBuildAll] = useState(false)
 
   const refresh = useCallback(async () => {
     const res = await fetch('/api/admin/vaults')
@@ -38,7 +40,17 @@ export function VaultsPageClient({ initialVaults, currentUsername, isAdmin }: Pr
         <main className="relative flex flex-1 flex-col overflow-hidden">
           {/* Toolbar */}
           <div className="flex flex-shrink-0 items-center gap-3 border-b px-5 py-3.5" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-            <h2 className="text-[1.05rem] font-bold text-[var(--text)] mr-auto">{t('admin.vaults.title')}</h2>
+            <h2 className="text-[1.05rem] font-bold text-[var(--text)]">{t('admin.vaults.title')}</h2>
+            <div className="flex flex-1 justify-center">
+              {vaults.length >= 1 && (
+                <button
+                  onClick={() => setShowBuildAll(true)}
+                  className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-4 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--accent-bg)]"
+                >
+                  {t('admin.vaults.buildAll')}
+                </button>
+              )}
+            </div>
             <button
               onClick={() => setSelected('new')}
               className="rounded-md bg-indigo-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-600 transition"
@@ -62,6 +74,13 @@ export function VaultsPageClient({ initialVaults, currentUsername, isAdmin }: Pr
               vault={panelVault}
               onClose={() => setSelected(null)}
               onSaved={refresh}
+            />
+          )}
+          {showBuildAll && (
+            <BuildAllModal
+              vaults={vaults.map((v) => ({ slug: v.slug, name: v.name }))}
+              onClose={() => setShowBuildAll(false)}
+              onFinished={refresh}
             />
           )}
         </main>
