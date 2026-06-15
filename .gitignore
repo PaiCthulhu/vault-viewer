@@ -50,8 +50,13 @@ data/
 public/vault-assets/
 # local vault definitions (machine-specific paths) — copy from the .example
 vaults.config.json
+# local dashboard state
+.dashboard.json
 
 # brainstorm/process artifacts
 .superpowers/
 docs/plans/
 docs/specs/
+
+# machine-specific agent instructions (deploy/PM2 details for this host)
+CLAUDE.local.md

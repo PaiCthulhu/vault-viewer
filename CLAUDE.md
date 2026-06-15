@@ -4,6 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 (A tool-agnostic copy of this guide lives in `AGENTS.md` for other AI coding agents.)
 
+> **Machine-specific notes:** host-specific operational details (how the production
+> instance runs under PM2, and the build/restart procedure) live in `CLAUDE.local.md`
+> (gitignored) and are imported below. The import is silently skipped on machines that
+> don't have the file.
+
+@CLAUDE.local.md
+
 ## This is NOT the Next.js you know
 
 This repo runs a recent Next.js (App Router, v16) with breaking changes — APIs, conventions, and file structure may differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing framework code, and heed deprecation notices.
