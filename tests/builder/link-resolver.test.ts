@@ -53,6 +53,12 @@ describe('LinkResolver.extractOutlinks', () => {
     const content = '[[Aldor]] aparece aqui e [[Aldor]] novamente'
     expect(lr.extractOutlinks(content)).toHaveLength(1)
   })
+
+  it('resolve link com pipe escapado de tabela [[Aldor\\|alias]]', () => {
+    const lr = new LinkResolver(files)
+    const content = '| [[Aldor\\|O Mago]] | nota |'
+    expect(lr.extractOutlinks(content)).toContain('Personagens/Aldor')
+  })
 })
 
 describe('LinkResolver.replaceWikilinks', () => {
@@ -89,6 +95,19 @@ describe('LinkResolver.replaceWikilinks', () => {
   it('link cross-page com heading [[Page#Heading|alias]]', () => {
     const lr = new LinkResolver(files)
     const result = lr.replaceWikilinks('[[Aldor#Secao Um|veja]]', 'myvault')
+    expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor#secao-um">veja</a>')
+  })
+
+  it('resolve pipe escapado de tabela [[Page\\|Alias]] (não vira dead-link)', () => {
+    const lr = new LinkResolver(files)
+    const result = lr.replaceWikilinks('| [[Personagens/Aldor\\|Márcia]] | nota |', 'myvault')
+    expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor">Márcia</a>')
+    expect(result).not.toContain('vault-dead-link')
+  })
+
+  it('resolve pipe escapado com heading [[Page#Heading\\|alias]]', () => {
+    const lr = new LinkResolver(files)
+    const result = lr.replaceWikilinks('| [[Aldor#Secao Um\\|veja]] | nota |', 'myvault')
     expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor#secao-um">veja</a>')
   })
 })

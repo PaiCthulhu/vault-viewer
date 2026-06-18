@@ -39,7 +39,9 @@ export class LinkResolver {
     const seen = new Set<string>()
     let match: RegExpExecArray | null
     while ((match = pattern.exec(content)) !== null) {
-      const resolved = this.resolve(match[1].trim())
+      // Dentro de tabelas, o pipe do wikilink é escapado como `\|`; o regex
+      // captura a barra invertida no fim do alvo — removida aqui.
+      const resolved = this.resolve(match[1].replace(/\\\s*$/, '').trim())
       if (resolved) seen.add(resolved)
     }
     return [...seen]
@@ -49,8 +51,11 @@ export class LinkResolver {
     return content.replace(
       /\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g,
       (original, title, heading, alias) => {
-        const titleStr = (title ?? '').trim()
-        const headingStr = (heading ?? '').trim()
+        // Dentro de tabelas, o pipe do wikilink é escapado como `\|` (e `#` como
+        // `\#`); o regex captura a barra invertida no fim do título/heading que
+        // precede o pipe. Removida aqui para o alvo resolver corretamente.
+        const titleStr = (title ?? '').replace(/\\\s*$/, '').trim()
+        const headingStr = (heading ?? '').replace(/\\\s*$/, '').trim()
         const aliasStr = alias?.trim()
 
         // Sem título e sem heading: não é um wikilink válido, mantém original.

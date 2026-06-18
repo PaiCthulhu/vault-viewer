@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPreview, decodeEntities } from '../../lib/preview'
+import { buildPreview, buildSectionPreview, decodeEntities } from '../../lib/preview'
 
 describe('decodeEntities', () => {
   it('decodes the basic entity set', () => {
@@ -96,5 +96,53 @@ describe('buildPreview', () => {
     expect(snippet.length).toBeLessThanOrEqual(321)
     expect(snippet.endsWith('…')).toBe(true)
     expect(snippet).not.toContain('lore…') // cut at a space, not mid-word
+  })
+})
+
+describe('buildSectionPreview', () => {
+  const html =
+    '<h1 class="vault-page-title" id="page">Page</h1>' +
+    '<p>Intro before any section.</p>' +
+    '<h2 id="alfa">Alfa</h2>' +
+    '<p>Conteúdo do alfa.</p>' +
+    '<h3 id="alfa-um">Alfa Um</h3>' +
+    '<p>Sub do alfa.</p>' +
+    '<h2 id="beta">Beta</h2>' +
+    '<p>Conteúdo do beta.</p>'
+
+  it('extrai o heading e o corpo da seção alvo até o próximo heading de mesmo nível', () => {
+    const res = buildSectionPreview(html, 'alfa')
+    expect(res).not.toBeNull()
+    expect(res!.heading).toBe('Alfa')
+    // Inclui o conteúdo e a subseção (h3 é mais profundo), mas NÃO o beta (h2).
+    expect(res!.snippet).toContain('Conteúdo do alfa.')
+    expect(res!.snippet).toContain('Sub do alfa.')
+    expect(res!.snippet).not.toContain('Conteúdo do beta.')
+    expect(res!.snippet).not.toContain('Intro before any section.')
+  })
+
+  it('para uma subseção, vai só até o próximo heading de nível <= o dela', () => {
+    const res = buildSectionPreview(html, 'alfa-um')
+    expect(res!.heading).toBe('Alfa Um')
+    expect(res!.snippet).toContain('Sub do alfa.')
+    expect(res!.snippet).not.toContain('Conteúdo do beta.')
+    expect(res!.snippet).not.toContain('Conteúdo do alfa.')
+  })
+
+  it('captura imagem dentro da seção', () => {
+    const withImg =
+      '<h2 id="s">S</h2><p>x</p><img src="/vault-assets/in-section.png" alt=""><h2 id="t">T</h2>'
+    const res = buildSectionPreview(withImg, 's')
+    expect(res!.image).toBe('/vault-assets/in-section.png')
+  })
+
+  it('retorna null quando a seção não existe', () => {
+    expect(buildSectionPreview(html, 'inexistente')).toBeNull()
+  })
+
+  it('decodifica entidades no texto do heading', () => {
+    const h = '<h2 id="x">Caf&eacute; &amp; Bar</h2><p>corpo</p>'
+    const res = buildSectionPreview(h, 'x')
+    expect(res!.heading).toBe('Café & Bar')
   })
 })

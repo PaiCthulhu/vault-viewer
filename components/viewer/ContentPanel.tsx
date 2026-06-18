@@ -142,9 +142,15 @@ export function ContentPanel({ segments, css, isWidePage, slug }: ContentPanelPr
       clearTimer()
       hoverTimer.current = setTimeout(() => {
         if (currentAnchor.current !== anchor) return
+        // Split off a `#heading` fragment so it doesn't leak into the page path
+        // (a `[[Page#Heading]]` link → href `/vault/slug/Page#heading`).
+        const hashIdx = href.indexOf('#')
+        const section = hashIdx >= 0 ? decodeURIComponent(href.slice(hashIdx + 1)) : ''
+        const pathPart = hashIdx >= 0 ? href.slice(0, hashIdx) : href
+
         // Derive slug + path from the href segments. Falls back to the panel's
         // own vault slug, but a wiki-link may point at another vault.
-        const parts = href.split('/').filter(Boolean) // ['vault', '<slug>', ...path]
+        const parts = pathPart.split('/').filter(Boolean) // ['vault', '<slug>', ...path]
         if (parts.length < 2) return
         const targetSlug = decodeURIComponent(parts[1]) || slug
         const pagePath = parts.slice(2).map(decodeURIComponent).join('/')
@@ -152,8 +158,9 @@ export function ContentPanel({ segments, css, isWidePage, slug }: ContentPanelPr
 
         let p = previewCache.get(href)
         if (!p) {
+          const sectionParam = section ? `&section=${encodeURIComponent(section)}` : ''
           p = fetch(
-            `/api/vault/${encodeURIComponent(targetSlug)}/preview?path=${encodeURIComponent(pagePath)}`,
+            `/api/vault/${encodeURIComponent(targetSlug)}/preview?path=${encodeURIComponent(pagePath)}${sectionParam}`,
           ).then(r => {
             if (!r.ok) throw new Error(`preview ${r.status}`)
             return r.json() as Promise<PreviewData>

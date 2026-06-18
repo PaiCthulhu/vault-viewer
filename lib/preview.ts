@@ -105,3 +105,57 @@ export function buildPreview(html: string): PreviewPayload {
 
   return { image, imagePosition, snippet }
 }
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Extracts the HTML of the section that starts at the heading with `sectionId`,
+// up to (but not including) the next heading of the same or a higher level.
+// Returns the heading's plain text plus the section body HTML, or null if the
+// heading isn't found. Used for previewing `[[Page#Heading]]` links.
+export function extractSection(
+  html: string,
+  sectionId: string,
+): { heading: string; html: string } | null {
+  const headOpen = new RegExp(`<h([1-6])\\b[^>]*\\bid="${escapeRegExp(sectionId)}"[^>]*>`, 'i')
+  const m = headOpen.exec(html)
+  if (!m) return null
+  const level = Number(m[1])
+  const openEnd = m.index + m[0].length
+
+  // Heading text runs until its matching </hN>.
+  const close = new RegExp(`</h${m[1]}>`, 'i').exec(html.slice(openEnd))
+  const heading = decodeEntities(
+    (close ? html.slice(openEnd, openEnd + close.index) : '').replace(/<[^>]+>/g, ' '),
+  )
+    .replace(/\s+/g, ' ')
+    .trim()
+  const bodyStart = close ? openEnd + close.index + close[0].length : openEnd
+
+  // Section ends at the next heading whose level is <= this one's.
+  const nextHead = /<h([1-6])\b/gi
+  nextHead.lastIndex = bodyStart
+  let end = html.length
+  let nm: RegExpExecArray | null
+  while ((nm = nextHead.exec(html)) !== null) {
+    if (Number(nm[1]) <= level) {
+      end = nm.index
+      break
+    }
+  }
+
+  return { heading, html: html.slice(bodyStart, end) }
+}
+
+// Like buildPreview but scoped to a single section (a `#heading` target). Returns
+// null when the section heading doesn't exist, so callers can fall back to the
+// whole-page preview.
+export function buildSectionPreview(
+  html: string,
+  sectionId: string,
+): (PreviewPayload & { heading: string }) | null {
+  const section = extractSection(html, sectionId)
+  if (!section) return null
+  return { ...buildPreview(section.html), heading: section.heading }
+}
