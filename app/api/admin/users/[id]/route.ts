@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { dbGetUserById, dbUpdateUser, dbDeleteUser } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-guard'
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const { id } = await params
   const userId = parseInt(id, 10)
   if (isNaN(userId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
@@ -27,6 +31,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const { id } = await params
   const userId = parseInt(id, 10)
   if (isNaN(userId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 })

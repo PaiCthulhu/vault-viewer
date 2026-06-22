@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { verifyToken, COOKIE_NAME } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-guard'
 import type { VaultsConfigFile } from '@/types'
 
 const REBUILD_TIMEOUT_MS = 300_000
@@ -18,11 +17,8 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   // --- Auth guard (admin-only) ---
-  const cookieStore = await cookies()
-  const token = cookieStore.get(COOKIE_NAME)?.value
-  const payload = token ? await verifyToken(token) : null
-  if (!payload) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-  if (!payload.isAdmin) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+  const denied = await requireAdmin()
+  if (denied) return denied
 
   const { slug } = await params
 

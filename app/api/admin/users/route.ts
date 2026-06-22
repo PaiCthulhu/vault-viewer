@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { dbGetAllUsers, dbCreateUser, dbGetUserPermissions } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-guard'
 import type { UserPublic } from '@/types'
 
 export async function GET() {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const users = dbGetAllUsers()
   const result: UserPublic[] = users.map((u) => ({
     id: u.id,
@@ -16,6 +20,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const body = await request.json().catch(() => null)
   if (!body?.username || !body?.password) {
     return NextResponse.json({ error: 'username e password são obrigatórios' }, { status: 400 })

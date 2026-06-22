@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import fs from 'fs'
 import path from 'path'
-import { verifyToken, COOKIE_NAME } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-guard'
 import type { VaultsConfigFile } from '@/types'
 
 /**
@@ -21,15 +20,6 @@ export function validateTitleProperty(
     return { error: 'titleProperty inválido (use até 40 caracteres: letras, números, espaço, ponto, hífen)' }
   }
   return { value: trimmed }
-}
-
-async function requireAdmin(): Promise<NextResponse | null> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(COOKIE_NAME)?.value
-  const payload = token ? await verifyToken(token) : null
-  if (!payload) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-  if (!payload.isAdmin) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-  return null
 }
 
 export async function PATCH(
