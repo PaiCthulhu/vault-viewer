@@ -23,6 +23,22 @@
   --accent-bg: rgba(99, 102, 241, 0.15);
 }
 
+/* Obsidian's variable names, so vault CSS written for the app (a DataviewJS
+   view.css, the <style> a gallery script injects) resolves here too. Defined
+   once on :root: next-themes puts `.dark` on <html> as well, so the var()s
+   below pick up the active theme. */
+:root {
+  --background-primary: var(--bg);
+  --background-secondary: var(--bg-secondary);
+  --background-modifier-border: var(--border);
+  --background-modifier-hover: color-mix(in srgb, var(--text) 7.5%, transparent);
+  --text-normal: var(--text);
+  --text-accent: var(--accent);
+  --interactive-accent: var(--accent);
+  --font-ui-small: 13px;
+  --font-ui-smaller: 12px;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -270,7 +286,9 @@ body.vault-resizing * {
 
 .vault-article {
   padding: 2rem 2.5rem;
-  max-width: 72ch;
+  /* Obsidian's readable line width: a note's cssclass (on this element) can
+     widen the page by setting --file-line-width, e.g. from a view.css. */
+  max-width: var(--file-line-width, 72ch);
   margin: 0 auto;
   color: var(--text);
   line-height: 1.75;

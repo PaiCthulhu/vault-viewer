@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import vm from 'vm'
 import type { PageMeta } from '../types'
 
@@ -181,6 +183,9 @@ function pageToProxy(p: PageMeta, vaultSlug: string): Record<string, unknown> {
       ext: 'md',
       link: `<a href="/vault/${vaultSlug}/${encodeURIComponent(p.path).replace(/%2F/gi, '/')}">${p.title}</a>`,
       tags: p.tags,
+      // O frontmatter cru, como o file.frontmatter do Dataview (o resto do proxy
+      // espalha allFields no topo).
+      frontmatter: p.frontmatter,
     },
     ...p.allFields,
     tags: p.tags,
@@ -371,6 +376,12 @@ function escapeAttr(s: string): string {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
 }
 
+// Propriedades DOM que são espelho de um atributo (`a.href = x` grava `href`).
+// Sem isso a atribuição fica numa propriedade solta que o toHTML não vê.
+const REFLECTED_PROPS = ['href', 'src', 'title', 'target', 'rel', 'type', 'placeholder', 'value', 'loading', 'alt', 'name'] as const
+// Atributos booleanos: presentes (vazios) quando true, ausentes quando false.
+const BOOLEAN_PROPS = ['open', 'disabled', 'checked', 'selected', 'hidden'] as const
+
 class El {
   tagName: string
   id = ''
@@ -380,8 +391,55 @@ class El {
   children: El[] = []
   attrs: Record<string, string> = {}
 
+  // Accessors definidos no prototype logo abaixo da classe. `declare` não emite
+  // campo, então não sombreia o accessor.
+  declare href: string
+  declare src: string
+  declare title: string
+  declare target: string
+  declare rel: string
+  declare type: string
+  declare placeholder: string
+  declare value: string
+  declare loading: string
+  declare alt: string
+  declare name: string
+  declare open: boolean
+  declare disabled: boolean
+  declare checked: boolean
+  declare selected: boolean
+  declare hidden: boolean
+
   constructor(tag: string) {
     this.tagName = tag
+  }
+
+  // classList mínimo sobre className (add/remove/toggle/contains).
+  get classList() {
+    const list = () => this.className.split(/\s+/).filter(Boolean)
+    const set = (cls: string[]) => { this.className = cls.join(' ') }
+    return {
+      add: (...names: string[]) => set([...list(), ...names.filter(n => !list().includes(n))]),
+      remove: (...names: string[]) => set(list().filter(c => !names.includes(c))),
+      contains: (name: string) => list().includes(name),
+      toggle: (name: string, force?: boolean) => {
+        const on = force ?? !list().includes(name)
+        if (on) { if (!list().includes(name)) set([...list(), name]) } else set(list().filter(c => c !== name))
+        return on
+      },
+    }
+  }
+
+  getAttribute(name: string): string | null {
+    return name in this.attrs ? this.attrs[name] : null
+  }
+
+  hasAttribute(name: string): boolean {
+    return name in this.attrs
+  }
+
+  removeAttribute(name: string): void {
+    delete this.attrs[name]
   }
 
   createEl(tag: string, opts?: ElOpts): El {
@@ -459,14 +517,71 @@ class El {
   }
 }
 
+for (const prop of REFLECTED_PROPS) {
+  Object.defineProperty(El.prototype, prop, {
+    get(this: El) { return this.attrs[prop] ?? '' },
+    set(this: El, v: unknown) { this.attrs[prop] = String(v) },
+    configurable: true,
+  })
+}
+for (const prop of BOOLEAN_PROPS) {
+  Object.defineProperty(El.prototype, prop, {
+    get(this: El) { return prop in this.attrs },
+    set(this: El, v: unknown) {
+      if (v) this.attrs[prop] = ''
+      else delete this.attrs[prop]
+    },
+    configurable: true,
+  })
+}
+
+// Lê um arquivo do vault pelo caminho relativo à raiz (como o Obsidian escreve:
+// barras normais, sem `/` inicial). Arquivo inexistente devolve undefined, como
+// o dv.io.load do Dataview, e o que resolve para fora do vault também: para o
+// Obsidian, esse arquivo não existe.
+async function readVaultFile(vaultRoot: string | undefined, rel: string, caller: string): Promise<string | undefined> {
+  if (!vaultRoot) throw new Error(`${caller}: vault root unavailable`)
+  const clean = String(rel).replace(/^\/+/, '')
+  const full = path.resolve(vaultRoot, clean)
+  const inside = path.relative(path.resolve(vaultRoot), full)
+  if (!inside || inside === '..' || inside.startsWith('..' + path.sep) || path.isAbsolute(inside)) {
+    return undefined
+  }
+  try {
+    return await fs.promises.readFile(full, 'utf-8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw err
+  }
+}
+
+// Os campos de um TFile do Obsidian que os scripts costumam ler.
+interface DvFile {
+  path: string
+  name: string
+  basename: string
+  extension: string
+}
+
+function makeDvFile(filePath: string): DvFile {
+  const name = filePath.split('/').pop() as string
+  const dot = name.lastIndexOf('.')
+  return {
+    path: filePath,
+    name,
+    basename: dot > 0 ? name.slice(0, dot) : name,
+    extension: dot > 0 ? name.slice(dot + 1) : '',
+  }
+}
+
 interface DvApp {
   metadataCache: {
-    getFirstLinkpathDest(linkpath: string, sourcePath: string): { path: string; name: string } | null
+    getFirstLinkpathDest(linkpath: string, sourcePath: string): DvFile | null
   }
   vault: {
     adapter: { getResourcePath(filePath: string): string }
     getResourcePath(file: { path: string }): string
-    getFileByPath(filePath: string): { path: string; name: string } | null
+    getFileByPath(filePath: string): DvFile | null
   }
   workspace: { openLinkText(linktext: string, sourcePath: string): void }
 }
@@ -476,8 +591,17 @@ function createDvContext(
   current: PageMeta,
   vaultSlug: string,
   resolveImage: (p: string) => string,
+  vaultRoot?: string,
 ) {
   const capturedCss: string[] = []
+  // Promises de dv.view/dv.io.load ainda em andamento. No Obsidian um
+  // `dv.view(...)` sem await desenha depois, no container vivo; aqui a saída é
+  // serializada uma vez, então o executeDataviewJS espera todas antes.
+  const pending: Promise<unknown>[] = []
+  const track = <T>(p: Promise<T>): Promise<T> => {
+    pending.push(p)
+    return p
+  }
 
   // Single ordered output sink: every dv.* call appends to `container` in call
   // order, exactly like Obsidian (where dv.header/dv.el/container.createEl all
@@ -490,6 +614,52 @@ function createDvContext(
 
   const dv = {
     container,
+    currentFilePath: current.path,
+    io: {
+      load(rel: string): Promise<string | undefined> {
+        return track(readVaultFile(vaultRoot, rel, 'dv.io.load'))
+      },
+    },
+    // Como o dv.view do Dataview: procura `<nome>.js` e depois `<nome>/view.js`;
+    // a view recebe (dv, input) e vê os globais do bloco. O `<nome>/view.css`
+    // vai para o CSS da página (no Obsidian ele vira um <style> no container),
+    // mesmo se a view falhar, e uma vez só por página. Qualquer falha vira um
+    // .dataview-error no container: a promise nunca rejeita, então um
+    // `dv.view(...)` sem await não vira unhandled rejection no builder.
+    view(viewName: string, input?: unknown): Promise<void> {
+      return track((async () => {
+        const name = String(viewName).replace(/\.js$/, '')
+        const simple = `${name}.js`
+        const complex = `${name}/view.js`
+        let viewPath = simple
+        try {
+          let source = await readVaultFile(vaultRoot, simple, 'dv.view')
+          if (source === undefined) {
+            viewPath = complex
+            source = await readVaultFile(vaultRoot, complex, 'dv.view')
+          }
+          if (source === undefined) {
+            container.createEl('div', {
+              cls: 'dataview-error',
+              text: `DataviewJS error: custom view not found for '${simple}' or '${complex}'`,
+            })
+            return
+          }
+          try {
+            const fn = vm.runInContext(`(async function (dv, input) {\n${source}\n})`, vmContext, { filename: viewPath })
+            await fn(dv, input)
+          } catch (err) {
+            container.createEl('div', { cls: 'dataview-error', text: `DataviewJS error in view '${viewPath}': ${err}` })
+          }
+          if (viewPath === complex) {
+            const css = await readVaultFile(vaultRoot, `${name}/view.css`, 'dv.view')
+            if (css && !capturedCss.includes(css)) capturedCss.push(css)
+          }
+        } catch (err) {
+          container.createEl('div', { cls: 'dataview-error', text: `DataviewJS error in view '${viewPath}': ${err}` })
+        }
+      })())
+    },
     pages(query?: string) {
       let filtered = allPages
       if (query) {
@@ -562,6 +732,11 @@ function createDvContext(
     createElement(tag: string): El {
       return new El(tag)
     },
+    // SVG: o El serializa a tag e os atributos como vieram (viewBox incluso); o
+    // parser HTML põe o namespace ao ler <svg>, então o ns pode ser ignorado.
+    createElementNS(_ns: string, tag: string): El {
+      return new El(tag)
+    },
     getElementById(id: string): El | null {
       return trackedById.get(id) ?? null
     },
@@ -588,7 +763,7 @@ function createDvContext(
           .split('#')[0]
           .trim()
         if (!cleaned) return null
-        return { path: cleaned, name: cleaned.split('/').pop() as string }
+        return makeDvFile(cleaned)
       },
     },
     vault: {
@@ -603,7 +778,7 @@ function createDvContext(
       getFileByPath(filePath: string) {
         const cleaned = String(filePath ?? '').trim()
         if (!cleaned) return null
-        return { path: cleaned, name: cleaned.split('/').pop() as string }
+        return makeDvFile(cleaned)
       },
     },
     workspace: {
@@ -616,10 +791,35 @@ function createDvContext(
   const pagesByPath = new Map<string, PageMeta>()
   for (const p of allPages) pagesByPath.set(p.path, p)
 
-  return {
+  // Globais do script. Date e URL vêm do realm do builder: o frontmatter (gray-
+  // matter) chega com Date de fora, e `v instanceof Date` só casa com o mesmo
+  // construtor. Não há `window`: quem precisar saber se há DOM vivo testa isso.
+  // O dv.view (acima) compila a view neste mesmo contexto, para ela ver os
+  // mesmos globais; ele só roda depois que o contexto existe.
+  const vmContext = vm.createContext({
     dv,
     document,
     app,
+    console,
+    Math,
+    JSON,
+    Array,
+    Object,
+    String,
+    Number,
+    Set,
+    Map,
+    RegExp,
+    Date,
+    URL,
+  })
+
+  return {
+    vmContext,
+    // Espera os dv.view/dv.io.load soltos, inclusive os que eles disparam.
+    settle: async () => {
+      while (pending.length > 0) await Promise.allSettled(pending.splice(0))
+    },
     getOutput: () => {
       // Everything (dv.el/header/paragraph/span/table/list + container.createEl)
       // lives in `container` in call order, so serialize it directly. `body` is
@@ -627,7 +827,10 @@ function createDvContext(
       stampCards(container, pagesByPath)
       stampCards(body, pagesByPath)
       const parts: string[] = []
-      const containerHtml = container.childrenHTML()
+      // O container só vira elemento quando o script mexeu nele (classe, id,
+      // atributo): `.codex .x` no CSS de uma view depende da classe da raiz.
+      const touched = container.className || container.id || Object.keys(container.attrs).length > 0
+      const containerHtml = touched ? container.toHTML() : container.childrenHTML()
       if (containerHtml) parts.push(containerHtml)
       const bodyHtml = body.childrenHTML()
       if (bodyHtml) parts.push(bodyHtml)
@@ -637,37 +840,54 @@ function createDvContext(
   }
 }
 
-export function executeDataviewJS(
+export interface DataviewJSOptions {
+  // Caminho do vault no disco: habilita dv.io.load e dv.view (sem ele, falham).
+  vaultRoot?: string
+  // Prazo para o bloco e o que ele deixou pendente terminarem. Uma promise que
+  // nunca resolve (ex.: esperar um evento, e o addEventListener daqui é no-op)
+  // esvaziaria o event loop e o builder sairia com código 0 sem gravar nada.
+  timeoutMs?: number
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000
+
+export async function executeDataviewJS(
   code: string,
   allPages: PageMeta[],
   current: PageMeta,
   vaultSlug: string,
   resolveImage: (p: string) => string,
-): { html: string; css: string } {
-  const { dv, document, app, getOutput, getCss } = createDvContext(
+  { vaultRoot, timeoutMs = DEFAULT_TIMEOUT_MS }: DataviewJSOptions = {},
+): Promise<{ html: string; css: string }> {
+  const { vmContext, settle, getOutput, getCss } = createDvContext(
     allPages,
     current,
     vaultSlug,
     resolveImage,
+    vaultRoot,
   )
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    vm.runInNewContext(code, {
-      dv,
-      document,
-      app,
-      console,
-      Math,
-      JSON,
-      Array,
-      Object,
-      String,
-      Number,
-      Set,
-      Map,
-      RegExp,
+    // Como o Dataview: bloco com `await` roda dentro de uma função async. No
+    // bloco síncrono, o valor de conclusão do script não é esperado.
+    let run: unknown
+    if (code.includes('await')) run = vm.runInContext(`(async () => {\n${code}\n})()`, vmContext)
+    else vm.runInContext(code, vmContext)
+    const done = (async () => {
+      await run
+      await settle()
+    })()
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`timed out after ${timeoutMs / 1000}s waiting for the script (a promise that never settles?)`)),
+        timeoutMs,
+      )
     })
+    await Promise.race([done, expired])
   } catch (err) {
     return { html: `<div class="dataview-error">DataviewJS error: ${err}</div>`, css: '' }
+  } finally {
+    clearTimeout(timer)
   }
   return { html: rewriteInternalLinks(getOutput(), vaultSlug), css: getCss() }
 }

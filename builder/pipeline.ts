@@ -38,6 +38,22 @@ function htmlToText(s: string): string {
     .toLowerCase()
 }
 
+// String.replace com substituto assíncrono. Os matches rodam em sequência, na
+// ordem do texto, para o CSS capturado sair na mesma ordem dos blocos.
+export async function replaceAsync(
+  s: string,
+  re: RegExp,
+  fn: (match: string, ...groups: string[]) => Promise<string>,
+): Promise<string> {
+  let out = ''
+  let last = 0
+  for (const m of s.matchAll(re)) {
+    out += s.slice(last, m.index) + await fn(m[0], ...m.slice(1))
+    last = m.index + m[0].length
+  }
+  return out + s.slice(last)
+}
+
 // Resolve a page's display title from the configured frontmatter property.
 // When `titleProperty` is a non-empty string and the frontmatter has a
 // non-empty value for it, use that; otherwise fall back to the filename title.
@@ -110,8 +126,8 @@ export async function buildVault(vault: VaultConfig): Promise<void> {
     // A recursão termina porque callouts removem o prefixo `> ` e columns removem as cercas.
     async function renderBody(md: string): Promise<string> {
       // 1. DataviewJS (recursivo — também pega blocos desempacotados de callouts/columns)
-      md = md.replace(/^```dataviewjs[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm, (_, code) => {
-        const { html, css: cssText } = executeDataviewJS(code, stubs, currentStub, vault.slug, p => imageHandler.resolve(p))
+      md = await replaceAsync(md, /^```dataviewjs[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm, async (_, code) => {
+        const { html, css: cssText } = await executeDataviewJS(code, stubs, currentStub, vault.slug, p => imageHandler.resolve(p), { vaultRoot: vault.path })
         if (cssText) css.push(cssText)
         return html
       })

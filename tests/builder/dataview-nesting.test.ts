@@ -4,6 +4,7 @@ import { renderColumns } from '../../builder/plugins/columns'
 import { renderCallouts } from '../../builder/plugins/callouts'
 import { applyObsidianCompat } from '../../builder/plugins/obsidian-compat'
 import { renderMarkdown } from '../../builder/markdown'
+import { replaceAsync } from '../../builder/pipeline'
 import type { PageMeta } from '../../builder/types'
 
 // Reproduz a composição do `makeRenderBody` do pipeline: o processamento de
@@ -34,8 +35,8 @@ const noopResolve = (p: string) => p
 // Mesma ordem de passos do pipeline real (dataview PRIMEIRO, recursivo).
 function makeRenderBody(css: string[]) {
   async function renderBody(md: string): Promise<string> {
-    md = md.replace(/^```dataviewjs[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm, (_, code) => {
-      const { html, css: cssText } = executeDataviewJS(code, stubs, current, 'myvault', noopResolve)
+    md = await replaceAsync(md, /^```dataviewjs[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm, async (_, code) => {
+      const { html, css: cssText } = await executeDataviewJS(code, stubs, current, 'myvault', noopResolve)
       if (cssText) css.push(cssText)
       return html
     })

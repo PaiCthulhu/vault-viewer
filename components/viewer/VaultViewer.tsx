@@ -17,6 +17,7 @@ import type { TreeNode } from '@/lib/vault-tree'
 import type { VaultConfig } from '@/types'
 import type { HtmlSegment } from '@/lib/parse-html-segments'
 import type { TocEntry } from '@/lib/toc'
+import { pageCssClasses } from '@/lib/css-classes'
 
 interface VaultViewerProps {
   vault: VaultConfig
@@ -64,9 +65,10 @@ export function VaultViewer({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [globalGraph])
 
-  const isWidePage = Array.isArray(page.frontmatter?.cssclasses)
-    ? (page.frontmatter.cssclasses as string[]).includes('wide-page')
-    : String(page.frontmatter?.cssclasses ?? '').includes('wide-page')
+  // The note's `cssclasses` go on the article, as in Obsidian (`wide-page` and
+  // a view.css that sets --file-line-width both widen it). A string, so
+  // ContentPanel's memoized segments stay stable across re-renders.
+  const articleClass = ['vault-article', ...pageCssClasses(page.frontmatter)].join(' ')
 
   function closeAll() {
     setSidebarOpen(false)
@@ -147,7 +149,7 @@ export function VaultViewer({
             <ContentPanel
               segments={segments}
               css={page.css}
-              isWidePage={isWidePage}
+              articleClass={articleClass}
               slug={vault.slug}
             />
           )}

@@ -2,16 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { useI18n } from '@/components/i18n/I18nProvider'
 import { DataviewTable } from './DataviewTable'
 import { DataviewList } from './DataviewList'
 import { LinkPreview, type LinkPreviewState, type PreviewData, type ExternalPreviewData } from './LinkPreview'
 import type { HtmlSegment } from '@/lib/parse-html-segments'
+import { galleryGroup } from '@/lib/gallery-group'
 
 interface ContentPanelProps {
   segments: HtmlSegment[]
   css: string
-  isWidePage: boolean
+  // 'vault-article' plus the note's cssclasses (see lib/css-classes.ts).
+  articleClass: string
   slug: string
 }
 
@@ -29,12 +32,21 @@ const externalPreviewCache = new Map<string, Promise<ExternalPreviewData>>()
 const PREVIEW_DELAY = 350
 const CARD_WIDTH = 320
 
-export function ContentPanel({ segments, css, isWidePage, slug }: ContentPanelProps) {
+export function ContentPanel({ segments, css, articleClass, slug }: ContentPanelProps) {
   const router = useRouter()
   const { t } = useI18n()
   const articleRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+
+  // Vault CSS written for Obsidian themes itself with `.theme-dark` /
+  // `.theme-light` on <body>; next-themes only sets `.dark`/`.light` on <html>.
+  const { resolvedTheme } = useTheme()
+  useEffect(() => {
+    if (!resolvedTheme) return
+    document.body.classList.toggle('theme-dark', resolvedTheme === 'dark')
+    document.body.classList.toggle('theme-light', resolvedTheme !== 'dark')
+  }, [resolvedTheme])
 
   // Hover-preview state.
   const [preview, setPreview] = useState<LinkPreviewState>(null)
@@ -522,6 +534,11 @@ export function ContentPanel({ segments, css, isWidePage, slug }: ContentPanelPr
         ).some(c => c.style.display !== 'none')
         gallery.style.display = anyVisible ? '' : 'none'
 
+        // A gallery that is a collapsible group's whole body hides the group
+        // too, instead of leaving an empty one behind.
+        const group = galleryGroup(gallery)
+        if (group) group.style.display = anyVisible ? '' : 'none'
+
         let prev = gallery.previousElementSibling
         if (prev === bar) prev = prev.previousElementSibling
         if (
@@ -656,8 +673,10 @@ export function ContentPanel({ segments, css, isWidePage, slug }: ContentPanelPr
       )
     }
 
-    let topmost: Node = firstGallery
-    let prev: Node | null = firstGallery.previousSibling
+    // A gallery that is a group's whole body anchors on the group, so the bar
+    // lands above the first group instead of inside it.
+    let topmost: Node = galleryGroup(firstGallery) ?? firstGallery
+    let prev: Node | null = topmost.previousSibling
     while (prev && isHeaderLike(prev)) {
       // Skip whitespace text nodes for the anchor, but keep walking past them.
       if (prev.nodeType === Node.ELEMENT_NODE) topmost = prev
@@ -708,28 +727,28 @@ export function ContentPanel({ segments, css, isWidePage, slug }: ContentPanelPr
           return (
             <div
               key={i}
-              className={`vault-article${isWidePage ? ' wide-page' : ''}`}
+              className={articleClass}
               dangerouslySetInnerHTML={{ __html: seg.html }}
             />
           )
         }
         if (seg.type === 'dataview-table') {
           return (
-            <div key={i} className={`vault-article${isWidePage ? ' wide-page' : ''}`}>
+            <div key={i} className={articleClass}>
               <DataviewTable columns={seg.columns} rows={seg.rows} vault={seg.vault} />
             </div>
           )
         }
         if (seg.type === 'dataview-list') {
           return (
-            <div key={i} className={`vault-article${isWidePage ? ' wide-page' : ''}`}>
+            <div key={i} className={articleClass}>
               <DataviewList items={seg.items} vault={seg.vault} />
             </div>
           )
         }
         return null
       }),
-    [segments, isWidePage],
+    [segments, articleClass],
   )
 
   return (

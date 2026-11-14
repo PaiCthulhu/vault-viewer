@@ -66,9 +66,9 @@ describe('executeDQL', () => {
 })
 
 describe('executeDataviewJS', () => {
-  it('dv.table() produz placeholder .dataview-result interativo', () => {
+  it('dv.table() produz placeholder .dataview-result interativo', async () => {
     const code = `dv.table(["Nome", "Tier"], dv.pages().map(p => [p.file.name, p.Tier]))`
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('class="dataview-result"')
     expect(html).toContain('data-type="table"')
     // Colunas codificadas em data-columns
@@ -81,12 +81,12 @@ describe('executeDataviewJS', () => {
     expect(rows.some((r: string[]) => r[0] === 'Aldor')).toBe(true)
   })
 
-  it('dv.pages() filtra por pasta', () => {
+  it('dv.pages() filtra por pasta', async () => {
     const code = `
       const ps = dv.pages('"Personagens"')
       dv.table(["N"], ps.map(p => [p.file.name]))
     `
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const rows = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8')) as string[][]
     const flat = rows.flat()
@@ -94,21 +94,21 @@ describe('executeDataviewJS', () => {
     expect(flat).not.toContain('Magus')
   })
 
-  it('dv.pages().where() filtra com predicado', () => {
+  it('dv.pages().where() filtra com predicado', async () => {
     const code = `
       const ps = dv.pages().where(p => p.Tier === 'Lendário')
       dv.list(ps.map(p => p.file.name))
     `
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const items = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
     expect(items).toContain('Aldor')
     expect(items).not.toContain('Ragnar')
   })
 
-  it('dv.list() produz placeholder .dataview-result interativo', () => {
+  it('dv.list() produz placeholder .dataview-result interativo', async () => {
     const code = `dv.list(["Alpha", "Beta"])`
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('class="dataview-result"')
     expect(html).toContain('data-type="list"')
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
@@ -116,29 +116,29 @@ describe('executeDataviewJS', () => {
     expect(items).toEqual(['Alpha', 'Beta'])
   })
 
-  it('dv.current() retorna dados da página atual', () => {
+  it('dv.current() retorna dados da página atual', async () => {
     const code = `dv.paragraph(dv.current().file.name)`
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('Aldor')
   })
 
-  it('captura CSS injetado via document.createElement("style")', () => {
+  it('captura CSS injetado via document.createElement("style")', async () => {
     const code = `
       const s = document.createElement('style')
       s.innerHTML = '.foo { color: red }'
       document.head.appendChild(s)
     `
-    const { css } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { css } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(css).toContain('.foo { color: red }')
   })
 
-  it('retorna div.dataview-error em caso de erro de script', () => {
+  it('retorna div.dataview-error em caso de erro de script', async () => {
     const code = `throw new Error("teste")`
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('dataview-error')
   })
 
-  it('.array() retorna um array JS puro (sem métodos DvArray)', () => {
+  it('.array() retorna um array JS puro (sem métodos DvArray)', async () => {
     const code = `
       const out = []
       const arr = dv.pages('"Personagens"').where(p => p.Tier === 'Lendário').array()
@@ -148,24 +148,24 @@ describe('executeDataviewJS', () => {
       out.push('name=' + arr[0].file.name)
       dv.paragraph(out.join('|'))
     `
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('isArray=true')
     expect(html).toContain('len=1')
     expect(html).toContain('hasWhere=undefined')
     expect(html).toContain('name=Aldor')
   })
 
-  it('.values é um alias para o array plano', () => {
+  it('.values é um alias para o array plano', async () => {
     const code = `
       const v = dv.pages('"Personagens"').values
       dv.paragraph('isArray=' + Array.isArray(v) + '|len=' + v.length)
     `
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('isArray=true')
     expect(html).toContain('len=2')
   })
 
-  it('p.file.folder: aninhado e top-level; p.file.ext = md', () => {
+  it('p.file.folder: aninhado e top-level; p.file.ext = md', async () => {
     const localPages = [
       ...pages,
       makePage({ path: 'TopLevel', title: 'TopLevel', frontmatter: {} }),
@@ -174,14 +174,14 @@ describe('executeDataviewJS', () => {
       const lines = dv.pages().map(p => p.file.name + '=>' + p.file.folder + ':' + p.file.ext)
       dv.list(lines)
     `
-    const { html } = executeDataviewJS(code, localPages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, localPages, current, 'myvault', noopResolve)
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const items = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
     expect(items).toContain('Aldor=>Personagens:md')
     expect(items).toContain('TopLevel=>:md')
   })
 
-  it('reescreve href de anchors internal-link (caminho cru -> /vault/)', () => {
+  it('reescreve href de anchors internal-link (caminho cru -> /vault/)', async () => {
     const code = `
       const card = dv.container.createEl('div', { cls: 'dv-card' })
       card.createEl('a', {
@@ -190,13 +190,13 @@ describe('executeDataviewJS', () => {
         attr: { 'data-href': 'Cosmologia/Astros/Donner', href: 'Cosmologia/Astros/Donner' },
       })
     `
-    const { html } = executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
     expect(html).toContain('href="/vault/drachegotter/Cosmologia/Astros/Donner"')
     // The standalone href is rewritten (data-href may stay raw, which is fine).
     expect(html).not.toMatch(/(\s)href="Cosmologia\/Astros\/Donner"/)
   })
 
-  it('decodifica entidades HTML no href antes de codificar a URL', () => {
+  it('decodifica entidades HTML no href antes de codificar a URL', async () => {
     // O serializador de El escapa `&` -> `&amp;` no valor do atributo. O rewrite
     // deve decodificar a entidade antes de encodeURIComponent, produzindo
     // `%26%20` (& seguido de espaço), NÃO `%26amp%3B`.
@@ -208,47 +208,47 @@ describe('executeDataviewJS', () => {
         attr: { href: 'Personalidades & Facções/Nações/Ntoto Ileri' },
       })
     `
-    const { html } = executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
     expect(html).toContain(
       'href="/vault/drachegotter/Personalidades%20%26%20Fac%C3%A7%C3%B5es/Na%C3%A7%C3%B5es/Ntoto%20Ileri"',
     )
     expect(html).not.toContain('%26amp%3B')
   })
 
-  it('não mexe em hrefs já absolutos ou http em internal-link', () => {
+  it('não mexe em hrefs já absolutos ou http em internal-link', async () => {
     const code = `
       const c = dv.container.createEl('div', { cls: 'dv-card' })
       c.createEl('a', { cls: 'internal-link', text: 'A', attr: { href: '/vault/x/Y' } })
       c.createEl('a', { cls: 'internal-link', text: 'B', attr: { href: 'https://example.com' } })
     `
-    const { html } = executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
     expect(html).toContain('href="/vault/x/Y"')
     expect(html).toContain('href="https://example.com"')
   })
 
-  it('dv.el() retorna elemento mutável (empty/createEl) refletido no output', () => {
+  it('dv.el() retorna elemento mutável (empty/createEl) refletido no output', async () => {
     const code = `
       const gallery = dv.el('div', '', { cls: 'dv-gallery' })
       gallery.empty()
       const card = gallery.createEl('div', { cls: 'dv-card' })
       card.createEl('span', { text: 'oi' })
     `
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('class="dv-gallery"')
     expect(html).toContain('class="dv-card"')
     expect(html).toContain('<span>oi</span>')
   })
 
-  it('não reescreve anchors sem classe internal-link', () => {
+  it('não reescreve anchors sem classe internal-link', async () => {
     const code = `
       const c = dv.container.createEl('div')
       c.createEl('a', { cls: 'outra-classe', text: 'A', attr: { href: 'Raw/Path' } })
     `
-    const { html } = executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
     expect(html).toContain('href="Raw/Path"')
   })
 
-  it('dv.table reescreve internal-links nas células ANTES do base64', () => {
+  it('dv.table reescreve internal-links nas células ANTES do base64', async () => {
     // Célula contendo um <a class="internal-link"> com href cru de vault. O href
     // deve ser reescrito para /vault/... DENTRO do payload base64 (o rewrite final
     // de output não cobre o conteúdo base64).
@@ -256,7 +256,7 @@ describe('executeDataviewJS', () => {
       const link = '<a class="internal-link" href="Cosmologia/Astros/Donner">Donner</a>'
       dv.table(["Astro"], [[link]])
     `
-    const { html } = executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
     expect(html).toContain('class="dataview-result"')
     expect(html).toContain('data-type="table"')
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
@@ -265,9 +265,9 @@ describe('executeDataviewJS', () => {
     expect(rows[0][0]).not.toMatch(/href="Cosmologia\/Astros\/Donner"/)
   })
 
-  it('dv.table normaliza células de array via renderCell', () => {
+  it('dv.table normaliza células de array via renderCell', async () => {
     const code = `dv.table(["Tags"], [[["a", "b", "c"]]])`
-    const { html } = executeDataviewJS(code, pages, current, 'myvault', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const rows = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
     expect(rows[0][0]).toBe('a, b, c')
@@ -324,8 +324,8 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
     return matches.map(m => JSON.parse(decodeURIComponent(m[1])))
   }
 
-  it('estampa data-props com chaves incluídas, normalizadas e Tags', () => {
-    const { html } = executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
+  it('estampa data-props com chaves incluídas, normalizadas e Tags', async () => {
+    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
     const props = decodeProps(html)
     expect(props).toHaveLength(2)
 
@@ -341,8 +341,8 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
     expect(aldor.Tags).toEqual(['Personagem', 'Herói'])
   })
 
-  it('exclui chaves de cover/ID/Created/URL e strings vazias', () => {
-    const { html } = executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
+  it('exclui chaves de cover/ID/Created/URL e strings vazias', async () => {
+    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
     const aldor = decodeProps(html).find(p => p.Tier?.[0] === 'Lendário')!
     expect(aldor.cover).toBeUndefined()
     expect(aldor.ID).toBeUndefined()
@@ -351,7 +351,7 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
     expect(aldor.Notas).toBeUndefined() // string vazia ignorada
   })
 
-  it('cartões em document.body também são estampados', () => {
+  it('cartões em document.body também são estampados', async () => {
     const code = `
       const gallery = document.body.createEl("div", { cls: "dv-gallery" });
       const card = gallery.createEl("div", { cls: "dv-card" });
@@ -361,21 +361,21 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
         attr: { "data-href": "Personalidades/Aldor" },
       });
     `
-    const { html } = executeDataviewJS(code, cardPages, cardPages[0], 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, cardPages, cardPages[0], 'drachegotter', noopResolve)
     const props = decodeProps(html)
     expect(props).toHaveLength(1)
     expect(props[0].Tier).toEqual(['Lendário'])
   })
 
-  it('usa o data-href cru (não o href reescrito) para resolver a página', () => {
+  it('usa o data-href cru (não o href reescrito) para resolver a página', async () => {
     // Mesmo após rewriteInternalLinks alterar href, data-props deve ter sido
     // resolvido pelo caminho cru e estar presente.
-    const { html } = executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
     expect(html).toContain('href="/vault/drachegotter/Personalidades/Aldor"')
     expect(html).toContain('data-props=')
   })
 
-  it('cartão sem página correspondente é ignorado silenciosamente', () => {
+  it('cartão sem página correspondente é ignorado silenciosamente', async () => {
     const code = `
       const card = dv.container.createEl("div", { cls: "dv-card" });
       card.createEl("a", {
@@ -384,7 +384,7 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
         attr: { "data-href": "Nao/Existe" },
       });
     `
-    const { html } = executeDataviewJS(code, cardPages, cardPages[0], 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, cardPages, cardPages[0], 'drachegotter', noopResolve)
     expect(html).toContain('class="dv-card"')
     expect(html).not.toContain('data-props=')
   })
@@ -427,13 +427,13 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
   })
   const galleryPages = [galleryPage]
 
-  it('renderiza duas imagens com src resolvido e classe da galeria', () => {
+  it('renderiza duas imagens com src resolvido e classe da galeria', async () => {
     const resolved: string[] = []
     const resolveImage = (p: string) => {
       resolved.push(p)
       return `/vault-assets/drachegotter/${p}`
     }
-    const { html, css } = executeDataviewJS(
+    const { html, css } = await executeDataviewJS(
       GALLERY_SCRIPT,
       galleryPages,
       galleryPage,
@@ -460,13 +460,13 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
     expect(css).toContain('--background-secondary')
   })
 
-  it('dedup: getElementById impede injeção dupla de CSS quando o script roda duas vezes', () => {
+  it('dedup: getElementById impede injeção dupla de CSS quando o script roda duas vezes', async () => {
     const resolveImage = (p: string) => `/vault-assets/drachegotter/${p}`
     // Roda o mesmo script duas vezes no MESMO contexto (mesma página).
     // Cada execução é envolvida em um bloco para isolar as declarações `const`,
     // mas o estado de `document` (head/getElementById) é compartilhado.
     const doubled = `{${GALLERY_SCRIPT}}\n{${GALLERY_SCRIPT}}`
-    const { css } = executeDataviewJS(
+    const { css } = await executeDataviewJS(
       doubled,
       galleryPages,
       galleryPage,
