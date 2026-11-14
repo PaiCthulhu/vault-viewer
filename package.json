@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^13.1.1",
     "cytoscape": "^3.34.0",
     "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
@@ -52,9 +52,9 @@
     "vitest": "^4.1.8"
   },
   "allowScripts": {
-    "better-sqlite3@12.10.0": true,
     "esbuild@0.28.0": true,
     "sharp@0.34.5": true,
-    "unrs-resolver@1.12.2": true
+    "unrs-resolver@1.12.2": true,
+    "better-sqlite3": false
   }
 }

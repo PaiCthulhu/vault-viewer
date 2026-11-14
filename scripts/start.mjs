@@ -34,5 +34,6 @@ process.env.PORT = resolvePort()
 
 // Run the Next.js CLI as if invoked as `next start` (commander reads process.argv).
 const nextBin = nodeRequire.resolve('next/dist/bin/next')
-process.argv = [process.argv[0], nextBin, 'start']
+// Bind the production viewer to loopback; public access enters through Caddy.
+process.argv = [process.argv[0], nextBin, 'start', '-H', '127.0.0.1']
 await import(pathToFileURL(nextBin).href)

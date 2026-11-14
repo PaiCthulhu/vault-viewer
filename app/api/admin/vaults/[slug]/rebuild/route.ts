@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { requireAdmin } from '@/lib/admin-guard'
+import { runRebuild } from '@/lib/rebuild'
 import type { VaultsConfigFile } from '@/types'
-
-const REBUILD_TIMEOUT_MS = 300_000
-const TAIL_CHARS = 600
-
-function tail(s: string): string {
-  return s.length > TAIL_CHARS ? s.slice(-TAIL_CHARS) : s
-}
 
 export async function POST(
   _request: NextRequest,
@@ -39,59 +32,16 @@ export async function POST(
     return NextResponse.json({ error: 'Vault não encontrado' }, { status: 404 })
   }
 
-  // --- Spawn the builder ---
-  // slug is already validated against ^[a-zA-Z0-9_-]+$ so it is safe to pass as
-  // an argv entry even with shell:true (needed so `npx` resolves on Windows).
-  return await new Promise<NextResponse>((resolve) => {
-    const child = spawn('npx', ['tsx', 'builder/index.ts', '--vault', slug], {
-      cwd: process.cwd(),
-      shell: true,
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-
-    const finish = (res: NextResponse) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve(res)
-    }
-
-    const timer = setTimeout(() => {
-      child.kill()
-      finish(
-        NextResponse.json(
-          { ok: false, error: 'Tempo esgotado no rebuild', output: tail(stderr || stdout) },
-          { status: 504 },
-        ),
-      )
-    }, REBUILD_TIMEOUT_MS)
-
-    child.stdout?.on('data', (d) => { stdout += d.toString() })
-    child.stderr?.on('data', (d) => { stderr += d.toString() })
-
-    child.on('error', (err) => {
-      finish(
-        NextResponse.json(
-          { ok: false, error: 'Falha ao iniciar o rebuild', output: tail(err.message) },
-          { status: 500 },
-        ),
-      )
-    })
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        finish(NextResponse.json({ ok: true, output: tail(stdout) }))
-      } else {
-        finish(
-          NextResponse.json(
-            { ok: false, output: tail(stderr || stdout) },
-            { status: 500 },
-          ),
-        )
-      }
-    })
-  })
+  // --- Run the builder (per-vault lock lives in lib/rebuild.ts) ---
+  // `wait`: a request that lands during another build gets the result of the
+  // extra build that covers it, so the UI never reports a build that did not run.
+  const r = await runRebuild(slug, { wait: true })
+  if (r.ok) return NextResponse.json({ ok: true, output: r.output })
+  if (r.timedOut) {
+    return NextResponse.json(
+      { ok: false, error: 'Tempo esgotado no rebuild', output: r.output },
+      { status: 504 },
+    )
+  }
+  return NextResponse.json({ ok: false, output: r.output }, { status: 500 })
 }
