@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { EventEmitter } from 'events'
-import { runRebuild, getBuildState } from '@/lib/rebuild'
+import { runRebuild, getBuildState, type RebuildResult } from '@/lib/rebuild'
 
 type FakeChild = EventEmitter & {
   stdout: EventEmitter
@@ -9,17 +9,27 @@ type FakeChild = EventEmitter & {
 }
 
 // Fake spawn: every call is recorded and stays "running" until finish() is called.
-function makeSpawn() {
+// `throwOn[i]`: call i returns a child whose stdout.on throws that value. The throw happens
+// inside buildOnce's Promise executor, after the spawn try, so that build rejects.
+// `onSpawn(i)` runs during call i, before it returns: a request arriving while that build runs.
+function makeSpawn(opts: { throwOn?: Record<number, unknown>; onSpawn?: (i: number) => void } = {}) {
   const calls: { slug: string; args: string[]; child: FakeChild }[] = []
   let running = 0
   let maxRunning = 0
   const spawnFn = ((_cmd: string, args: string[]) => {
+    const i = calls.length
     const child = new EventEmitter() as FakeChild
     child.stdout = new EventEmitter()
     child.stderr = new EventEmitter()
     child.kill = () => {}
     const slug = args[args.length - 1]
     calls.push({ slug, args, child })
+    opts.onSpawn?.(i)
+    if (opts.throwOn && i in opts.throwOn) {
+      const thrown = opts.throwOn[i]
+      child.stdout.on = () => { throw thrown }
+      return child
+    }
     running++
     maxRunning = Math.max(maxRunning, running)
     return child
@@ -171,5 +181,85 @@ describe('runRebuild', () => {
     await tick()
     s.finish(1)
     await tick()
+  })
+
+  describe('build que lança erro conta como build que falhou', () => {
+    afterEach(() => { vi.restoreAllMocks() })
+
+    it('no primeiro build: resolve ok:false, solta a trava e o pedido seguinte builda na hora', async () => {
+      const s = makeSpawn({ throwOn: { 0: new Error('stdout quebrado') } })
+      const before = Date.now()
+      expect(await runRebuild('rj1', { spawnFn: s.spawnFn })).toEqual({ ok: false, output: 'stdout quebrado' })
+      const st = getBuildState('rj1')
+      expect(st.running).toBeNull()
+      expect(st.lastAttemptStartedAt).toBeGreaterThanOrEqual(before)
+      const b = runRebuild('rj1', { spawnFn: s.spawnFn })
+      expect(s.calls).toHaveLength(2)
+      s.finish(1)
+      expect(await b).toEqual({ ok: true, output: '' })
+    })
+
+    it('no primeiro build: o pedido que chegou durante ele ganha o build extra, com o first dele', async () => {
+      let late: Promise<RebuildResult> | undefined
+      const s = makeSpawn({
+        throwOn: { 0: new Error('stdout quebrado') },
+        onSpawn: (i) => {
+          if (i === 0) late = runRebuild('rj4', { spawnFn: s.spawnFn, wait: true, first: ['Nova'] })
+        },
+      })
+      expect(await runRebuild('rj4', { spawnFn: s.spawnFn })).toEqual({ ok: false, output: 'stdout quebrado' })
+      await tick()
+      expect(s.calls).toHaveLength(2)
+      expect(s.calls[1].args.join('|')).toContain('--first|Nova')
+      s.finish(1)
+      expect(await late).toEqual({ ok: true, output: '' })
+    })
+
+    it('num build extra: quem esperava recebe ok:false e o pedido que chegou durante ele ganha o build dele', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      // Relógio que anda 1 s por leitura: sem ele os builds 0 e 1 começam no mesmo ms.
+      let clock = 1_000_000
+      vi.spyOn(Date, 'now').mockImplementation(() => (clock += 1000))
+      let late: Promise<RebuildResult> | undefined
+      let extraStartedAt: number | undefined
+      const s = makeSpawn({
+        throwOn: { 1: new Error('stdout quebrado') },
+        onSpawn: (i) => {
+          if (i !== 1) return
+          extraStartedAt = getBuildState('rj2').running!.startedAt
+          late = runRebuild('rj2', { spawnFn: s.spawnFn, wait: true, first: ['Nova'] })
+        },
+      })
+      const a = runRebuild('rj2', { spawnFn: s.spawnFn })
+      const waiter = runRebuild('rj2', { spawnFn: s.spawnFn, wait: true })
+      s.finish(0)
+      expect(await a).toEqual({ ok: true, output: '' })
+      expect(await waiter).toEqual({ ok: false, output: 'stdout quebrado' })
+      // O build 2 já começou mas não terminou: o último que terminou é o que lançou erro.
+      expect(getBuildState('rj2').lastAttemptStartedAt).toBe(extraStartedAt)
+      await tick()
+      expect(s.calls).toHaveLength(3)
+      expect(s.calls[2].args.join('|')).toContain('--first|Nova')
+      s.finish(2)
+      expect(await late).toEqual({ ok: true, output: '' })
+      await tick()
+      const st = getBuildState('rj2')
+      expect(st.running).toBeNull()
+      expect(st.queued).toBe(false)
+    })
+
+    it('erro longo guarda só o fim no output, como o spawn que falha', async () => {
+      const s = makeSpawn({ throwOn: { 0: new Error('a'.repeat(700) + 'FIM') } })
+      expect(await runRebuild('rj5', { spawnFn: s.spawnFn })).toEqual({ ok: false, output: 'a'.repeat(597) + 'FIM' })
+    })
+
+    it('valor lançado que não é Error vira texto, e um que nem vira texto ainda dá ok:false', async () => {
+      const s = makeSpawn({ throwOn: { 0: 'texto solto', 1: Object.create(null) } })
+      expect(await runRebuild('rj3', { spawnFn: s.spawnFn })).toEqual({ ok: false, output: 'texto solto' })
+      const r = await runRebuild('rj3', { spawnFn: s.spawnFn })
+      expect(r.ok).toBe(false)
+      expect(typeof r.output).toBe('string')
+      expect(getBuildState('rj3').running).toBeNull()
+    })
   })
 })

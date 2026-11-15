@@ -15,7 +15,8 @@ export interface PendingDeps {
 const defaultDeps: PendingDeps = {
   buildState: getBuildState,
   requestBuild(slug, first) {
-    // runRebuild nunca rejeita, mas um erro aqui não pode virar rejeição solta.
+    // runRebuild nunca rejeita (um build que lança erro volta como ok:false); o .catch fica de
+    // proteção, porque um erro aqui não pode virar rejeição solta.
     void runRebuild(slug, { first })
       .then(r => {
         if (!r.ok) console.error(`[pending-page] build de ${slug} falhou: ${r.output}`)

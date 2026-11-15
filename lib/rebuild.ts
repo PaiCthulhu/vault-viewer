@@ -68,6 +68,15 @@ function tail(s: string): string {
   return s.length > TAIL_CHARS ? s.slice(-TAIL_CHARS) : s
 }
 
+// Never throws: it runs inside catches that must not reject.
+function errorText(err: unknown): string {
+  try {
+    return String(err instanceof Error ? err.message : err)
+  } catch {
+    return 'erro sem descrição'
+  }
+}
+
 // Same Node binary as this server, with tsx as an import hook: no shell and no
 // `npx` (spawn with shell:true is deprecated, DEP0190).
 function buildOnce(slug: string, spawnFn: SpawnFn, first: string[] = []): Promise<RebuildResult> {
@@ -82,7 +91,7 @@ function buildOnce(slug: string, spawnFn: SpawnFn, first: string[] = []): Promis
         cwd: process.cwd(),
       })
     } catch (err) {
-      resolve({ ok: false, output: tail(err instanceof Error ? err.message : String(err)) })
+      resolve({ ok: false, output: tail(errorText(err)) })
       return
     }
 
@@ -110,6 +119,18 @@ function buildOnce(slug: string, spawnFn: SpawnFn, first: string[] = []): Promis
       finish(code === 0 ? { ok: true, output: tail(stdout) } : { ok: false, output: tail(stderr || stdout) })
     })
   })
+}
+
+// buildOnce settles through the child's events or the timer, but a throw it doesn't foresee
+// (a different spawnFn, an error inside the executor) would reject. That counts as a failed
+// build, so the lock is released (or the next extra build starts) and whoever waits gets
+// ok:false instead of hanging. The timer, if it was set, still kills the child.
+async function buildOrFail(slug: string, spawnFn: SpawnFn, first: string[]): Promise<RebuildResult> {
+  try {
+    return await buildOnce(slug, spawnFn, first)
+  } catch (err) {
+    return { ok: false, output: tail(errorText(err)) }
+  }
 }
 
 /**
@@ -148,7 +169,7 @@ export async function runRebuild(
 
   const startedAt = Date.now()
   st.running = { startedAt }
-  const result = await buildOnce(slug, spawnFn, (opts.first ?? []).slice(0, MAX_FIRST))
+  const result = await buildOrFail(slug, spawnFn, (opts.first ?? []).slice(0, MAX_FIRST))
   st.lastAttemptStartedAt = startedAt
 
   if (!st.queued) {
@@ -167,7 +188,7 @@ export async function runRebuild(
         st.first = []
         const extraStartedAt = Date.now()
         st.running = { startedAt: extraStartedAt }
-        const r = await buildOnce(slug, spawnFn, first)
+        const r = await buildOrFail(slug, spawnFn, first)
         st.lastAttemptStartedAt = extraStartedAt
         waiters?.resolve(r)
         if (!r.ok) console.error(`[rebuild] build extra de "${slug}" falhou: ${r.output}`)
