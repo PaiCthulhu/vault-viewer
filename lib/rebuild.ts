@@ -12,15 +12,57 @@ export interface RebuildResult {
 
 type SpawnFn = typeof nodeSpawn
 
-interface Slot {
-  /** A request arrived during the current build: run exactly one more after it. */
-  pending: boolean
-  /** Resolves with the result of that extra build; created by the first coalesced request. */
+export interface BuildState {
+  /** Build em andamento (ms epoch, gravado logo antes do spawn). */
+  running: { startedAt: number } | null
+  /** Há um build extra pedido para depois do atual. */
+  queued: boolean
+  /** Caminhos da frente do build extra. */
+  first: string[]
+  /** startedAt do último build que terminou, com sucesso ou não. */
+  lastAttemptStartedAt: number | null
+}
+
+interface VaultState extends BuildState {
+  /** Resolves with the result of the extra build; created by the first coalesced `wait` request. */
   next?: { promise: Promise<RebuildResult>; resolve: (r: RebuildResult) => void }
 }
 
-// Per-vault lock, in memory (one server process). Presence = a build is running.
-const slots = new Map<string, Slot>()
+const MAX_FIRST = 20
+
+// O estado fica em globalThis porque páginas e route handlers rodam em runtimes
+// diferentes do Turbopack, cada um com seu próprio cache de módulos: uma variável
+// de módulo seria uma cópia por runtime e os dois não veriam o mesmo build.
+// O registro de um vault não sai do mapa ao fim do build, para guardar lastAttemptStartedAt.
+const STATE_KEY = Symbol.for('vault-viewer.rebuild')
+type GlobalWithState = typeof globalThis & { [STATE_KEY]?: Map<string, VaultState> }
+
+function states(): Map<string, VaultState> {
+  const g = globalThis as GlobalWithState
+  return (g[STATE_KEY] ??= new Map<string, VaultState>())
+}
+
+function stateOf(slug: string): VaultState {
+  const m = states()
+  let st = m.get(slug)
+  if (!st) {
+    st = { running: null, queued: false, first: [], lastAttemptStartedAt: null }
+    m.set(slug, st)
+  }
+  return st
+}
+
+/** Cópia do estado do build do vault; vault sem estado → tudo vazio/null. */
+export function getBuildState(slug: string): BuildState {
+  const st = states().get(slug)
+  if (!st) return { running: null, queued: false, first: [], lastAttemptStartedAt: null }
+  return {
+    running: st.running ? { ...st.running } : null,
+    queued: st.queued,
+    first: [...st.first],
+    lastAttemptStartedAt: st.lastAttemptStartedAt,
+  }
+}
 
 function tail(s: string): string {
   return s.length > TAIL_CHARS ? s.slice(-TAIL_CHARS) : s
@@ -28,11 +70,15 @@ function tail(s: string): string {
 
 // Same Node binary as this server, with tsx as an import hook: no shell and no
 // `npx` (spawn with shell:true is deprecated, DEP0190).
-function buildOnce(slug: string, spawnFn: SpawnFn): Promise<RebuildResult> {
+function buildOnce(slug: string, spawnFn: SpawnFn, first: string[] = []): Promise<RebuildResult> {
   return new Promise((resolve) => {
     let child: ReturnType<SpawnFn>
     try {
-      child = spawnFn(process.execPath, ['--import', 'tsx', 'builder/index.ts', '--vault', slug], {
+      child = spawnFn(process.execPath, [
+        '--import', 'tsx', 'builder/index.ts',
+        ...first.flatMap((p) => ['--first', p]),
+        '--vault', slug,
+      ], {
         cwd: process.cwd(),
       })
     } catch (err) {
@@ -70,47 +116,64 @@ function buildOnce(slug: string, spawnFn: SpawnFn): Promise<RebuildResult> {
  * Rebuilds one vault, never two builds of the same vault at once. A request that
  * arrives while that vault is building returns `{ok:true, coalesced:true}` at
  * once and makes ONE more build run after the current one (however many arrive).
- * Different vaults do not block each other.
+ * Different vaults do not block each other. `first` lists notes the builder
+ * should write before the rest; those of coalesced requests are merged (arrival
+ * order, no repeats, at most 20) into the extra build.
  */
 export async function runRebuild(
   slug: string,
-  opts: { spawnFn?: SpawnFn; wait?: boolean } = {},
+  opts: { spawnFn?: SpawnFn; wait?: boolean; first?: string[] } = {},
 ): Promise<RebuildResult> {
   if (!/^[a-zA-Z0-9_-]+$/.test(slug)) {
     return { ok: false, output: 'Slug inválido' }
   }
   const spawnFn = opts.spawnFn ?? nodeSpawn
+  const st = stateOf(slug)
 
-  const running = slots.get(slug)
-  if (running) {
-    running.pending = true
-    if (!running.next) {
+  if (st.running) {
+    st.queued = true
+    for (const p of opts.first ?? []) {
+      if (st.first.length >= MAX_FIRST) break
+      if (!st.first.includes(p)) st.first.push(p)
+    }
+    if (!st.next) {
       let resolve!: (r: RebuildResult) => void
       const promise = new Promise<RebuildResult>((res) => { resolve = res })
-      running.next = { promise, resolve }
+      st.next = { promise, resolve }
     }
     // With `wait`, the caller gets the result of the build that covers its request.
-    if (opts.wait) return running.next.promise
+    if (opts.wait) return st.next.promise
     return { ok: true, output: '', coalesced: true }
   }
 
-  const slot: Slot = { pending: false }
-  slots.set(slug, slot)
-  const result = await buildOnce(slug, spawnFn)
+  const startedAt = Date.now()
+  st.running = { startedAt }
+  const result = await buildOnce(slug, spawnFn, (opts.first ?? []).slice(0, MAX_FIRST))
+  st.lastAttemptStartedAt = startedAt
 
-  // Follow-up builds run detached, still holding the lock; a failure goes to the log.
+  if (!st.queued) {
+    st.running = null
+    return result
+  }
+
+  // Follow-up builds run detached, still holding the lock (`running`); a failure goes to the log.
   void (async () => {
     try {
-      while (slot.pending) {
-        slot.pending = false
-        const waiters = slot.next
-        slot.next = undefined
-        const r = await buildOnce(slug, spawnFn)
+      while (st.queued) {
+        st.queued = false
+        const waiters = st.next
+        st.next = undefined
+        const first = st.first
+        st.first = []
+        const extraStartedAt = Date.now()
+        st.running = { startedAt: extraStartedAt }
+        const r = await buildOnce(slug, spawnFn, first)
+        st.lastAttemptStartedAt = extraStartedAt
         waiters?.resolve(r)
         if (!r.ok) console.error(`[rebuild] build extra de "${slug}" falhou: ${r.output}`)
       }
     } finally {
-      slots.delete(slug)
+      st.running = null
     }
   })()
 

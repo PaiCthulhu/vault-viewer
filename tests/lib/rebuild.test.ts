@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'events'
-import { runRebuild } from '@/lib/rebuild'
+import { runRebuild, getBuildState } from '@/lib/rebuild'
 
 type FakeChild = EventEmitter & {
   stdout: EventEmitter
@@ -10,7 +10,7 @@ type FakeChild = EventEmitter & {
 
 // Fake spawn: every call is recorded and stays "running" until finish() is called.
 function makeSpawn() {
-  const calls: { slug: string; child: FakeChild }[] = []
+  const calls: { slug: string; args: string[]; child: FakeChild }[] = []
   let running = 0
   let maxRunning = 0
   const spawnFn = ((_cmd: string, args: string[]) => {
@@ -19,7 +19,7 @@ function makeSpawn() {
     child.stderr = new EventEmitter()
     child.kill = () => {}
     const slug = args[args.length - 1]
-    calls.push({ slug, child })
+    calls.push({ slug, args, child })
     running++
     maxRunning = Math.max(maxRunning, running)
     return child
@@ -113,5 +113,63 @@ describe('runRebuild', () => {
     expect(s.calls).toHaveLength(2)
     s.finish(1)
     expect(await b).toMatchObject({ ok: true })
+  })
+
+  it('passa cada caminho de first como argumento próprio do spawn', async () => {
+    const s = makeSpawn()
+    const a = runRebuild('f1', { spawnFn: s.spawnFn, first: ['Jogos/A b', 'X'] })
+    expect(s.calls[0].args.slice(-6)).toEqual(['--first', 'Jogos/A b', '--first', 'X', '--vault', 'f1'])
+    s.finish(0)
+    await a
+  })
+
+  it('first dos pedidos juntados vai para o build extra, sem repetir', async () => {
+    const s = makeSpawn()
+    const a = runRebuild('f2', { spawnFn: s.spawnFn })
+    await runRebuild('f2', { spawnFn: s.spawnFn, first: ['A'] })
+    await runRebuild('f2', { spawnFn: s.spawnFn, first: ['B', 'A'] })
+    expect(getBuildState('f2')).toMatchObject({ queued: true, first: ['A', 'B'] })
+    s.finish(0)
+    await a
+    await tick()
+    const args = s.calls[1].args
+    expect(args.join('|')).toContain('--first|A|--first|B')
+    expect(getBuildState('f2').first).toEqual([])
+    s.finish(1)
+    await tick()
+  })
+
+  it('getBuildState: running durante o build e lastAttemptStartedAt depois, mesmo com falha', async () => {
+    const s = makeSpawn()
+    expect(getBuildState('st')).toEqual({ running: null, queued: false, first: [], lastAttemptStartedAt: null })
+    const before = Date.now()
+    const a = runRebuild('st', { spawnFn: s.spawnFn })
+    const during = getBuildState('st').running
+    expect(during).not.toBeNull()
+    expect(during!.startedAt).toBeGreaterThanOrEqual(before)
+    s.finish(0, 1)
+    await a
+    await tick()
+    const after = getBuildState('st')
+    expect(after.running).toBeNull()
+    expect(after.lastAttemptStartedAt).toBe(during!.startedAt)
+  })
+
+  it('duas cópias isoladas do módulo veem o mesmo estado', async () => {
+    const s = makeSpawn()
+    vi.resetModules()
+    const m1 = await import('@/lib/rebuild')
+    vi.resetModules()
+    const m2 = await import('@/lib/rebuild')
+    expect(m1).not.toBe(m2)
+    const a = m1.runRebuild('g', { spawnFn: s.spawnFn })
+    expect(m2.getBuildState('g').running).not.toBeNull()
+    expect(await m2.runRebuild('g', { spawnFn: s.spawnFn })).toMatchObject({ coalesced: true })
+    expect(s.calls).toHaveLength(1)
+    s.finish(0)
+    await a
+    await tick()
+    s.finish(1)
+    await tick()
   })
 })
