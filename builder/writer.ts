@@ -52,7 +52,8 @@ export function writeAssets(dataDir: string, assets: string[]): void {
 }
 
 // Apaga os .json de pages/ que não estão em `written` e as pastas que ficaram vazias
-// (nunca a própria pages/). É best-effort: falha ao apagar (EBUSY/EPERM) só avisa. Compara em minúsculas: no NTFS `Foo` e `foo` são o mesmo
+// (nunca a própria pages/). É best-effort: falha ao listar ou apagar (EBUSY/EPERM)
+// só avisa e a poda segue. Compara em minúsculas: no NTFS `Foo` e `foo` são o mesmo
 // arquivo, e renomear só a caixa de uma nota não pode apagar a página recém-gravada.
 export function prunePages(dataDir: string, written: Iterable<string>): number {
   const pagesDir = path.join(dataDir, 'pages')
@@ -62,7 +63,14 @@ export function prunePages(dataDir: string, written: Iterable<string>): number {
 
   let removed = 0
   const walk = (dir: string): void => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch (err) {
+      console.warn(`[poda] não listei ${dir}: ${(err as Error).message}`)
+      return
+    }
+    for (const entry of entries) {
       const abs = path.join(dir, entry.name)
       if (entry.isDirectory()) {
         walk(abs)

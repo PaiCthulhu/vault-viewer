@@ -97,6 +97,23 @@ describe('writeOutput', () => {
     expect(fs.existsSync(path.join(path.dirname(file), 'Beta.json'))).toBe(true)
   })
 
+  it('falha ao listar uma pasta na poda só avisa e o index.json sai', () => {
+    const pagesDir = path.join(TMP, 'test-vault', 'pages')
+    fs.mkdirSync(path.join(pagesDir, 'Trancada'), { recursive: true })
+    const realRead = fs.readdirSync
+    vi.spyOn(fs, 'readdirSync').mockImplementation(((p: fs.PathLike, o?: unknown) => {
+      if (String(p).endsWith('Trancada')) throw Object.assign(new Error('eperm'), { code: 'EPERM' })
+      return (realRead as (p: fs.PathLike, o?: unknown) => unknown)(p, o)
+    }) as typeof fs.readdirSync)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    expect(() => writeOutput('test-vault', pages, graph, index, TMP)).not.toThrow()
+
+    expect(warn).toHaveBeenCalled()
+    expect(fs.existsSync(path.join(TMP, 'test-vault', 'index.json'))).toBe(true)
+  })
+
   it('falha ao apagar na poda só avisa e o index.json sai', () => {
     const pagesDir = path.join(TMP, 'test-vault', 'pages')
     fs.mkdirSync(path.join(pagesDir, 'Velha'), { recursive: true })

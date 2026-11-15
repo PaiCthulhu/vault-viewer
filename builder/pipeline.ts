@@ -226,7 +226,8 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
     ])
     let prevAssets: string[] = []
     try {
-      prevAssets = JSON.parse(fs.readFileSync(path.join(dataDir, 'assets.json'), 'utf-8')) as string[]
+      const prev: unknown = JSON.parse(fs.readFileSync(path.join(dataDir, 'assets.json'), 'utf-8'))
+      if (Array.isArray(prev)) prevAssets = prev.filter((a): a is string => typeof a === 'string')
     } catch { /* sem assets.json anterior */ }
 
     const indexOf = new Map(files.map((f, i) => [f.relativePath, i]))

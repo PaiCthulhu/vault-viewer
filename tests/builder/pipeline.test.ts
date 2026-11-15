@@ -102,6 +102,35 @@ describe('buildVault --first', () => {
     expect(writes[iIndex].content).toBe(final)
   })
 
+  it('assets.json anterior que não é array é tratado como vazio', async () => {
+    const out = path.join(TMP, 'out')
+    fs.mkdirSync(path.join(out, 'v'), { recursive: true })
+    for (const lixo of ['{}', 'null', '7']) {
+      fs.writeFileSync(path.join(out, 'v', 'assets.json'), lixo)
+      await buildVault(vault, { dataRoot: out, first: ['Jogos/B'] })
+      expect(fs.existsSync(path.join(out, 'v', 'pages', 'Jogos', 'B.json'))).toBe(true)
+      expect(JSON.parse(fs.readFileSync(path.join(out, 'v', 'assets.json'), 'utf-8'))).toContain('Imagens/b.png')
+    }
+  })
+
+  it('assets.json da frente é a união com o anterior; o final só tem os atuais', async () => {
+    const out = path.join(TMP, 'out')
+    fs.mkdirSync(path.join(out, 'v'), { recursive: true })
+    fs.writeFileSync(path.join(out, 'v', 'assets.json'), JSON.stringify(['Antiga/x.png']))
+    const writes = spyWrites()
+
+    await buildVault(vault, { dataRoot: out, first: ['Jogos/B'] })
+
+    const iAssets = writes.findIndex(w => /\/assets\.json$/.test(w.file))
+    const iB = writes.findIndex(w => /\/pages\/Jogos\/B\.json$/.test(w.file))
+    expect(iAssets).toBeLessThan(iB)
+    const da_frente = JSON.parse(writes[iAssets].content)
+    expect(da_frente).toContain('Antiga/x.png')
+    expect(da_frente).toContain('Imagens/b.png')
+    const final = JSON.parse(fs.readFileSync(path.join(out, 'v', 'assets.json'), 'utf-8'))
+    expect(final).not.toContain('Antiga/x.png')
+  })
+
   it('nota alterada depois do startedAt anterior vai na frente sozinha', async () => {
     const out = path.join(TMP, 'out')
     await buildVault(vault, { dataRoot: out })
