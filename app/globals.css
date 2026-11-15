@@ -770,3 +770,52 @@ body.vault-resizing * {
 .filetree-node:hover { background: var(--bg-secondary); color: var(--text); }
 .filetree-node.active { color: var(--accent); background: var(--accent-bg); }
 .filetree-node.is-folder { font-weight: 500; }
+
+/* ─── Página pendente: tela de "aguarde" e faixa "atualizando…" ───────── */
+
+.page-status-block {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Sem altura no layout: a pílula flutua sobre o topo do conteúdo. */
+.page-status-overlay {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  overflow: visible;
+}
+
+.page-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.page-status-spinner {
+  flex: none;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: page-status-spin 0.9s linear infinite;
+}
+
+@keyframes page-status-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-status-spinner { animation: none; }
+}

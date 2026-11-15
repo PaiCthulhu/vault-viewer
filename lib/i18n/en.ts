@@ -186,4 +186,8 @@ export const en: Record<string, string> = {
   'login.invalid': 'Invalid username or password',
 
   'admin.vaultDetail.buildFailedDefault': 'Build failed',
+
+  'pending.generating': 'This page is being generated…',
+  'pending.giveUp': 'Still not ready. Reload the page later.',
+  'pending.updating': 'Updating this page…',
 }

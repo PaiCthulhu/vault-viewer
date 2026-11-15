@@ -3,7 +3,8 @@ import { cookies } from 'next/headers'
 import { verifyToken, COOKIE_NAME } from '@/lib/auth'
 import { getVaultBySlug } from '@/lib/vault-config'
 import { dbUserHasVaultAccess } from '@/lib/db'
-import { getPageData, getPagesIndex, getGraphData, getVaultTree, findHomePage } from '@/lib/vault'
+import { getPageData, getPagesIndex, getGraphData, getVaultTree, findHomePage, pageJsonMtimeMs } from '@/lib/vault'
+import { isPending, provisionalPage } from '@/lib/pending-page'
 import { getFolderPage } from '@/lib/folder-page'
 import { parseHtmlSegments } from '@/lib/parse-html-segments'
 import { extractToc } from '@/lib/toc'
@@ -46,12 +47,34 @@ export default async function VaultPage({ params }: Props) {
 
   // No real page at this path? If it names a folder (no folder note), serve an
   // auto-generated index page listing the folder's direct children.
+  let isFolderPage = false
+  let pending: { mode: 'generating' | 'updating'; path: string } | null = null
+  let decodedPath = ''
   if (!page && path.length > 0) {
-    const folderPath = path.map(decodeURIComponent).join('/')
-    page = getFolderPage(slug, folderPath)
+    try {
+      decodedPath = path.map(decodeURIComponent).join('/')
+    } catch {
+      notFound()
+    }
+    page = getFolderPage(slug, decodedPath)
+    isFolderPage = page !== null
+
+    // Nota que o builder ainda não gerou: mostra "aguarde" no lugar do 404.
+    if (!page && isPending(vault, decodedPath, { trigger: true })) {
+      page = provisionalPage(decodedPath)
+      pending = { mode: 'generating', path: decodedPath }
+    }
   }
 
   if (!page) notFound()
+
+  // Página real cuja nota mudou depois do último build: serve como está, com a faixa.
+  if (!pending && !isFolderPage) {
+    const mtime = pageJsonMtimeMs(slug, page.path)
+    if (isPending(vault, page.path, { trigger: true, pageJsonMtimeMs: mtime })) {
+      pending = { mode: 'updating', path: page.path }
+    }
+  }
 
   // Parse HTML server-side
   const segments = parseHtmlSegments(page.html)
@@ -68,6 +91,7 @@ export default async function VaultPage({ params }: Props) {
       graphData={graphData}
       username={user.username}
       isAdmin={user.isAdmin}
+      pending={pending}
     />
   )
 }

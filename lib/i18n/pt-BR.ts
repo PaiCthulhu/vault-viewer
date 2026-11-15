@@ -185,4 +185,8 @@ export const ptBR: Record<string, string> = {
   'login.invalid': 'Usuário ou senha inválidos',
 
   'admin.vaultDetail.buildFailedDefault': 'Falha no build',
+
+  'pending.generating': 'Esta página está sendo gerada…',
+  'pending.giveUp': 'Ainda não ficou pronta. Recarregue a página mais tarde.',
+  'pending.updating': 'Atualizando esta página…',
 }

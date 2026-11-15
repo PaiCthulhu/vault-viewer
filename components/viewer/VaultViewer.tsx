@@ -5,6 +5,7 @@ import { useI18n } from '@/components/i18n/I18nProvider'
 import { Topbar } from '@/components/shared/Topbar'
 import { SidebarPanel } from './SidebarPanel'
 import { ContentPanel } from './ContentPanel'
+import { PageStatusNotice } from './PageStatusNotice'
 import { GraphPanel } from './GraphPanel'
 import { GlobalGraph } from './GlobalGraph'
 import { DrawerOverlay } from './DrawerOverlay'
@@ -29,6 +30,7 @@ interface VaultViewerProps {
   graphData: BuildGraph
   username: string
   isAdmin: boolean
+  pending?: { mode: 'generating' | 'updating'; path: string } | null
 }
 
 export function VaultViewer({
@@ -41,6 +43,7 @@ export function VaultViewer({
   graphData,
   username,
   isAdmin,
+  pending,
 }: VaultViewerProps) {
   const { t } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -151,6 +154,16 @@ export function VaultViewer({
               css={page.css}
               articleClass={articleClass}
               slug={vault.slug}
+              notice={
+                pending ? (
+                  <PageStatusNotice
+                    key={pending.mode + ':' + pending.path}
+                    slug={vault.slug}
+                    pagePath={pending.path}
+                    mode={pending.mode}
+                  />
+                ) : null
+              }
             />
           )}
         </main>
