@@ -9,3 +9,7 @@ export function nextPollDelay(elapsedMs: number): number | null {
   if (elapsedMs >= POLL_GIVE_UP_MS) return null
   return elapsedMs < FAST_PHASE_MS ? 1000 : 5000
 }
+
+// Teto do router.refresh(): intervalo mínimo entre dois e máximo sem o componente desmontar.
+export const MIN_REFRESH_GAP_MS = 5000
+export const MAX_REFRESHES = 3

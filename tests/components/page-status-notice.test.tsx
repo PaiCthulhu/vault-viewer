@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act, cleanup } from '@testing-library/react'
 
 const refresh = vi.fn()
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }))
+const router = { refresh }
+vi.mock('next/navigation', () => ({ useRouter: () => router }))
 vi.mock('@/components/i18n/I18nProvider', async () => {
   const { getDict, translate } = await import('@/lib/i18n')
   const dict = getDict('pt-BR')
@@ -72,5 +73,60 @@ describe('PageStatusNotice', () => {
     render(el('updating'))
     await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('missing chama refresh', async () => {
+    vi.stubGlobal('fetch', respond(['missing']))
+    render(el('updating'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('resposta !ok não para a consulta', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, json: async () => ({}) })
+      .mockResolvedValue({ ok: true, json: async () => ({ state: 'ready' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    render(el('updating'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('depois do unmount não há mais fetch', async () => {
+    const fetchMock = respond(['pending'])
+    vi.stubGlobal('fetch', fetchMock)
+    const { unmount } = render(el('updating'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    unmount()
+    const n = fetchMock.mock.calls.length
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+    expect(fetchMock.mock.calls.length).toBe(n)
+  })
+
+  it('ready constante: no máximo um refresh em 4 s', async () => {
+    vi.stubGlobal('fetch', respond(['ready']))
+    render(el('updating'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('depois do 3º refresh não há mais fetch e generating mostra giveUp', async () => {
+    const fetchMock = respond(['ready'])
+    vi.stubGlobal('fetch', fetchMock)
+    render(el('generating'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    expect(refresh).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('Ainda não ficou pronta. Recarregue a página mais tarde.')).toBeTruthy()
+    const n = fetchMock.mock.calls.length
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    expect(fetchMock.mock.calls.length).toBe(n)
+  })
+
+  it('updating some depois do 3º refresh', async () => {
+    vi.stubGlobal('fetch', respond(['ready']))
+    const { container } = render(el('updating'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    expect(refresh).toHaveBeenCalledTimes(3)
+    expect(container.innerHTML).toBe('')
   })
 })

@@ -786,6 +786,7 @@ body.vault-resizing * {
   top: 0;
   height: 0;
   z-index: 20;
+  pointer-events: none;
   display: flex;
   justify-content: center;
   overflow: visible;
@@ -802,6 +803,7 @@ body.vault-resizing * {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 999px;
+  pointer-events: none;
 }
 
 .page-status-spinner {

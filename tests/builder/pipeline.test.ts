@@ -65,9 +65,13 @@ describe('buildVault --first', () => {
       const ca = fs.readFileSync(path.join(A, 'v', f), 'utf-8')
       const cb = fs.readFileSync(path.join(B, 'v', f), 'utf-8')
       if (f === 'index.json') {
-        const { builtAt: _b1, startedAt: _s1, ...ra } = JSON.parse(ca)
-        const { builtAt: _b2, startedAt: _s2, ...rb } = JSON.parse(cb)
-        expect(rb).toEqual(ra)
+        const strip = (raw: string) => {
+          const o = JSON.parse(raw)
+          delete o.builtAt
+          delete o.startedAt
+          return o
+        }
+        expect(strip(cb)).toEqual(strip(ca))
       } else {
         expect(cb, f).toBe(ca)
       }

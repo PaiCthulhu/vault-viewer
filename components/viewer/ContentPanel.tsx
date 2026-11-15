@@ -18,6 +18,8 @@ interface ContentPanelProps {
   slug: string
   // Faixa ou tela de aguarde no topo do contêiner de rolagem, antes do artigo.
   notice?: React.ReactNode
+  // 'overlay': antes de tudo (faixa sobreposta). 'after': depois dos segmentos (logo abaixo do título).
+  noticePlacement?: 'overlay' | 'after'
 }
 
 const BG_URL_RE = /url\(['"]?([^'")]+)['"]?\)/
@@ -34,7 +36,7 @@ const externalPreviewCache = new Map<string, Promise<ExternalPreviewData>>()
 const PREVIEW_DELAY = 350
 const CARD_WIDTH = 320
 
-export function ContentPanel({ segments, css, articleClass, slug, notice }: ContentPanelProps) {
+export function ContentPanel({ segments, css, articleClass, slug, notice, noticePlacement = 'overlay' }: ContentPanelProps) {
   const router = useRouter()
   const { t } = useI18n()
   const articleRef = useRef<HTMLDivElement>(null)
@@ -759,7 +761,7 @@ export function ContentPanel({ segments, css, articleClass, slug, notice }: Cont
       className="overflow-y-auto h-full"
       style={{ background: 'var(--bg)' }}
     >
-      {notice}
+      {noticePlacement === 'overlay' && notice}
 
       {css && <style dangerouslySetInnerHTML={{ __html: css }} />}
 
@@ -771,6 +773,8 @@ export function ContentPanel({ segments, css, articleClass, slug, notice }: Cont
       >
         {memoizedSegments}
       </div>
+
+      {noticePlacement === 'after' && notice}
 
       <LinkPreview state={preview} />
 

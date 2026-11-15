@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useI18n } from '@/components/i18n/I18nProvider'
-import { nextPollDelay } from '@/lib/page-status-poll'
+import { nextPollDelay, MIN_REFRESH_GAP_MS, MAX_REFRESHES } from '@/lib/page-status-poll'
 
 interface Props {
   slug: string
@@ -22,6 +22,9 @@ export function PageStatusNotice({ slug, pagePath, mode }: Props) {
   useEffect(() => {
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    let refreshes = 0
+    let lastRefreshAt = -Infinity
+    const start = Date.now()
     const url = `/api/vault/${encodeURIComponent(slug)}/page-status?path=${encodeURIComponent(pagePath)}`
 
     async function poll() {
@@ -29,25 +32,30 @@ export function PageStatusNotice({ slug, pagePath, mode }: Props) {
         const res = await fetch(url, { cache: 'no-store' })
         if (!res.ok) return
         const { state } = (await res.json()) as { state?: string }
-        if (!cancelled && (state === 'ready' || state === 'missing')) router.refresh()
+        if (cancelled || (state !== 'ready' && state !== 'missing')) return
+        // Teto: no mínimo 5 s entre refreshes e no máximo 3 sem o componente desmontar.
+        if (Date.now() - lastRefreshAt < MIN_REFRESH_GAP_MS) return
+        refreshes++
+        lastRefreshAt = Date.now()
+        router.refresh()
       } catch {
         // falha de rede: tenta de novo na próxima rodada
       }
     }
 
-    function schedule(elapsed: number) {
-      const delay = nextPollDelay(elapsed)
-      if (delay === null) {
+    function schedule() {
+      const delay = nextPollDelay(Date.now() - start)
+      if (delay === null || refreshes >= MAX_REFRESHES) {
         setGaveUp(true)
         return
       }
       timer = setTimeout(async () => {
         await poll()
-        if (!cancelled) schedule(elapsed + delay)
+        if (!cancelled) schedule()
       }, delay)
     }
 
-    schedule(0)
+    schedule()
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)

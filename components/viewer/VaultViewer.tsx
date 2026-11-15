@@ -154,6 +154,7 @@ export function VaultViewer({
               css={page.css}
               articleClass={articleClass}
               slug={vault.slug}
+              noticePlacement={pending?.mode === 'generating' ? 'after' : 'overlay'}
               notice={
                 pending ? (
                   <PageStatusNotice
