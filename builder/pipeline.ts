@@ -1,7 +1,8 @@
 import fs from 'fs'
+import path from 'path'
 import type { VaultConfig } from '@/types'
 import type { PageMeta } from './types'
-import { scanVault, scanCanvases, scanImages, countFolders } from './scanner'
+import { scanVault, scanCanvases, scanImages, countFolders, noteTime } from './scanner'
 import { loadVaultIgnore } from './vault-ignore'
 import { extractFrontmatter, extractTags } from './frontmatter'
 import { LinkResolver } from './link-resolver'
@@ -16,7 +17,8 @@ import { renderProperties } from './plugins/properties'
 import { executeDQL, executeDataviewJS } from './plugins/dataview'
 import { renderMarkdown } from './markdown'
 import { buildGraph } from './graph-builder'
-import { writeOutput } from './writer'
+import { writeOutput, writePage, writeSummaries, writeAssets, toSummaries } from './writer'
+import { readPrevScanMs, selectFirstPages } from './first-pages'
 
 // Normalize a rendered <h1>'s text (or a plain title) for a tolerant comparison:
 // strip tags, decode common entities, unify dash/quote variants, collapse
@@ -71,12 +73,15 @@ export function resolveTitle(
   return filenameTitle
 }
 
-export async function buildVault(vault: VaultConfig, opts: { dataRoot?: string } = {}): Promise<void> {
+export async function buildVault(vault: VaultConfig, opts: { first?: string[]; dataRoot?: string } = {}): Promise<void> {
   console.log(`\n[${vault.slug}] Iniciando build de "${vault.name}"`)
   console.log(`[${vault.slug}] Vault path: ${vault.path}`)
 
   // ── Passe 1: Scan + frontmatter (sem renderização) ──────────────────────────
   // `.viewerignore` (sintaxe gitignore) na raiz do vault esconde arquivos/pastas.
+  const dataDir = path.join(opts.dataRoot ?? path.join(process.cwd(), 'data'), vault.slug)
+  // Início da varredura do build anterior: lido antes de gravar qualquer coisa.
+  const prevScanMs = readPrevScanMs(path.join(dataDir, 'index.json'))
   const startedAt = new Date().toISOString()
   const ig = loadVaultIgnore(vault.path)
   const files = scanVault(vault.path, ig)
@@ -151,10 +156,10 @@ export async function buildVault(vault: VaultConfig, opts: { dataRoot?: string }
     return renderBody
   }
 
-  for (let i = 0; i < files.length; i++) {
+  // Renderiza a nota `i`. Só lê stubs/imageHandler, então a ordem de chamada não muda o resultado.
+  async function renderPage(i: number): Promise<PageMeta> {
     const file = files[i]
     const stub = stubs[i]
-    process.stdout.write(`\r[${vault.slug}] Processando ${i + 1}/${files.length}: ${file.title.slice(0, 40).padEnd(40)}`)
 
     const raw = fs.readFileSync(file.absolutePath, 'utf-8').replace(/\r\n/g, '\n')
     const { body } = extractFrontmatter(raw, file.title)
@@ -204,7 +209,41 @@ export async function buildVault(vault: VaultConfig, opts: { dataRoot?: string }
 
     const fullHtml = banner + `<article class="vault-content">${titleHtml}${propsHtml}${bodyHtml}</article>`
 
-    pages.push({ ...stub, html: fullHtml, css: pageCss.join('\n') })
+    return { ...stub, html: fullHtml, css: pageCss.join('\n') }
+  }
+
+  // ── Frente: notas pedidas (--first) e alteradas desde o último build ────────
+  const noteTimes = files.map(f => ({ path: f.relativePath, t: noteTime(fs.statSync(f.absolutePath)) }))
+  const front = selectFirstPages(opts.first ?? [], noteTimes, prevScanMs)
+  const rendered = new Map<number, PageMeta>()
+  const alreadyWritten: string[] = []
+
+  if (front.length > 0) {
+    console.log(`[${vault.slug}] Na frente: ${front.length} páginas`)
+    const summaries = toSummaries([
+      ...stubs,
+      ...canvasFiles.map(c => ({ path: c.relativePath, title: c.title, tags: [] as string[] })),
+    ])
+    let prevAssets: string[] = []
+    try {
+      prevAssets = JSON.parse(fs.readFileSync(path.join(dataDir, 'assets.json'), 'utf-8')) as string[]
+    } catch { /* sem assets.json anterior */ }
+
+    const indexOf = new Map(files.map((f, i) => [f.relativePath, i]))
+    for (let n = 0; n < front.length; n++) {
+      const i = indexOf.get(front[n])!
+      const page = await renderPage(i)
+      rendered.set(i, page)
+      // assets.json antes da página: as imagens novas dela têm de abrir assim que ela aparecer.
+      writeAssets(dataDir, [...new Set([...prevAssets, ...imageHandler.assets()])].sort())
+      alreadyWritten.push(writePage(dataDir, page))
+      if (n === 0) writeSummaries(dataDir, summaries)
+    }
+  }
+
+  for (let i = 0; i < files.length; i++) {
+    process.stdout.write(`\r[${vault.slug}] Processando ${i + 1}/${files.length}: ${files[i].title.slice(0, 40).padEnd(40)}`)
+    pages.push(rendered.get(i) ?? await renderPage(i))
   }
 
   process.stdout.write('\n')
@@ -266,7 +305,7 @@ export async function buildVault(vault: VaultConfig, opts: { dataRoot?: string }
     vault.slug, pages, graph,
     { pageCount: pages.length, folderCount, builtAt, startedAt },
     opts.dataRoot,
-    { assets: imageHandler.assets() },
+    { assets: imageHandler.assets(), alreadyWritten },
   )
 
   console.log(`[${vault.slug}] Build concluído: ${pages.length} páginas, ${graph.edges.length} edges`)

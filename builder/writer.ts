@@ -52,7 +52,7 @@ export function writeAssets(dataDir: string, assets: string[]): void {
 }
 
 // Apaga os .json de pages/ que não estão em `written` e as pastas que ficaram vazias
-// (nunca a própria pages/). Compara em minúsculas: no NTFS `Foo` e `foo` são o mesmo
+// (nunca a própria pages/). É best-effort: falha ao apagar (EBUSY/EPERM) só avisa. Compara em minúsculas: no NTFS `Foo` e `foo` são o mesmo
 // arquivo, e renomear só a caixa de uma nota não pode apagar a página recém-gravada.
 export function prunePages(dataDir: string, written: Iterable<string>): number {
   const pagesDir = path.join(dataDir, 'pages')
@@ -66,11 +66,19 @@ export function prunePages(dataDir: string, written: Iterable<string>): number {
       const abs = path.join(dir, entry.name)
       if (entry.isDirectory()) {
         walk(abs)
-        if (fs.readdirSync(abs).length === 0) fs.rmdirSync(abs)
+        try {
+          if (fs.readdirSync(abs).length === 0) fs.rmdirSync(abs)
+        } catch (err) {
+          console.warn(`[poda] não apaguei a pasta ${abs}: ${(err as Error).message}`)
+        }
       } else if (entry.name.toLowerCase().endsWith('.json')) {
         if (!keep.has(path.relative(pagesDir, abs).toLowerCase())) {
-          fs.rmSync(abs)
-          removed++
+          try {
+            fs.rmSync(abs)
+            removed++
+          } catch (err) {
+            console.warn(`[poda] não apaguei ${abs}: ${(err as Error).message}`)
+          }
         }
       }
     }

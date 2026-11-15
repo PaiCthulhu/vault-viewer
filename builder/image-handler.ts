@@ -29,7 +29,8 @@ export class ImageHandler {
       if (byName) relPath = byName
     }
 
-    if (this.isFileInsideVault(relPath)) this.found.add(relPath)
+    const normalized = this.insideVaultFile(relPath)
+    if (normalized) this.found.add(normalized)
 
     const publicUrl = `/vault-assets/${this.vaultSlug}/${relPath}`
     this.resolved.set(imagePath, publicUrl)
@@ -41,10 +42,12 @@ export class ImageHandler {
     return [...this.found].sort()
   }
 
-  private isFileInsideVault(relPath: string): boolean {
+  // Forma normalizada (relativa ao vault, com `/`) se for arquivo dentro do vault; senão null.
+  private insideVaultFile(relPath: string): string | null {
     const root = path.resolve(this.vaultPath)
     const abs = path.resolve(root, relPath)
-    if (!abs.startsWith(root + path.sep)) return false
-    return fs.statSync(abs, { throwIfNoEntry: false })?.isFile() ?? false
+    if (!abs.startsWith(root + path.sep)) return null
+    if (!(fs.statSync(abs, { throwIfNoEntry: false })?.isFile() ?? false)) return null
+    return path.relative(root, abs).replace(/\\/g, '/')
   }
 }

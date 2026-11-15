@@ -96,4 +96,22 @@ describe('writeOutput', () => {
     expect(fs.readFileSync(file, 'utf-8')).toBe('"X"')
     expect(fs.existsSync(path.join(path.dirname(file), 'Beta.json'))).toBe(true)
   })
+
+  it('falha ao apagar na poda só avisa e o index.json sai', () => {
+    const pagesDir = path.join(TMP, 'test-vault', 'pages')
+    fs.mkdirSync(path.join(pagesDir, 'Velha'), { recursive: true })
+    fs.writeFileSync(path.join(pagesDir, 'Velha', 'X.json'), '{}')
+    const realRm = fs.rmSync
+    vi.spyOn(fs, 'rmSync').mockImplementation((p, o) => {
+      if (String(p).endsWith('X.json')) throw Object.assign(new Error('busy'), { code: 'EBUSY' })
+      return realRm(p, o)
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    expect(() => writeOutput('test-vault', pages, graph, index, TMP)).not.toThrow()
+
+    expect(warn).toHaveBeenCalled()
+    expect(fs.existsSync(path.join(TMP, 'test-vault', 'index.json'))).toBe(true)
+  })
 })

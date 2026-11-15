@@ -2,7 +2,13 @@ import fs from 'fs'
 import path from 'path'
 import type { VaultIgnore } from './vault-ignore'
 
-const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'])
+export const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'])
+
+// Momento da nota para decidir se mudou: o maior entre mtime, ctime e birthtime
+// (um arquivo copiado/movido mantém o mtime antigo, mas ganha ctime/birthtime novos).
+export function noteTime(st: { mtimeMs: number; ctimeMs: number; birthtimeMs: number }): number {
+  return Math.max(st.mtimeMs, st.ctimeMs, st.birthtimeMs)
+}
 
 const NOOP_IGNORE: VaultIgnore = { ignores: () => false, ignoresDir: () => false }
 

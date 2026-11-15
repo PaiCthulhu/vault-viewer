@@ -5,6 +5,11 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const vaultIdx = args.indexOf('--vault')
   const allFlag = args.includes('--all')
+  // Cada --first consome o argumento seguinte; com --all é ignorado.
+  const first: string[] = []
+  args.forEach((a, i) => {
+    if (a === '--first' && args[i + 1] !== undefined) first.push(args[i + 1])
+  })
 
   if (!allFlag && vaultIdx === -1) {
     console.error('Uso: npx tsx builder/index.ts --vault <slug> | --all')
@@ -31,7 +36,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  await buildVault(vault)
+  await buildVault(vault, { first })
 }
 
 main().catch(err => {
