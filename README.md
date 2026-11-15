@@ -142,7 +142,7 @@ Then edit it **or** add vaults from the admin UI (step 6).
 
 ### 5. Build a vault
 
-Rendering happens ahead of time (build step), writing the output to `data/<slug>/` and copying images to `public/vault-assets/<slug>/`.
+Rendering happens ahead of time (build step), writing the output to `data/<slug>/`. Images are not copied: the build records the ones the pages cite in `data/<slug>/assets.json`, and the viewer serves them straight from the vault folder.
 
 ```bash
 # Build one vault
