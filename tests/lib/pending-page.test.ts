@@ -79,6 +79,28 @@ describe('noteFor', () => {
     expect(noteFor(vault, 'Privado::$INDEX_ALLOCATION/Segredo')).toBeNull()
     expect(noteFor(vault, 'Privado:$I30:$INDEX_ALLOCATION/Segredo')).toBeNull()
   })
+  it('não acha nota ignorada por ponto ou espaço no fim do segmento', () => {
+    fs.writeFileSync(path.join(vaultDir, '.viewerignore'), 'Privado/\n')
+    note('Privado/Segredo')
+    expect(noteFor(vault, 'Privado./Segredo')).toBeNull()
+    expect(noteFor(vault, 'Privado /Segredo')).toBeNull()
+  })
+  it('acha a nota com caixa diferente', () => {
+    expect(noteFor(vault, 'jogos/nova')).not.toBeNull()
+  })
+  it('não acha nota pelo caminho de uma junção', () => {
+    note('Real/Dentro')
+    const link = path.join(vaultDir, 'Atalho')
+    let ok = true
+    try {
+      fs.symlinkSync(path.join(vaultDir, 'Real'), link, 'junction')
+    } catch {
+      ok = false
+    }
+    if (!ok) return // ambiente sem permissão para criar link
+    expect(noteFor(vault, 'Real/Dentro')).not.toBeNull()
+    expect(noteFor(vault, 'Atalho/Dentro')).toBeNull()
+  })
   it('com .md e .canvas de mesmo nome usa o maior t', () => {
     const md = noteFor(vault, 'Jogos/Nova')!.t
     const canvas = path.join(vaultDir, 'Jogos', 'Nova.canvas')

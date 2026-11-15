@@ -40,6 +40,7 @@ export function noteFor(vault: VaultConfig, p: string): { t: number } | null {
   if (!safePagePath(p)) return null
   const ig = loadVaultIgnore(vault.path)
   let best: number | null = null
+  let realRoot: string | undefined
   for (const ext of ['.md', '.canvas']) {
     const rel = p + ext
     let st: fs.Stats
@@ -50,6 +51,18 @@ export function noteFor(vault: VaultConfig, p: string): { t: number } | null {
     }
     if (!st.isFile()) continue
     if (!isScannedPath(rel, ig)) continue
+    // O Windows aceita apelidos para o mesmo caminho (stream NTFS, nome 8.3, ponto ou espaço no fim,
+    // pasta link) e o .viewerignore olha só o texto: sem esta checagem ele seria contornado. O
+    // caminho canônico do arquivo tem de ser o próprio p + ext (sem diferenciar caixa), o que
+    // também alinha com o walkVault, que não entra em pasta link.
+    try {
+      realRoot ??= fs.realpathSync.native(vault.path)
+      const real = fs.realpathSync.native(path.join(vault.path, ...rel.split('/')))
+      const canon = path.relative(realRoot, real).split(path.sep).join('/')
+      if (canon.startsWith('..') || canon.toLowerCase() !== rel.toLowerCase()) continue
+    } catch {
+      continue
+    }
     const t = noteTime(st)
     if (best === null || t > best) best = t
   }
