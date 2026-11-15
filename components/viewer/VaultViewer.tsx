@@ -6,6 +6,7 @@ import { Topbar } from '@/components/shared/Topbar'
 import { SidebarPanel } from './SidebarPanel'
 import { ContentPanel } from './ContentPanel'
 import { PageStatusNotice } from './PageStatusNotice'
+import { PageWatcher } from './PageWatcher'
 import { GraphPanel } from './GraphPanel'
 import { GlobalGraph } from './GlobalGraph'
 import { DrawerOverlay } from './DrawerOverlay'
@@ -31,6 +32,8 @@ interface VaultViewerProps {
   username: string
   isAdmin: boolean
   pending?: { mode: 'generating' | 'updating'; path: string } | null
+  // Versão (sha1) da página renderizada; null/ausente = não vigiar (página pendente).
+  pageVersion?: string | null
 }
 
 export function VaultViewer({
@@ -44,6 +47,7 @@ export function VaultViewer({
   username,
   isAdmin,
   pending,
+  pageVersion,
 }: VaultViewerProps) {
   const { t } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -154,6 +158,7 @@ export function VaultViewer({
               css={page.css}
               articleClass={articleClass}
               slug={vault.slug}
+              pagePath={page.path}
               noticePlacement={pending?.mode === 'generating' ? 'after' : 'overlay'}
               notice={
                 pending ? (
@@ -165,6 +170,17 @@ export function VaultViewer({
                   />
                 ) : null
               }
+            />
+          )}
+          {/* Sem vigia com o grafo global aberto: um refresh entregaria novo graphData ao
+              GlobalGraph, que reconstrói o cytoscape e perde zoom e posição. Ao fechar o
+              grafo o vigia remonta e confere na hora. */}
+          {pageVersion && !pending && !globalGraph && (
+            <PageWatcher
+              key={vault.slug + ':' + page.path}
+              slug={vault.slug}
+              pagePath={page.path}
+              version={pageVersion}
             />
           )}
         </main>

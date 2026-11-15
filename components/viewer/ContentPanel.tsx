@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useI18n } from '@/components/i18n/I18nProvider'
@@ -9,6 +9,7 @@ import { DataviewList } from './DataviewList'
 import { LinkPreview, type LinkPreviewState, type PreviewData, type ExternalPreviewData } from './LinkPreview'
 import type { HtmlSegment } from '@/lib/parse-html-segments'
 import { galleryGroup } from '@/lib/gallery-group'
+import { chipsToRestore, type FilterMemory } from '@/lib/filter-memory'
 
 interface ContentPanelProps {
   segments: HtmlSegment[]
@@ -16,6 +17,8 @@ interface ContentPanelProps {
   // 'vault-article' plus the note's cssclasses (see lib/css-classes.ts).
   articleClass: string
   slug: string
+  // Path da página mostrada: a memória dos filtros só vale para a mesma página.
+  pagePath: string
   // Faixa ou tela de aguarde no topo do contêiner de rolagem, antes do artigo.
   notice?: React.ReactNode
   // 'overlay': antes de tudo (faixa sobreposta). 'after': depois dos segmentos (logo abaixo do título).
@@ -36,12 +39,14 @@ const externalPreviewCache = new Map<string, Promise<ExternalPreviewData>>()
 const PREVIEW_DELAY = 350
 const CARD_WIDTH = 320
 
-export function ContentPanel({ segments, css, articleClass, slug, notice, noticePlacement = 'overlay' }: ContentPanelProps) {
+export function ContentPanel({ segments, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay' }: ContentPanelProps) {
   const router = useRouter()
   const { t } = useI18n()
   const articleRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  // Chips ativos da barra de filtro, na ordem; sobrevive à remontagem da barra (refresh).
+  const filterMemoryRef = useRef<FilterMemory | null>(null)
 
   // Vault CSS written for Obsidian themes itself with `.theme-dark` /
   // `.theme-light` on <body>; next-themes only sets `.dark`/`.light` on <html>.
@@ -381,8 +386,12 @@ export function ContentPanel({ segments, css, articleClass, slug, notice, notice
   // properties. Filters are added as chips via a "+ Adicionar filtro" popover
   // (no wall of selects); each chip is a property + value <select> composed
   // with AND. Cards/empty gallery groups are shown/hidden directly.
-  // Plain DOM enhancement; resets on navigation since the article re-renders.
-  useEffect(() => {
+  // Plain DOM enhancement. The active chips are remembered per page: they reset
+  // on navigation to another page and are restored when the bar is rebuilt for
+  // the same page (router.refresh() hands over fresh segments). A layout effect so
+  // the bar and chips are back before the browser paints the fresh innerHTML.
+  useLayoutEffect(() => {
+    if (filterMemoryRef.current?.path !== pagePath) filterMemoryRef.current = null
     const el = articleRef.current
     if (!el) return
 
@@ -507,6 +516,10 @@ export function ContentPanel({ segments, css, articleClass, slug, notice, notice
 
     // ─── Apply filters ─────────────────────────────────────────────────────
     const applyFilters = () => {
+      filterMemoryRef.current = {
+        path: pagePath,
+        chips: [...activeChips].map(([key, select]) => ({ key, value: select.value })),
+      }
       const active: { key: string; value: string }[] = []
       for (const [key, select] of activeChips) {
         if (select.value) active.push({ key, value: select.value })
@@ -689,12 +702,25 @@ export function ContentPanel({ segments, css, articleClass, slug, notice, notice
 
     topmost.parentNode?.insertBefore(bar, topmost)
     rebuildMenu()
+
+    // Restore the chips of the previous bar when it is the same page. Read the
+    // memory before anything below rewrites it (addChip -> applyFilters).
+    const restore = chipsToRestore(
+      filterMemoryRef.current,
+      pagePath,
+      new Map(keys.map(k => [k.key, k.values])),
+    )
+    for (const { key, value } of restore) {
+      addChip(key)
+      const select = activeChips.get(key)
+      if (select) select.value = value
+    }
     applyFilters()
 
     return () => {
       if (docClickHandler) document.removeEventListener('click', docClickHandler)
     }
-  }, [segments, t])
+  }, [segments, t, pagePath])
 
   // Relabel builder-emitted nodes (e.g. the Properties block summary) to the
   // active locale. The built HTML carries <span data-i18n="properties.title">…</span>.

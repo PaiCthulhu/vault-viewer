@@ -6,6 +6,7 @@ import { dbUserHasVaultAccess } from '@/lib/db'
 import { getPageData, getPagesIndex, getGraphData, getVaultTree, findHomePage, pageJsonMtimeMs } from '@/lib/vault'
 import { isPending, provisionalPage } from '@/lib/pending-page'
 import { getFolderPage } from '@/lib/folder-page'
+import { pageVersion } from '@/lib/page-version'
 import { parseHtmlSegments } from '@/lib/parse-html-segments'
 import { extractToc } from '@/lib/toc'
 import { VaultViewer } from '@/components/viewer/VaultViewer'
@@ -92,6 +93,7 @@ export default async function VaultPage({ params }: Props) {
       username={user.username}
       isAdmin={user.isAdmin}
       pending={pending}
+      pageVersion={pending ? null : pageVersion(page)}
     />
   )
 }
