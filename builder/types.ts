@@ -13,6 +13,7 @@ export interface VaultIndex {
   pageCount: number
   folderCount: number
   builtAt: string // ISO timestamp
+  startedAt?: string // ISO timestamp de logo antes da varredura do vault
 }
 
 export interface PageSummary {

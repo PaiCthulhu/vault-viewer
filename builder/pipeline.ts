@@ -1,5 +1,4 @@
 import fs from 'fs'
-import path from 'path'
 import type { VaultConfig } from '@/types'
 import type { PageMeta } from './types'
 import { scanVault, scanCanvases, scanImages, countFolders } from './scanner'
@@ -72,14 +71,13 @@ export function resolveTitle(
   return filenameTitle
 }
 
-export async function buildVault(vault: VaultConfig): Promise<void> {
-  const publicAssetsDir = path.join(process.cwd(), 'public', 'vault-assets')
-
+export async function buildVault(vault: VaultConfig, opts: { dataRoot?: string } = {}): Promise<void> {
   console.log(`\n[${vault.slug}] Iniciando build de "${vault.name}"`)
   console.log(`[${vault.slug}] Vault path: ${vault.path}`)
 
   // ── Passe 1: Scan + frontmatter (sem renderização) ──────────────────────────
   // `.viewerignore` (sintaxe gitignore) na raiz do vault esconde arquivos/pastas.
+  const startedAt = new Date().toISOString()
   const ig = loadVaultIgnore(vault.path)
   const files = scanVault(vault.path, ig)
   const canvasFiles = scanCanvases(vault.path, ig)
@@ -87,9 +85,9 @@ export async function buildVault(vault: VaultConfig): Promise<void> {
   const folderCount = countFolders(vault.path, ig)
   // Canvas files entram no resolver para [[Página Inicial]] resolver, mas NÃO nos stubs.
   const linkResolver = new LinkResolver([...files, ...canvasFiles])
-  const imageHandler = new ImageHandler(vault.path, vault.slug, publicAssetsDir, imageIndex)
+  const imageHandler = new ImageHandler(vault.path, vault.slug, imageIndex)
 
-  // Garante que a imagem de capa do vault seja copiada para public/vault-assets.
+  // Garante que a imagem de capa do vault seja registrada na lista de assets (assets.json).
   if (vault.coverImage) imageHandler.resolve(vault.coverImage)
 
   console.log(`[${vault.slug}] Encontrados: ${files.length} páginas, ${canvasFiles.length} canvases, ${imageIndex.size} imagens, ${folderCount} pastas`)
@@ -264,7 +262,12 @@ export async function buildVault(vault: VaultConfig): Promise<void> {
   // ── Graph + Write ─────────────────────────────────────────────────────────
   const graph = buildGraph(pages)
   const builtAt = new Date().toISOString()
-  writeOutput(vault.slug, pages, graph, { pageCount: pages.length, folderCount, builtAt })
+  writeOutput(
+    vault.slug, pages, graph,
+    { pageCount: pages.length, folderCount, builtAt, startedAt },
+    opts.dataRoot,
+    { assets: imageHandler.assets() },
+  )
 
   console.log(`[${vault.slug}] Build concluído: ${pages.length} páginas, ${graph.edges.length} edges`)
 }

@@ -72,7 +72,7 @@ export function getGraphData(slug: string): BuildGraph | null {
   }
 }
 
-export function getVaultIndex(slug: string): { pageCount: number; folderCount: number; builtAt: string } | null {
+export function getVaultIndex(slug: string): { pageCount: number; folderCount: number; builtAt: string; startedAt?: string } | null {
   const safe = sanitizeSlug(slug)
   if (!safe) return null
   const filePath = path.join(DATA_ROOT, safe, 'index.json')
