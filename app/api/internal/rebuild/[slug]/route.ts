@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, timingSafeEqual } from 'crypto'
-import { runRebuild } from '@/lib/rebuild'
+import { runRebuild, type RebuildResult } from '@/lib/rebuild'
 import { getVaultBySlug } from '@/lib/vault-config'
 
 // Internal rebuild trigger, called by the external sync service after it writes a
@@ -63,14 +63,30 @@ export async function POST(
     return NextResponse.json({ error: 'Vault não encontrado' }, { status: 404 })
   }
 
-  // Fire and forget: the caller must not wait for the build.
-  runRebuild(slug)
-    .then((r) => {
-      if (!r.ok) console.error(`[rebuild] "${slug}" falhou: ${r.output}`)
-    })
-    .catch((err) => {
-      console.error(`[rebuild] "${slug}" erro: ${err instanceof Error ? err.message : 'desconhecido'}`)
-    })
+  const logFailure = (r: RebuildResult) => {
+    if (!r.ok) console.error(`[rebuild] "${slug}" falhou: ${r.output}`)
+  }
+  const logError = (err: unknown) => {
+    console.error(`[rebuild] "${slug}" erro: ${err instanceof Error ? err.message : 'desconhecido'}`)
+  }
+
+  // ?wait=1: answer only when the build that covers this request ends (with a
+  // build already running, that is the extra one queued after it). The build
+  // output stays in the log. A client that gives up and disconnects cancels
+  // nothing: the build runs to the end and its result is dropped.
+  if (new URL(request.url).searchParams.get('wait') === '1') {
+    try {
+      const r = await runRebuild(slug, { wait: true })
+      logFailure(r)
+      return NextResponse.json({ ok: r.ok }, { status: r.ok ? 200 : 500 })
+    } catch (err) {
+      logError(err)
+      return NextResponse.json({ ok: false }, { status: 500 })
+    }
+  }
+
+  // Fire and forget: the caller does not wait for the build.
+  runRebuild(slug).then(logFailure).catch(logError)
 
   return NextResponse.json({ ok: true }, { status: 202 })
 }
