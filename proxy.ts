@@ -12,8 +12,10 @@ export async function proxy(request: NextRequest) {
   const kind = classifyPath(pathname)
   if (kind.kind === 'invalid') return new NextResponse(null, { status: 400 })
 
-  // Vault images (public/vault-assets/<slug>/…): session required, and readers
-  // only get images of vaults they can open.
+  // Imagens dos vaults (/vault-assets/<slug>/…, servidas pela rota em
+  // app/vault-assets): exige sessão, e leitor só vê imagens de vaults que pode
+  // abrir. O proxy barra antes e a rota confere de novo, então ele não é mais a
+  // única trava.
   if (kind.kind === 'asset') {
     const token = request.cookies.get(COOKIE_NAME)?.value
     const payload = token ? await verifyToken(token) : null
@@ -62,8 +64,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except the framework's own bundles and the favicon. Images are
-  // NOT excluded: `public/` holds every vault's images, and excluding them by
-  // extension or by `vault-assets` served them to anyone, without a session.
+  // Tudo, menos os bundles do framework e o favicon. Imagens e `vault-assets`
+  // NÃO podem ser excluídos: excluir por extensão ou por `vault-assets` serviu
+  // as imagens de todos os vaults sem sessão (hoje a rota também confere).
   matcher: ['/((?!_next/static|favicon.ico).*)'],
 }

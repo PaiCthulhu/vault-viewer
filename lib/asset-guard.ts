@@ -1,13 +1,13 @@
 import type { JWTPayload } from '@/types'
 
 /**
- * Authorization for vault images, which the builder copies to
- * `public/vault-assets/<slug>/…`.
+ * Autorização das imagens dos vaults. Elas saem da pasta do vault pela rota
+ * `app/vault-assets/[slug]/[...path]/route.ts`, limitadas ao `assets.json` do
+ * build. O proxy barra antes e a rota confere de novo com `assetAccessStatus`,
+ * então o proxy não é mais a única trava.
  *
- * Next serves `public/` straight from disk, so the proxy is the only place that
- * can gate those files. Every asset belongs to exactly one vault (the first path
- * segment), and the rule is the same one the vault page applies: admins see
- * every vault, readers only the vaults they were granted.
+ * Toda imagem pertence a um vault (o primeiro segmento do caminho), e a regra é
+ * a da página do vault: admin vê todos, leitor só os vaults que recebeu.
  *
  * Paths are checked the way the static server will resolve them, not the way
  * they arrive: percent-decoded (`%2f` stays encoded in `pathname` but the file
