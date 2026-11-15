@@ -157,14 +157,12 @@ export async function DELETE(
     return NextResponse.json({ error: 'Falha ao gravar vaults.config.json' }, { status: 500 })
   }
 
-  // Best-effort removal of built data (inclui o assets.json; as imagens ficam
-  // na pasta do vault e não são copiadas).
-  for (const dir of [path.join(process.cwd(), 'data', slug)]) {
-    try {
-      fs.rmSync(dir, { recursive: true, force: true })
-    } catch {
-      /* non-fatal */
-    }
+  // Remoção best-effort dos dados do build (inclui o assets.json; as imagens
+  // ficam na pasta do vault e não são copiadas).
+  try {
+    fs.rmSync(path.join(process.cwd(), 'data', slug), { recursive: true, force: true })
+  } catch {
+    /* não fatal */
   }
 
   return NextResponse.json({ ok: true })

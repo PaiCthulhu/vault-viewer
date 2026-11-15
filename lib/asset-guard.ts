@@ -9,11 +9,10 @@ import type { JWTPayload } from '@/types'
  * Toda imagem pertence a um vault (o primeiro segmento do caminho), e a regra é
  * a da página do vault: admin vê todos, leitor só os vaults que recebeu.
  *
- * Paths are checked the way the static server will resolve them, not the way
- * they arrive: percent-decoded (`%2f` stays encoded in `pathname` but the file
- * lookup decodes it) and case-folded (the filesystem on the host is
- * case-insensitive, so `/VAULT-ASSETS/x` reaches the same file as
- * `/vault-assets/x`).
+ * Os caminhos são checados como o Next vai resolvê-los, não como chegam:
+ * decodificados (`%2f` fica codificado em `pathname`, mas a busca decodifica) e
+ * sem diferenciar caixa (o sistema de arquivos do host não diferencia, então
+ * `/VAULT-ASSETS/x` cai na mesma rota que `/vault-assets/x`).
  */
 
 const ASSET_PREFIX = '/vault-assets/'

@@ -7,8 +7,8 @@ import { classifyPath, assetAccessStatus } from '@/lib/asset-guard'
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Checked against the path the static file server will actually resolve
-  // (decoded, case-folded) — see lib/asset-guard.ts.
+  // Checado contra o caminho como o Next vai resolvê-lo (decodificado, sem
+  // diferenciar caixa) — ver lib/asset-guard.ts.
   const kind = classifyPath(pathname)
   if (kind.kind === 'invalid') return new NextResponse(null, { status: 400 })
 

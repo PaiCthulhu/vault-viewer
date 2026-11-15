@@ -30,7 +30,9 @@ vi.mock('@/lib/vault-config', () => ({
   getVaultBySlug: (slug: string) => (slug === 'v' ? { slug: 'v', path: vaultDir } : undefined),
 }))
 
-import { GET } from '@/app/vault-assets/[slug]/[...path]/route'
+import { GET, HEAD } from '@/app/vault-assets/[slug]/[...path]/route'
+import { IMAGE_CONTENT_TYPES, resolveInsideRoot } from '@/lib/vault-assets'
+import { IMAGE_EXTS } from '@/builder/scanner'
 
 let work: string
 const PNG = Buffer.from('89504e470d0a1a0a0000', 'hex')
@@ -154,5 +156,91 @@ describe('rota /vault-assets', () => {
     expect(res.headers.get('Content-Security-Policy')).toBe(
       "default-src 'none'; style-src 'unsafe-inline'; sandbox",
     )
+  })
+
+  it('%2F que vira .. depois do decode morre na validação do caminho juntado', async () => {
+    fs.writeFileSync(path.join(work, 'fora.png'), PNG)
+    writeList(['../fora.png'])
+    const res = await get(['..%2Ffora.png'])
+    expect(res.status).toBe(404)
+  })
+
+  it('entrada absoluta na lista que sai do vault dá 404 pela contenção', async () => {
+    const fora = path.join(work, 'fora.png')
+    fs.writeFileSync(fora, PNG)
+    const fwd = fora.split(path.sep).join('/')
+    writeList([fwd])
+    expect((await get(fwd.split('/').filter(Boolean))).status).toBe(404)
+  })
+
+  it('resolveInsideRoot aceita filhos e recusa saída, raiz e prefixo parecido', () => {
+    const root = path.join(work, 'vault')
+    expect(resolveInsideRoot(root, 'a/b.png')).toBe(path.join(root, 'a', 'b.png'))
+    expect(resolveInsideRoot(root, '../fora.png')).toBeNull()
+    expect(resolveInsideRoot(root, '../vault2/x.png')).toBeNull()
+    expect(resolveInsideRoot(root, '.')).toBeNull()
+    expect(resolveInsideRoot(root, path.join(work, 'fora.png'))).toBeNull()
+  })
+
+  it('diretório chamado x.png na lista dá 404', async () => {
+    fs.mkdirSync(path.join(vaultDir, 'x.png'), { recursive: true })
+    writeList(['x.png'])
+    expect((await get(['x.png'])).status).toBe(404)
+  })
+
+  it('respostas de erro têm corpo vazio', async () => {
+    writeList([])
+    for (const t of [undefined, 'outro', 'admin']) {
+      mockToken = t
+      const res = await get(['nada.png'])
+      expect(res.status).toBeGreaterThanOrEqual(401)
+      expect(await res.text()).toBe('')
+    }
+  })
+
+  it('HEAD devolve 200 com os cabeçalhos e sem corpo; 304 e 404 também', async () => {
+    put('a.png')
+    writeList(['a.png'])
+    const res = await HEAD(
+      new NextRequest('http://localhost/vault-assets/v/a.png', { method: 'HEAD' }),
+      { params: Promise.resolve({ slug: 'v', path: ['a.png'] }) },
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('image/png')
+    expect(res.headers.get('Content-Length')).toBe(String(PNG.length))
+    expect(res.headers.get('ETag')).toMatch(/^W\//)
+    expect(await res.text()).toBe('')
+    const etag = res.headers.get('ETag')!
+    const r304 = await HEAD(
+      new NextRequest('http://localhost/vault-assets/v/a.png', {
+        method: 'HEAD',
+        headers: { 'If-None-Match': etag },
+      }),
+      { params: Promise.resolve({ slug: 'v', path: ['a.png'] }) },
+    )
+    expect(r304.status).toBe(304)
+    const r404 = await HEAD(
+      new NextRequest('http://localhost/vault-assets/v/b.png', { method: 'HEAD' }),
+      { params: Promise.resolve({ slug: 'v', path: ['b.png'] }) },
+    )
+    expect(r404.status).toBe(404)
+  })
+
+  it('assets.json reescrito com o mesmo mtime mas outro tamanho recarrega a lista', async () => {
+    put('a.png')
+    put('b.png')
+    writeList(['a.png'])
+    const f = path.join(work, 'data', 'v', 'assets.json')
+    const t = fs.statSync(f).mtime
+    expect((await get(['b.png'])).status).toBe(404)
+    fs.writeFileSync(f, JSON.stringify(['a.png', 'b.png']))
+    fs.utimesSync(f, t, t)
+    expect((await get(['b.png'])).status).toBe(200)
+  })
+})
+
+describe('IMAGE_CONTENT_TYPES', () => {
+  it('cobre exatamente as extensões de IMAGE_EXTS', () => {
+    expect(Object.keys(IMAGE_CONTENT_TYPES).sort()).toEqual([...IMAGE_EXTS].sort())
   })
 })
