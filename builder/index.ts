@@ -1,30 +1,25 @@
 import { getVaultsConfig, getVaultBySlug } from '@/lib/vault-config'
 import { buildVault } from './pipeline'
+import { parseArgs, buildAll } from './cli'
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2)
-  const vaultIdx = args.indexOf('--vault')
-  const allFlag = args.includes('--all')
-  // Cada --first consome o argumento seguinte; com --all é ignorado.
-  const first: string[] = []
-  args.forEach((a, i) => {
-    if (a === '--first' && args[i + 1] !== undefined) first.push(args[i + 1])
-  })
+  const args = parseArgs(process.argv.slice(2))
 
-  if (!allFlag && vaultIdx === -1) {
+  if (!args.all && args.vault === undefined) {
     console.error('Uso: npx tsx builder/index.ts --vault <slug> | --all')
     process.exit(1)
   }
 
-  if (allFlag) {
-    const config = getVaultsConfig()
-    for (const vault of config.vaults) {
-      await buildVault(vault)
+  if (args.all) {
+    const failed = await buildAll(getVaultsConfig().vaults, vault => buildVault(vault))
+    if (failed.length > 0) {
+      console.error(`Vaults com falha: ${failed.join(', ')}`)
+      process.exit(1)
     }
     return
   }
 
-  const slug = args[vaultIdx + 1]
+  const slug = args.vault
   if (!slug) {
     console.error('Erro: --vault requer um slug. Ex: --vault drachegotter')
     process.exit(1)
@@ -36,7 +31,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  await buildVault(vault, { first })
+  await buildVault(vault, { first: args.first })
 }
 
 main().catch(err => {

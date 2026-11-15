@@ -112,7 +112,7 @@ export async function GET(request: NextRequest, ctx: Params) {
   } catch {
     return empty(404)
   }
-  return new Response(new Uint8Array(data), {
+  return new Response(data as unknown as BodyInit, {
     status: 200,
     headers: { ...r.headers, 'Content-Length': String(data.length) },
   })

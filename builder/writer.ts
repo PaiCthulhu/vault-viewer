@@ -13,6 +13,28 @@ function toFilePath(pagePath: string): string {
     .join(path.sep)
 }
 
+// Grava via arquivo temporário + rename, para um leitor nunca ver o arquivo pela metade.
+// O tmp não termina em .json (a poda só olha .json). Se o rename falhar porque um leitor
+// está com o destino aberto (Windows), grava direto e apaga o tmp.
+export function writeFileAtomic(file: string, data: string): void {
+  const tmp = `${file}.tmp-${process.pid}`
+  fs.writeFileSync(tmp, data, 'utf-8')
+  try {
+    fs.renameSync(tmp, file)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') {
+      fs.rmSync(tmp, { force: true })
+      throw err
+    }
+    try {
+      fs.writeFileSync(file, data, 'utf-8')
+    } finally {
+      fs.rmSync(tmp, { force: true })
+    }
+  }
+}
+
 // Arquivo JSON de uma página: <dataDir>/pages/<caminho saneado>.json
 export function pageFile(dataDir: string, pagePath: string): string {
   return path.join(dataDir, 'pages', toFilePath(pagePath) + '.json')
@@ -22,7 +44,7 @@ export function pageFile(dataDir: string, pagePath: string): string {
 export function writePage(dataDir: string, page: PageMeta): string {
   const filePath = pageFile(dataDir, page.path)
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, JSON.stringify(page, null, 2), 'utf-8')
+  writeFileAtomic(filePath, JSON.stringify(page, null, 2))
   return filePath
 }
 
@@ -41,14 +63,14 @@ export function toSummaries(pages: Pick<PageMeta, 'path' | 'title' | 'tags'>[]):
 // pages-index.json + tree.json (pastas-nota resolvidas em build para a sidebar receber pronta)
 export function writeSummaries(dataDir: string, summaries: PageSummary[]): void {
   fs.mkdirSync(dataDir, { recursive: true })
-  fs.writeFileSync(path.join(dataDir, 'pages-index.json'), JSON.stringify(summaries), 'utf-8')
-  fs.writeFileSync(path.join(dataDir, 'tree.json'), JSON.stringify(buildTree(summaries)), 'utf-8')
+  writeFileAtomic(path.join(dataDir, 'pages-index.json'), JSON.stringify(summaries))
+  writeFileAtomic(path.join(dataDir, 'tree.json'), JSON.stringify(buildTree(summaries)))
 }
 
 // assets.json: relPaths das imagens citadas que existem no vault
 export function writeAssets(dataDir: string, assets: string[]): void {
   fs.mkdirSync(dataDir, { recursive: true })
-  fs.writeFileSync(path.join(dataDir, 'assets.json'), JSON.stringify(assets), 'utf-8')
+  writeFileAtomic(path.join(dataDir, 'assets.json'), JSON.stringify(assets))
 }
 
 // Apaga os .json de pages/ que não estão em `written` e as pastas que ficaram vazias
@@ -119,13 +141,13 @@ export function writeOutput(
   }
 
   writeSummaries(dataDir, toSummaries(pages))
-  fs.writeFileSync(path.join(dataDir, 'graph.json'), JSON.stringify(graph, null, 2), 'utf-8')
+  writeFileAtomic(path.join(dataDir, 'graph.json'), JSON.stringify(graph, null, 2))
   if (opts.assets) writeAssets(dataDir, opts.assets)
 
   // Sem páginas, algo deu errado na varredura: não apaga o que já existe.
   if (pages.length > 0) prunePages(dataDir, written)
 
-  fs.writeFileSync(path.join(dataDir, 'index.json'), JSON.stringify(index, null, 2), 'utf-8')
+  writeFileAtomic(path.join(dataDir, 'index.json'), JSON.stringify(index, null, 2))
 
   console.log(`[${slug}] Escrito: ${pages.length} páginas → ${path.join(dataDir, 'pages')}`)
 }

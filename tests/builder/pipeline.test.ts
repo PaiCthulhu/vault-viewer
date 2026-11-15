@@ -26,7 +26,7 @@ function spyWrites(): { file: string; content: string }[] {
   const writes: { file: string; content: string }[] = []
   const real = fs.writeFileSync
   vi.spyOn(fs, 'writeFileSync').mockImplementation(((f: fs.PathOrFileDescriptor, d: string | NodeJS.ArrayBufferView, o?: fs.WriteFileOptions) => {
-    writes.push({ file: String(f).split(path.sep).join('/'), content: String(d) })
+    writes.push({ file: String(f).replace(/\.tmp-\d+$/, '').split(path.sep).join('/'), content: String(d) })
     return real(f, d, o)
   }) as typeof fs.writeFileSync)
   return writes

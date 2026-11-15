@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { writeOutput } from '../../builder/writer'
+import { writeOutput, writeFileAtomic } from '../../builder/writer'
 import type { PageMeta, BuildGraph, VaultIndex } from '../../builder/types'
 
 const TMP = path.join(os.tmpdir(), 'writer-test-' + Math.random().toString(36).slice(2))
@@ -41,7 +41,7 @@ describe('writeOutput', () => {
   it('index.json é o último arquivo gravado e as páginas vêm antes do pages-index', () => {
     const spy = vi.spyOn(fs, 'writeFileSync')
     writeOutput('test-vault', pages, graph, index, TMP, { assets: ['a.png'] })
-    const files = spy.mock.calls.map(c => String(c[0]).split(path.sep).join('/'))
+    const files = spy.mock.calls.map(c => String(c[0]).replace(/\.tmp-\d+$/, '').split(path.sep).join('/'))
     expect(path.basename(files[files.length - 1])).toBe('index.json')
     const idx = files.findIndex(f => f.endsWith('/pages-index.json'))
     const pageIdxs = files.map((f, i) => (/\/pages\/.+\.json$/.test(f) ? i : -1)).filter(i => i >= 0)
@@ -130,5 +130,32 @@ describe('writeOutput', () => {
 
     expect(warn).toHaveBeenCalled()
     expect(fs.existsSync(path.join(TMP, 'test-vault', 'index.json'))).toBe(true)
+  })
+})
+
+describe('writeFileAtomic', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    fs.rmSync(TMP, { recursive: true, force: true })
+  })
+
+  it('deixa o conteúdo final certo e nenhum tmp sobrando', () => {
+    fs.mkdirSync(TMP, { recursive: true })
+    const f = path.join(TMP, 'a.json')
+    writeFileAtomic(f, 'um')
+    writeFileAtomic(f, 'dois')
+    expect(fs.readFileSync(f, 'utf-8')).toBe('dois')
+    expect(fs.readdirSync(TMP)).toEqual(['a.json'])
+  })
+
+  it('com rename falhando em EPERM cai para gravação direta e apaga o tmp', () => {
+    fs.mkdirSync(TMP, { recursive: true })
+    const f = path.join(TMP, 'b.json')
+    vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw Object.assign(new Error('perm'), { code: 'EPERM' })
+    })
+    writeFileAtomic(f, 'conteudo')
+    expect(fs.readFileSync(f, 'utf-8')).toBe('conteudo')
+    expect(fs.readdirSync(TMP)).toEqual(['b.json'])
   })
 })
