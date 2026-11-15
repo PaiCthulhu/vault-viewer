@@ -133,6 +133,38 @@ describe('POST /api/internal/rebuild/[slug]?wait=1', () => {
     expect(await r.json()).toEqual({ ok: false })
   })
 
+  it('build extra que falha com dois ?wait=1 esperando → uma linha de log só', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call('w-count')).status).toBe(202) // build de antes dos pedidos, sem espera
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+
+    const a = call('w-count', '?wait=1')
+    const b = call('w-count', '?wait=1')
+    await flush()
+    finish(0, 0)
+    await vi.waitFor(() => expect(calls).toHaveLength(2))
+    finish(1, 1, 'falhou o extra contado')
+
+    expect((await a).status).toBe(500)
+    expect((await b).status).toBe(500)
+    await flush()
+    // Conta pelo slug, não pelo output: uma linha repetida sem o output também conta.
+    const lines = err.mock.calls.map((c) => c.map(String).join(' ')).filter((l) => l.includes('w-count'))
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('falhou o extra contado')
+  })
+
+  it('sem wait, build que falha → uma linha de log só', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call('w-nowait-fail')).status).toBe(202)
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+    finish(0, 1, 'falhou sem espera')
+    await flush()
+    const lines = err.mock.calls.map((c) => c.map(String).join(' ')).filter((l) => l.includes('w-nowait-fail'))
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('falhou sem espera')
+  })
+
   it('cliente que desiste não cancela o build, e a rota termina sem erro', async () => {
     const ctrl = new AbortController()
     const res = call('w-abort', '?wait=1', { signal: ctrl.signal })

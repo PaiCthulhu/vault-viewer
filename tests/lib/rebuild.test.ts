@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
 import { EventEmitter } from 'events'
-import { runRebuild, getBuildState, type RebuildResult } from '@/lib/rebuild'
+import { runRebuild, getBuildState, REBUILD_TIMEOUT_MS, type RebuildResult } from '@/lib/rebuild'
 
 type FakeChild = EventEmitter & {
   stdout: EventEmitter
@@ -44,6 +44,16 @@ function makeSpawn(opts: { throwOn?: Record<number, unknown>; onSpawn?: (i: numb
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 describe('runRebuild', () => {
+  // A falha de build vai para o log: o spy deixa a saída limpa e é o que os testes de log contam.
+  let consoleError: MockInstance<typeof console.error>
+  beforeEach(() => { consoleError = vi.spyOn(console, 'error').mockImplementation(() => {}) })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  // Linhas de log que citam o vault. Os testes de log usam cada um o seu slug, então um build
+  // de outro teste que termine depois não entra na conta.
+  const logLines = (slug: string) =>
+    consoleError.mock.calls.map((c) => c.map(String).join(' ')).filter((l) => l.includes(`"${slug}"`))
+
   it('dois pedidos simultâneos → 2 spawns em sequência, nunca em paralelo', async () => {
     const s = makeSpawn()
     const a = runRebuild('notes', { spawnFn: s.spawnFn })
@@ -184,8 +194,6 @@ describe('runRebuild', () => {
   })
 
   describe('build que lança erro conta como build que falhou', () => {
-    afterEach(() => { vi.restoreAllMocks() })
-
     it('no primeiro build: resolve ok:false, solta a trava e o pedido seguinte builda na hora', async () => {
       const s = makeSpawn({ throwOn: { 0: new Error('stdout quebrado') } })
       const before = Date.now()
@@ -216,7 +224,6 @@ describe('runRebuild', () => {
     })
 
     it('num build extra: quem esperava recebe ok:false e o pedido que chegou durante ele ganha o build dele', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {})
       // Relógio que anda 1 s por leitura: sem ele os builds 0 e 1 começam no mesmo ms.
       let clock = 1_000_000
       vi.spyOn(Date, 'now').mockImplementation(() => (clock += 1000))
@@ -260,6 +267,108 @@ describe('runRebuild', () => {
       expect(r.ok).toBe(false)
       expect(typeof r.output).toBe('string')
       expect(getBuildState('rj3').running).toBeNull()
+    })
+  })
+
+  describe('falha de build sai no log uma vez, por build', () => {
+    const stderr = (s: ReturnType<typeof makeSpawn>, i: number, text: string) =>
+      s.calls[i].child.stderr.emit('data', Buffer.from(text))
+
+    it('primeiro build que falha: 1 linha, com o output', async () => {
+      const s = makeSpawn()
+      const a = runRebuild('log1', { spawnFn: s.spawnFn })
+      stderr(s, 0, 'quebrou no primeiro')
+      s.finish(0, 1)
+      expect(await a).toMatchObject({ ok: false })
+      const lines = logLines('log1')
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('quebrou no primeiro')
+    })
+
+    it('build extra que falha com 3 pedidos wait esperando: 1 linha', async () => {
+      const s = makeSpawn()
+      const a = runRebuild('log2', { spawnFn: s.spawnFn })
+      const waiters = [0, 1, 2].map(() => runRebuild('log2', { spawnFn: s.spawnFn, wait: true }))
+      s.finish(0)
+      expect(await a).toMatchObject({ ok: true })
+      await tick()
+      expect(s.calls).toHaveLength(2)
+      stderr(s, 1, 'quebrou no extra')
+      s.finish(1, 1)
+      for (const w of waiters) expect(await w).toMatchObject({ ok: false })
+      await tick()
+      const lines = logLines('log2')
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('quebrou no extra')
+    })
+
+    it('build que estoura o prazo: 1 linha, dizendo que foi tempo esgotado', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        const s = makeSpawn()
+        const a = runRebuild('log3', { spawnFn: s.spawnFn })
+        stderr(s, 0, 'preso no meio')
+        await vi.advanceTimersByTimeAsync(REBUILD_TIMEOUT_MS)
+        expect(await a).toMatchObject({ ok: false, timedOut: true })
+        const lines = logLines('log3')
+        expect(lines).toHaveLength(1)
+        expect(lines[0]).toContain('tempo esgotado')
+        expect(lines[0]).toContain('preso no meio')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('build que lança erro: 1 linha, com a mensagem do erro', async () => {
+      const s = makeSpawn({ throwOn: { 0: new Error('stdout quebrado') } })
+      expect(await runRebuild('log4', { spawnFn: s.spawnFn })).toMatchObject({ ok: false })
+      const lines = logLines('log4')
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('stdout quebrado')
+    })
+
+    it('log que lança erro não faz o runRebuild rejeitar nem prende a trava', async () => {
+      consoleError.mockImplementation(() => { throw new Error('stderr fechado') })
+      const s = makeSpawn()
+      const a = runRebuild('log6', { spawnFn: s.spawnFn })
+      const waiter = runRebuild('log6', { spawnFn: s.spawnFn, wait: true })
+      s.finish(0, 1)
+      expect(await a).toMatchObject({ ok: false })
+      await tick()
+      s.finish(1, 1)
+      expect(await waiter).toMatchObject({ ok: false })
+      await tick()
+      expect(getBuildState('log6').running).toBeNull()
+    })
+
+    it('build que dá certo, com um pedido juntado a ele: nenhuma linha', async () => {
+      const s = makeSpawn()
+      const a = runRebuild('log5', { spawnFn: s.spawnFn })
+      expect(await runRebuild('log5', { spawnFn: s.spawnFn })).toMatchObject({ coalesced: true })
+      s.finish(0)
+      expect(await a).toMatchObject({ ok: true })
+      await tick()
+      s.finish(1)
+      await tick()
+      expect(s.calls).toHaveLength(2)
+      expect(logLines('log5')).toEqual([])
+    })
+
+    it('spawn que lança na hora: 1 linha, com a mensagem do erro', async () => {
+      const spawnFn = (() => { throw new Error('spawn EPERM') }) as never
+      expect(await runRebuild('log7', { spawnFn })).toMatchObject({ ok: false })
+      const lines = logLines('log7')
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('spawn EPERM')
+    })
+
+    it('slug inválido: nenhum build roda, mas a recusa sai numa linha', async () => {
+      const s = makeSpawn()
+      expect(await runRebuild('com espaço', { spawnFn: s.spawnFn })).toEqual({ ok: false, output: 'Slug inválido' })
+      expect(s.calls).toHaveLength(0)
+      const lines = logLines('com espaço')
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('Slug inválido')
     })
   })
 })

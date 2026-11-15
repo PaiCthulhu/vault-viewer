@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, timingSafeEqual } from 'crypto'
-import { runRebuild, type RebuildResult } from '@/lib/rebuild'
+import { runRebuild } from '@/lib/rebuild'
 import { getVaultBySlug } from '@/lib/vault-config'
 
 // Internal rebuild trigger, called by the external sync service after it writes a
@@ -63,9 +63,10 @@ export async function POST(
     return NextResponse.json({ error: 'Vault não encontrado' }, { status: 404 })
   }
 
-  const logFailure = (r: RebuildResult) => {
-    if (!r.ok) console.error(`[rebuild] "${slug}" falhou: ${r.output}`)
-  }
+  // runRebuild logs a failed build itself, once per build: logging the result here
+  // too would repeat it for every request waiting on the same build. It never
+  // rejects either; the catches below stay as a guard, so a bug there can't turn
+  // into an unhandled rejection or a request that never answers.
   const logError = (err: unknown) => {
     console.error(`[rebuild] "${slug}" erro: ${err instanceof Error ? err.message : 'desconhecido'}`)
   }
@@ -77,7 +78,6 @@ export async function POST(
   if (new URL(request.url).searchParams.get('wait') === '1') {
     try {
       const r = await runRebuild(slug, { wait: true })
-      logFailure(r)
       return NextResponse.json({ ok: r.ok }, { status: r.ok ? 200 : 500 })
     } catch (err) {
       logError(err)
@@ -86,7 +86,7 @@ export async function POST(
   }
 
   // Fire and forget: the caller does not wait for the build.
-  runRebuild(slug).then(logFailure).catch(logError)
+  runRebuild(slug).catch(logError)
 
   return NextResponse.json({ ok: true }, { status: 202 })
 }

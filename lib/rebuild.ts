@@ -121,16 +121,33 @@ function buildOnce(slug: string, spawnFn: SpawnFn, first: string[] = []): Promis
   })
 }
 
+// The one log line of a failed build. Callers don't log the result: N requests waiting for
+// the same build would repeat its output. Never throws, so it can't make runRebuild reject.
+function logFailure(slug: string, r: RebuildResult): void {
+  if (r.ok) return
+  try {
+    const why = r.timedOut ? ` (tempo esgotado, ${REBUILD_TIMEOUT_MS / 1000} s)` : ''
+    // JSON.stringify quotes the slug and escapes what an invalid one could carry (a newline).
+    console.error(`[rebuild] ${JSON.stringify(slug)} falhou${why}: ${r.output}`)
+  } catch {
+    // nothing left to report it to
+  }
+}
+
 // buildOnce settles through the child's events or the timer, but a throw it doesn't foresee
 // (a different spawnFn, an error inside the executor) would reject. That counts as a failed
 // build, so the lock is released (or the next extra build starts) and whoever waits gets
 // ok:false instead of hanging. The timer, if it was set, still kills the child.
+// Every build, first or extra, ends here, so this is where a failure is logged.
 async function buildOrFail(slug: string, spawnFn: SpawnFn, first: string[]): Promise<RebuildResult> {
+  let r: RebuildResult
   try {
-    return await buildOnce(slug, spawnFn, first)
+    r = await buildOnce(slug, spawnFn, first)
   } catch (err) {
-    return { ok: false, output: tail(errorText(err)) }
+    r = { ok: false, output: tail(errorText(err)) }
   }
+  logFailure(slug, r)
+  return r
 }
 
 /**
@@ -139,14 +156,18 @@ async function buildOrFail(slug: string, spawnFn: SpawnFn, first: string[]): Pro
  * once and makes ONE more build run after the current one (however many arrive).
  * Different vaults do not block each other. `first` lists notes the builder
  * should write before the rest; those of coalesced requests are merged (arrival
- * order, no repeats, at most 20) into the extra build.
+ * order, no repeats, at most 20) into the extra build. A failed build is logged
+ * here, once; callers must not log the result again.
  */
 export async function runRebuild(
   slug: string,
   opts: { spawnFn?: SpawnFn; wait?: boolean; first?: string[] } = {},
 ): Promise<RebuildResult> {
   if (!/^[a-zA-Z0-9_-]+$/.test(slug)) {
-    return { ok: false, output: 'Slug inválido' }
+    // No build runs, but the refusal is logged too: callers don't log results.
+    const refused = { ok: false, output: 'Slug inválido' }
+    logFailure(slug, refused)
+    return refused
   }
   const spawnFn = opts.spawnFn ?? nodeSpawn
   const st = stateOf(slug)
@@ -177,7 +198,7 @@ export async function runRebuild(
     return result
   }
 
-  // Follow-up builds run detached, still holding the lock (`running`); a failure goes to the log.
+  // Follow-up builds run detached, still holding the lock (`running`).
   void (async () => {
     try {
       while (st.queued) {
@@ -191,7 +212,6 @@ export async function runRebuild(
         const r = await buildOrFail(slug, spawnFn, first)
         st.lastAttemptStartedAt = extraStartedAt
         waiters?.resolve(r)
-        if (!r.ok) console.error(`[rebuild] build extra de "${slug}" falhou: ${r.output}`)
       }
     } finally {
       st.running = null
