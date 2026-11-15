@@ -4,10 +4,18 @@ import type { VaultIgnore } from './vault-ignore'
 
 export const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'])
 
+// Folga para o relógio do disco e a fração de ms do stat: uma nota recém-gravada pode vir 1 ms à frente.
+const FUTURE_SLACK_MS = 2000
+
 // Momento da nota para decidir se mudou: o maior entre mtime, ctime e birthtime
 // (um arquivo copiado/movido mantém o mtime antigo, mas ganha ctime/birthtime novos).
-export function noteTime(st: { mtimeMs: number; ctimeMs: number; birthtimeMs: number }): number {
-  return Math.max(st.mtimeMs, st.ctimeMs, st.birthtimeMs)
+// Timestamps no futuro (relógio adiantado, cópia que preserva datas) são ignorados: senão a nota
+// nunca ficaria "anterior" a um build. Devolve -Infinity se os três estiverem no futuro.
+export function noteTime(
+  st: { mtimeMs: number; ctimeMs: number; birthtimeMs: number },
+  now: number = Date.now(),
+): number {
+  return Math.max(...[st.mtimeMs, st.ctimeMs, st.birthtimeMs].filter(t => t <= now + FUTURE_SLACK_MS), -Infinity)
 }
 
 const NOOP_IGNORE: VaultIgnore = { ignores: () => false, ignoresDir: () => false }

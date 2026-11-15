@@ -28,6 +28,9 @@ const defaultDeps: PendingDeps = {
 // (o scanner pula entradas com ponto).
 export function safePagePath(p: string): boolean {
   if (!p || p.includes('\\')) return false
+  // Caracteres que o Windows e o Obsidian não aceitam em nome de nota. Barram também a sintaxe de
+  // stream do NTFS ("Pasta::$INDEX_ALLOCATION"), que contornaria o .viewerignore.
+  if (/[<>:"|?*\x00-\x1f]/.test(p)) return false
   return p.split('/').every(seg => seg !== '' && !seg.startsWith('.'))
 }
 
@@ -36,6 +39,7 @@ export function safePagePath(p: string): boolean {
 export function noteFor(vault: VaultConfig, p: string): { t: number } | null {
   if (!safePagePath(p)) return null
   const ig = loadVaultIgnore(vault.path)
+  let best: number | null = null
   for (const ext of ['.md', '.canvas']) {
     const rel = p + ext
     let st: fs.Stats
@@ -46,9 +50,10 @@ export function noteFor(vault: VaultConfig, p: string): { t: number } | null {
     }
     if (!st.isFile()) continue
     if (!isScannedPath(rel, ig)) continue
-    return { t: noteTime(st) }
+    const t = noteTime(st)
+    if (best === null || t > best) best = t
   }
-  return null
+  return best === null ? null : { t: best }
 }
 
 // Último build que olhou o vault: o maior entre o início do último build concluído
@@ -91,6 +96,7 @@ export type PageStatus = 'ready' | 'pending' | 'missing'
 
 // Estado para a rota de status. Só lê: nunca dispara build.
 export function pageStatus(vault: VaultConfig, p: string, deps: Partial<PendingDeps> = {}): PageStatus {
+  if (!safePagePath(p)) return 'missing'
   let mtime: number | null = null
   const file = pageFilePath(vault.slug, p)
   if (file) {

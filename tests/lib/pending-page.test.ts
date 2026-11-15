@@ -4,7 +4,7 @@ import os from 'os'
 import path from 'path'
 import type { BuildState } from '@/lib/rebuild'
 import type { VaultConfig } from '@/types'
-import { scanVault, isScannedPath } from '@/builder/scanner'
+import { scanVault, isScannedPath, noteTime } from '@/builder/scanner'
 import { loadVaultIgnore } from '@/builder/vault-ignore'
 import {
   safePagePath, noteFor, lastScanMs, isPending, pageStatus, provisionalPage,
@@ -54,7 +54,7 @@ afterEach(() => {
 
 describe('safePagePath', () => {
   it('aceita caminho comum', () => expect(safePagePath('Jogos/Foo')).toBe(true))
-  it.each(['../x', 'a\\b', 'a//b', '.obsidian/x', 'a/.oculta', ''])('recusa %j', p => {
+  it.each(['../x', 'a\\b', 'a//b', '.obsidian/x', 'a/.oculta', '', 'a:b', 'a?b', 'a"b', 'a<b', 'a|b', 'a*b', 'ab'])('recusa %j', p => {
     expect(safePagePath(p)).toBe(false)
   })
 })
@@ -73,6 +73,33 @@ describe('noteFor', () => {
     note('.oculta/x')
     expect(noteFor(vault, '.oculta/x')).toBeNull()
   })
+  it('não contorna o .viewerignore com sintaxe de stream do NTFS', () => {
+    fs.writeFileSync(path.join(vaultDir, '.viewerignore'), 'Privado/\n')
+    note('Privado/Segredo')
+    expect(noteFor(vault, 'Privado::$INDEX_ALLOCATION/Segredo')).toBeNull()
+    expect(noteFor(vault, 'Privado:$I30:$INDEX_ALLOCATION/Segredo')).toBeNull()
+  })
+  it('com .md e .canvas de mesmo nome usa o maior t', () => {
+    const md = noteFor(vault, 'Jogos/Nova')!.t
+    const canvas = path.join(vaultDir, 'Jogos', 'Nova.canvas')
+    fs.writeFileSync(canvas, '{}')
+    const futuro = new Date(Math.min(md + 60_000, Date.now() - 1000))
+    fs.utimesSync(canvas, futuro, futuro)
+    const t = noteFor(vault, 'Jogos/Nova')!.t
+    expect(t).toBeGreaterThanOrEqual(md)
+    expect(t).toBe(Math.max(md, noteTime(fs.statSync(canvas))))
+  })
+})
+
+describe('noteTime', () => {
+  const now = 1_000_000_000_000
+  it('ignora timestamps no futuro', () => {
+    expect(noteTime({ mtimeMs: now + 3_600_000, ctimeMs: 5, birthtimeMs: 3 }, now)).toBe(5)
+  })
+  it('os três no futuro dão -Infinity', () => {
+    const f = now + 3_600_000
+    expect(noteTime({ mtimeMs: f, ctimeMs: f, birthtimeMs: f }, now)).toBe(-Infinity)
+  })
 })
 
 describe('isScannedPath', () => {
@@ -86,6 +113,19 @@ describe('isScannedPath', () => {
     for (const rel of ['Privado/Segredo.md', '.oculta/x.md', 'Pub/Ok.md', 'Jogos/Nova.md']) {
       expect(isScannedPath(rel, ig)).toBe(scanned.has(rel))
     }
+  })
+  it('concorda com o scanVault em padrão de arquivo e padrão aninhado', () => {
+    fs.writeFileSync(path.join(vaultDir, '.viewerignore'), '*.rascunho.md\n**/X/\n')
+    note('A/Nota.rascunho')
+    note('A/B/X/Fundo')
+    note('X/Raiz')
+    note('A/B/Visivel')
+    const ig = loadVaultIgnore(vaultDir)
+    const scanned = new Set(scanVault(vaultDir, ig).map(f => f.relativePath + '.md'))
+    const todos = ['A/Nota.rascunho.md', 'A/B/X/Fundo.md', 'X/Raiz.md', 'A/B/Visivel.md']
+    for (const rel of todos) expect(isScannedPath(rel, ig)).toBe(scanned.has(rel))
+    expect(scanned.has('A/B/Visivel.md')).toBe(true)
+    expect(scanned.has('A/Nota.rascunho.md')).toBe(false)
   })
 })
 
@@ -143,6 +183,15 @@ describe('isPending', () => {
     const t = T(); writeIndex({ builtAt: new Date(t + 1000).toISOString() })
     expect(isPending(vault, 'Jogos/Nova', { trigger: true }, deps(state()))).toBe(false)
   })
+  it('nota com mtime no futuro não provoca build em laço', () => {
+    const futuro = new Date(Date.now() + 3_600_000)
+    fs.utimesSync(path.join(vaultDir, 'Jogos', 'Nova.md'), futuro, futuro)
+    // o utimesSync põe o ctime em "agora": o index fica depois dele para isolar o mtime futuro
+    idx(Date.now() + 1000)
+    const d = deps(state())
+    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(false)
+    expect(d.requestBuild).not.toHaveBeenCalled()
+  })
   it('sem nota devolve false', () => {
     expect(isPending(vault, 'Nao/Existe', { trigger: true }, deps(state()))).toBe(false)
   })
@@ -157,6 +206,19 @@ describe('isPending', () => {
 })
 
 describe('pageStatus', () => {
+  it('caminho inseguro é missing sem tocar no disco', () => {
+    const d = deps(state())
+    expect(pageStatus(vault, '../x', d)).toBe('missing')
+    expect(d.buildState).not.toHaveBeenCalled()
+  })
+  it('nunca dispara build no ramo (b), com e sem JSON', () => {
+    const t = T(); idx(t - 10_000)
+    const d = deps(state())
+    expect(pageStatus(vault, 'Jogos/Nova', d)).toBe('pending')
+    writePageJson('Jogos/Nova', '{}', t - 5000)
+    expect(pageStatus(vault, 'Jogos/Nova', d)).toBe('pending')
+    expect(d.requestBuild).not.toHaveBeenCalled()
+  })
   it('JSON mais novo que a nota é ready', () => {
     const t = T(); idx(t - 10_000)
     writePageJson('Jogos/Nova', '{}', t + 5000)
