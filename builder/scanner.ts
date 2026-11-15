@@ -23,6 +23,17 @@ function relOf(vaultPath: string, full: string): string {
   return path.relative(vaultPath, full).replace(/\\/g, '/')
 }
 
+// Diz se o walkVault chegaria a visitar este arquivo (caminho relativo com extensão e barras '/').
+// É a mesma regra da varredura: segmento vazio ou com ponto, pasta ignorada acima ou arquivo ignorado.
+export function isScannedPath(relPath: string, ig: VaultIgnore): boolean {
+  const parts = relPath.split('/')
+  if (parts.some(seg => seg === '' || seg.startsWith('.'))) return false
+  for (let i = 1; i < parts.length; i++) {
+    if (ig.ignoresDir(parts.slice(0, i).join('/'))) return false
+  }
+  return !ig.ignores(relPath)
+}
+
 // Varre o vault aplicando `.viewerignore`: pula diretórios e arquivos casados.
 function walkVault(
   vaultPath: string,

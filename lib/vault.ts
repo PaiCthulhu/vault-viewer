@@ -3,7 +3,10 @@ import path from 'path'
 import type { PageMeta, BuildGraph, PageSummary } from '@/builder/types'
 import type { TreeNode } from '@/lib/vault-tree'
 
-const DATA_ROOT = path.join(process.cwd(), 'data')
+// Calculado na chamada (e não no carregamento do módulo) para que testes possam trocar o cwd.
+function dataRoot(): string {
+  return path.join(process.cwd(), 'data')
+}
 
 function sanitizeSlug(slug: string): string | null {
   // Slug must only contain alphanumeric, hyphens, underscores
@@ -20,14 +23,32 @@ function toFilePath(pagePath: string): string {
     .join(path.sep)
 }
 
-export function getPageData(slug: string, pathSegments: string[]): PageMeta | null {
+// Caminho do JSON de uma página, saneado e contido em pages/ (null se o slug ou o caminho forem inválidos).
+export function pageFilePath(slug: string, pagePath: string): string | null {
   const safe = sanitizeSlug(slug)
   if (!safe) return null
+  if (!pagePath) return null
+  const pagesRoot = path.join(dataRoot(), safe, 'pages')
+  const filePath = path.join(pagesRoot, toFilePath(pagePath) + '.json')
+  if (!filePath.startsWith(pagesRoot + path.sep) && filePath !== pagesRoot) return null
+  return filePath
+}
+
+export function pageJsonMtimeMs(slug: string, pagePath: string): number | null {
+  const filePath = pageFilePath(slug, pagePath)
+  if (!filePath) return null
+  try {
+    return fs.statSync(filePath).mtimeMs
+  } catch {
+    return null
+  }
+}
+
+export function getPageData(slug: string, pathSegments: string[]): PageMeta | null {
   if (pathSegments.length === 0) return null
   const pagePath = pathSegments.map(s => decodeURIComponent(s)).join('/')
-  const filePath = path.join(DATA_ROOT, safe, 'pages', toFilePath(pagePath) + '.json')
-  const pagesRoot = path.join(DATA_ROOT, safe, 'pages')
-  if (!filePath.startsWith(pagesRoot + path.sep) && filePath !== pagesRoot) return null
+  const filePath = pageFilePath(slug, pagePath)
+  if (!filePath) return null
   if (!fs.existsSync(filePath)) return null
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as PageMeta
@@ -39,7 +60,7 @@ export function getPageData(slug: string, pathSegments: string[]): PageMeta | nu
 export function getPagesIndex(slug: string): PageSummary[] {
   const safe = sanitizeSlug(slug)
   if (!safe) return []
-  const filePath = path.join(DATA_ROOT, safe, 'pages-index.json')
+  const filePath = path.join(dataRoot(), safe, 'pages-index.json')
   if (!fs.existsSync(filePath)) return []
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as PageSummary[]
@@ -51,7 +72,7 @@ export function getPagesIndex(slug: string): PageSummary[] {
 export function getVaultTree(slug: string): TreeNode[] {
   const safe = sanitizeSlug(slug)
   if (!safe) return []
-  const filePath = path.join(DATA_ROOT, safe, 'tree.json')
+  const filePath = path.join(dataRoot(), safe, 'tree.json')
   if (!fs.existsSync(filePath)) return []
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as TreeNode[]
@@ -63,7 +84,7 @@ export function getVaultTree(slug: string): TreeNode[] {
 export function getGraphData(slug: string): BuildGraph | null {
   const safe = sanitizeSlug(slug)
   if (!safe) return null
-  const filePath = path.join(DATA_ROOT, safe, 'graph.json')
+  const filePath = path.join(dataRoot(), safe, 'graph.json')
   if (!fs.existsSync(filePath)) return null
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as BuildGraph
@@ -75,7 +96,7 @@ export function getGraphData(slug: string): BuildGraph | null {
 export function getVaultIndex(slug: string): { pageCount: number; folderCount: number; builtAt: string; startedAt?: string } | null {
   const safe = sanitizeSlug(slug)
   if (!safe) return null
-  const filePath = path.join(DATA_ROOT, safe, 'index.json')
+  const filePath = path.join(dataRoot(), safe, 'index.json')
   if (!fs.existsSync(filePath)) return null
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
