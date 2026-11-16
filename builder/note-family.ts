@@ -7,6 +7,17 @@
 //   - `comment`: com `parent` (resolva ou não, e mesmo fora do formato, como lista ou
 //     número), não gera página nem aparece em lugar nenhum: corpo de comentário nunca
 //     passa pelo render completo (que roda dataviewjs). Sem `parent`, é nota comum.
+//     Quando a cadeia de `parent` chega a uma nota comum com Propriedades, o comentário
+//     é anexado a ela como conversa (`builder/comments.ts`); senão é órfão e some.
+//
+// Rede de segurança da pasta `_comments/` na raiz do vault (onde o viewer grava os
+// comentários; sem diferenciar caixa, em qualquer profundidade): um `.md` ali dentro que
+// não é comentário válido (frontmatter malformado, gravação pela metade, `note_type`
+// ausente ou diferente de `comment`, sem `parent`) é ignorado: sem página, sem render,
+// fora da árvore, da busca, do grafo e das conversas, e não é mãe nem aba de ninguém.
+// Sem isso, o `extractFrontmatter` engole o YAML quebrado e o arquivo vira nota comum,
+// cujo corpo passa pelo render completo (que roda dataviewjs). O Dataview continua
+// vendo esses arquivos.
 import type { PageTab } from './types'
 
 export type { PageTab }
@@ -28,12 +39,19 @@ export interface FamilyNote {
 }
 
 export interface NoteFamilies {
-  // Fora da árvore, da busca e do grafo: abas válidas e comentários com `parent`.
+  // Fora da árvore, da busca e do grafo: abas válidas, comentários válidos e os
+  // ignorados de `_comments/`.
   hidden: Set<string>
-  // Não geram `pages/<caminho>.json`: comentários com `parent`.
+  // Não geram `pages/<caminho>.json` nem passam pelo render: comentários válidos e os
+  // ignorados de `_comments/`.
   noPage: Set<string>
+  // Comentários válidos (`note_type: comment` com `parent`), resolva o `parent` ou não.
+  // Só eles formam conversas; um ignorado de `_comments/` está em `noPage` mas não aqui.
+  comments: Set<string>
   // Barra de abas, para a mãe e para cada aba dela (a mesma lista).
   tabsOf: Map<string, PageTab[]>
+  // Filha → caminho da mãe, só quando o `parent` resolve para OUTRA nota existente.
+  parentOf: Map<string, string>
 }
 
 // Alvo do `parent`, normalizado: aceita com e sem colchetes, descarta apelido e
@@ -45,6 +63,14 @@ export function parentRef(v: unknown): string | null {
   const m = /^\[\[([^\]|#]*)(?:[|#][^\]]*)?\]\]$/.exec(s)
   const target = (m ? m[1] : s).trim().replace(/\.md$/i, '').replace(/^\/+/, '').trim()
   return target || null
+}
+
+// Caminho (relativo à raiz, com `/`, sem `.md`) dentro da pasta `_comments/` da raiz,
+// sem diferenciar caixa e em qualquer profundidade. `_comments.md` na raiz e
+// `Notas/_comments/x.md` ficam de fora.
+export function isInCommentsFolder(path: string): boolean {
+  const slash = path.indexOf('/')
+  return slash > 0 && slash < path.length - 1 && path.slice(0, slash).toLowerCase() === '_comments'
 }
 
 // `parent` presente com algum valor (texto não vazio, lista não vazia, número...).
@@ -104,22 +130,30 @@ export function resolveFamilies(notes: FamilyNote[]): NoteFamilies {
 
   const hidden = new Set<string>()
   const noPage = new Set<string>()
+  const comments = new Set<string>()
   for (const n of notes) {
     const f = fields.get(n.path)!
     if (f.noteType === 'comment' && hasParentValue(n.frontmatter.parent)) {
+      comments.add(n.path)
+      hidden.add(n.path)
+      noPage.add(n.path)
+    } else if (isInCommentsFolder(n.path)) {
+      // Ignorado: dentro de `_comments/` e não é comentário válido.
       hidden.add(n.path)
       noPage.add(n.path)
     }
   }
 
-  // Mãe principal: não é comentário escondido nem aba com mãe resolvida. A checagem
-  // é de um passo só, então ciclos e cadeias (aba de aba) caem em nota comum.
+  // Mãe principal: não é comentário nem ignorado (sem página), nem aba com mãe
+  // resolvida. A checagem é de um passo só, então ciclos e cadeias (aba de aba) caem
+  // em nota comum.
   const isPrincipal = (m: FamilyNote): boolean =>
     !noPage.has(m.path) && !(fields.get(m.path)!.noteType === 'tab' && parentOf.has(m.path))
 
   const children = new Map<string, FamilyNote[]>()
   for (const n of notes) {
-    if (fields.get(n.path)!.noteType !== 'tab') continue
+    // Uma aba sem página (ignorada em `_comments/`) não entra na barra de ninguém.
+    if (fields.get(n.path)!.noteType !== 'tab' || noPage.has(n.path)) continue
     const m = parentOf.get(n.path)
     if (!m || !isPrincipal(m)) continue
     hidden.add(n.path)
@@ -141,5 +175,8 @@ export function resolveFamilies(notes: FamilyNote[]): NoteFamilies {
     for (const t of tabs) tabsOf.set(t.path, tabs)
   }
 
-  return { hidden, noPage, tabsOf }
+  const parentPaths = new Map<string, string>()
+  for (const [child, mother] of parentOf) parentPaths.set(child, mother.path)
+
+  return { hidden, noPage, comments, tabsOf, parentOf: parentPaths }
 }

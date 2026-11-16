@@ -9,6 +9,7 @@ import { getFolderPage } from '@/lib/folder-page'
 import { pageVersion } from '@/lib/page-version'
 import { parseHtmlSegments } from '@/lib/parse-html-segments'
 import { extractToc } from '@/lib/toc'
+import { pageDisplayNames } from '@/lib/comment-authors'
 import { VaultViewer } from '@/components/viewer/VaultViewer'
 
 interface Props {
@@ -81,6 +82,9 @@ export default async function VaultPage({ params }: Props) {
   const segments = parseHtmlSegments(page.html)
   const toc = extractToc(page.html)
 
+  // Nomes dos autores dos comentários: à parte, nunca dentro do `page` (a versão é o hash do JSON do disco).
+  const displayNames = vault.comments === true ? pageDisplayNames(page, user.username) : {}
+
   return (
     <VaultViewer
       vault={vault}
@@ -94,6 +98,7 @@ export default async function VaultPage({ params }: Props) {
       isAdmin={user.isAdmin}
       pending={pending}
       pageVersion={pending ? null : pageVersion(page)}
+      displayNames={displayNames}
     />
   )
 }

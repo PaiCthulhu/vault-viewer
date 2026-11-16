@@ -34,6 +34,9 @@ interface VaultViewerProps {
   pending?: { mode: 'generating' | 'updating'; path: string } | null
   // Versão (sha1) da página renderizada; null/ausente = não vigiar (página pendente).
   pageVersion?: string | null
+  // username → nome de exibição (null = usuário sem nome); ausente do mapa = autor desconhecido.
+  // Vem à parte do `page` para não alterar a versão da página.
+  displayNames?: Record<string, string | null>
 }
 
 export function VaultViewer({

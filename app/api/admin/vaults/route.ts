@@ -36,6 +36,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Caminho não existe no servidor' }, { status: 400 })
   }
 
+  if ('comments' in body && typeof body.comments !== 'boolean') {
+    return NextResponse.json({ error: 'comments deve ser booleano' }, { status: 400 })
+  }
+
   const filePath = path.join(process.cwd(), 'vaults.config.json')
   let config: VaultsConfigFile
   try {
@@ -64,6 +68,7 @@ export async function POST(request: NextRequest) {
       typeof body.coverProperty === 'string' && body.coverProperty.trim() !== ''
         ? body.coverProperty.trim()
         : null,
+    comments: body.comments === true,
   }
 
   config.vaults.push(vault)

@@ -8,15 +8,29 @@ let _db: Database.Database | null = null
 
 export function getDb(): Database.Database {
   if (!_db) {
-    _db = new Database(DB_PATH)
-    _db.pragma('journal_mode = WAL')
-    _db.pragma('foreign_keys = ON')
-    applySchema(_db)
+    // `_db` só recebe a conexão depois do schema: se algo lançar no meio (ex.: disco cheio
+    // no ALTER), a conexão é fechada e a próxima chamada tenta de novo, em vez de receber
+    // um banco sem schema.
+    const db = new Database(DB_PATH)
+    try {
+      db.pragma('journal_mode = WAL')
+      db.pragma('foreign_keys = ON')
+      applySchema(db)
+    } catch (e) {
+      // Um erro do close não pode esconder o erro original.
+      try {
+        db.close()
+      } catch {
+        /* segue com o erro original */
+      }
+      throw e
+    }
+    _db = db
   }
   return _db
 }
 
-function applySchema(db: Database.Database): void {
+export function applySchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,6 +47,12 @@ function applySchema(db: Database.Database): void {
       PRIMARY KEY (user_id, vault_slug)
     );
   `)
+
+  // Banco antigo: acrescenta a coluna do nome de exibição (nula = sem nome)
+  const cols = db.prepare('PRAGMA table_info(users)').all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'display_name')) {
+    db.exec('ALTER TABLE users ADD COLUMN display_name TEXT')
+  }
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -59,21 +79,40 @@ export function dbCreateUser(
   username: string,
   passwordHash: string,
   isAdmin = false,
+  displayName: string | null = null,
 ): UserRow {
   return getDb()
     .prepare(
-      'INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?) RETURNING *',
+      'INSERT INTO users (username, password_hash, is_admin, display_name) VALUES (?, ?, ?, ?) RETURNING *',
     )
-    .get(username, passwordHash, isAdmin ? 1 : 0) as UserRow
+    .get(username, passwordHash, isAdmin ? 1 : 0, displayName) as UserRow
+}
+
+// username → display_name, só para usernames que existem (null = usuário sem nome)
+export function dbGetDisplayNames(usernames: string[]): Record<string, string | null> {
+  const unique = [...new Set(usernames.filter((u) => u !== ''))]
+  if (unique.length === 0) return {}
+  const rows = getDb()
+    .prepare(
+      `SELECT username, display_name FROM users WHERE username IN (${unique.map(() => '?').join(', ')})`,
+    )
+    .all(...unique) as { username: string; display_name: string | null }[]
+  const out: Record<string, string | null> = {}
+  for (const r of rows) out[r.username] = r.display_name ?? null
+  return out
 }
 
 export function dbUpdateUser(
   id: number,
-  fields: { username?: string; passwordHash?: string },
+  fields: { username?: string; passwordHash?: string; displayName?: string | null },
 ): void {
   const db = getDb()
   const sets: string[] = []
-  const params: (string | number)[] = []
+  const params: (string | number | null)[] = []
+  if (fields.displayName !== undefined) {
+    sets.push('display_name = ?')
+    params.push(fields.displayName)
+  }
   if (fields.username !== undefined) {
     sets.push('username = ?')
     params.push(fields.username)

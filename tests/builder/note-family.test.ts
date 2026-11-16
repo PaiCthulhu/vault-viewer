@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parentRef, noteFamilyFields, resolveFamilies, type FamilyNote } from '../../builder/note-family'
+import { parentRef, noteFamilyFields, resolveFamilies, isInCommentsFolder, type FamilyNote } from '../../builder/note-family'
 
 function note(path: string, frontmatter: Record<string, unknown> = {}, title?: string): FamilyNote {
   return { path, title: title ?? path.split('/').pop()!, frontmatter }
@@ -231,5 +231,100 @@ describe('resolveFamilies — caixa', () => {
     const f = resolveFamilies([note('P/M'), note('P/m'), tab('A', '[[P/M]]'), tab('B', '[[P/m]]')])
     expect(f.tabsOf.get('P/M')!.map(t => t.path)).toEqual(['P/M', 'A'])
     expect(f.tabsOf.get('P/m')!.map(t => t.path)).toEqual(['P/m', 'B'])
+  })
+})
+
+describe('isInCommentsFolder', () => {
+  it.each([
+    ['_comments/x'],
+    ['_comments/Notas/Mãe/2026-11-16 120000 ana-k3f9'],
+    ['_Comments/a/b/c'],
+    ['_COMMENTS/x'],
+  ])('%s → dentro', p => {
+    expect(isInCommentsFolder(p)).toBe(true)
+  })
+
+  it.each([
+    ['_comments'], // `_comments.md` na raiz
+    ['Notas/_comments/x'],
+    ['_commentsX/y'],
+    ['_comment/x'],
+    ['x/_comments'],
+    ['_comments/'],
+    [''],
+  ])('%s → fora', p => {
+    expect(isInCommentsFolder(p)).toBe(false)
+  })
+})
+
+describe('resolveFamilies — pasta _comments/', () => {
+  const ignorado = (f: ReturnType<typeof resolveFamilies>, p: string) => {
+    expect(f.hidden.has(p), p).toBe(true)
+    expect(f.noPage.has(p), p).toBe(true)
+    expect(f.comments.has(p), p).toBe(false)
+    expect(f.tabsOf.has(p), p).toBe(false)
+  }
+
+  it('comentário válido entra em comments, dentro ou fora da pasta', () => {
+    const f = resolveFamilies([
+      note('N'),
+      note('_comments/N/c1', { note_type: 'comment', parent: '[[N]]' }),
+      note('Outra/c2', { note_type: 'comment', parent: '[[N]]' }),
+      note('_comments/X/orfao', { note_type: 'comment', parent: '[[Não Existe]]' }),
+    ])
+    expect([...f.comments].sort()).toEqual(['Outra/c2', '_comments/N/c1', '_comments/X/orfao'])
+    for (const p of f.comments) {
+      expect(f.hidden.has(p)).toBe(true)
+      expect(f.noPage.has(p)).toBe(true)
+    }
+  })
+
+  it('o que não é comentário válido dentro da pasta é ignorado, em qualquer caixa e profundidade', () => {
+    const f = resolveFamilies([
+      note('N', { status: 'x' }),
+      note('_comments/N/sem-frontmatter'),
+      note('_Comments/a/b/c'),
+      note('_COMMENTS/N/outro-tipo', { note_type: 'character', parent: '[[N]]' }),
+      note('_comments/N/sem-parent', { note_type: 'comment' }),
+      note('_comments/N/parent-vazio', { note_type: 'comment', parent: '  ' }),
+    ])
+    for (const p of [
+      '_comments/N/sem-frontmatter',
+      '_Comments/a/b/c',
+      '_COMMENTS/N/outro-tipo',
+      '_comments/N/sem-parent',
+      '_comments/N/parent-vazio',
+    ]) {
+      ignorado(f, p)
+    }
+    expect(f.comments.size).toBe(0)
+    expect(f.hidden.has('N')).toBe(false)
+  })
+
+  it('fora da raiz, ou o próprio _comments.md, continua nota comum', () => {
+    const f = resolveFamilies([note('Notas/_comments/x'), note('_comments'), note('_commentsX/y')])
+    expect(f.hidden.size).toBe(0)
+    expect(f.noPage.size).toBe(0)
+    expect(f.comments.size).toBe(0)
+  })
+
+  it('aba dentro da pasta é ignorada: a mãe não ganha barra', () => {
+    const f = resolveFamilies([note('M', { status: 'x' }), tab('_comments/M/aba', '[[M]]')])
+    ignorado(f, '_comments/M/aba')
+    expect(f.tabsOf.size).toBe(0)
+  })
+
+  it('aba dentro da pasta não entra na barra de uma mãe que tem abas válidas', () => {
+    const f = resolveFamilies([note('M'), tab('Abas/A', '[[M]]'), tab('_comments/M/aba', '[[M]]', { order: 1 })])
+    expect(f.tabsOf.get('M')!.map(t => t.path)).toEqual(['M', 'Abas/A'])
+    ignorado(f, '_comments/M/aba')
+  })
+
+  it('aba fora da pasta cuja mãe é um ignorado vira nota comum', () => {
+    const f = resolveFamilies([note('_comments/M/ignorado'), tab('T', '[[_comments/M/ignorado]]')])
+    ignorado(f, '_comments/M/ignorado')
+    expect(f.hidden.has('T')).toBe(false)
+    expect(f.noPage.has('T')).toBe(false)
+    expect(f.tabsOf.size).toBe(0)
   })
 })

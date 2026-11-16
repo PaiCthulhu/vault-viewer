@@ -14,6 +14,7 @@ interface Props {
 export function UserDetailPanel({ user, vaults, onClose, onSaved }: Props) {
   const { t } = useI18n()
   const [username, setUsername] = useState(user?.username ?? '')
+  const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [password, setPassword] = useState('')
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>(user?.vaultSlugs ?? [])
   const [saving, setSaving] = useState(false)
@@ -21,6 +22,7 @@ export function UserDetailPanel({ user, vaults, onClose, onSaved }: Props) {
 
   useEffect(() => {
     setUsername(user?.username ?? '')
+    setDisplayName(user?.displayName ?? '')
     setPassword('')
     setSelectedSlugs(user?.vaultSlugs ?? [])
     setError(null)
@@ -38,14 +40,16 @@ export function UserDetailPanel({ user, vaults, onClose, onSaved }: Props) {
     try {
       if (user) {
         // Update existing user
-        if (username || password) {
-          const res = await fetch(`/api/admin/users/${user.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username || undefined, password: password || undefined }),
-          })
-          if (!res.ok) { setError((await res.json()).error); return }
-        }
+        const res = await fetch(`/api/admin/users/${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: username || undefined,
+            password: password || undefined,
+            displayName,
+          }),
+        })
+        if (!res.ok) { setError((await res.json()).error); return }
         // Update permissions
         await fetch(`/api/admin/users/${user.id}/permissions`, {
           method: 'PUT',
@@ -58,7 +62,7 @@ export function UserDetailPanel({ user, vaults, onClose, onSaved }: Props) {
         const res = await fetch('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password, displayName }),
         })
         if (!res.ok) { setError((await res.json()).error); return }
         const { user: created } = await res.json()
@@ -105,6 +109,20 @@ export function UserDetailPanel({ user, vaults, onClose, onSaved }: Props) {
               onChange={(e) => setUsername(e.target.value)}
               className="w-[220px] rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[0.9rem] text-[var(--text)] outline-none focus:border-indigo-500/50"
             />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[0.72rem] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+              {t('admin.userDetail.displayName')}
+            </label>
+            <input
+              value={displayName}
+              maxLength={80}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-[220px] rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[0.9rem] text-[var(--text)] outline-none focus:border-indigo-500/50"
+            />
+            <p className="mt-1 w-[220px] text-[0.72rem] text-[var(--text-muted)]">
+              {t('admin.userDetail.displayNameHelp')}
+            </p>
           </div>
           <div>
             <label className="mb-1.5 block text-[0.72rem] font-semibold uppercase tracking-widest text-[var(--text-muted)]">

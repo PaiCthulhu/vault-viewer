@@ -24,6 +24,7 @@ export function VaultDetailPanel({ vault, onClose, onSaved }: Props) {
   const [coverImage, setCoverImage] = useState(vault?.coverImage ?? '')
   const [titleProperty, setTitleProperty] = useState(vault?.titleProperty ?? '')
   const [coverProperty, setCoverProperty] = useState(vault?.coverProperty ?? '')
+  const [comments, setComments] = useState(vault?.comments === true)
 
   const [saving, setSaving] = useState(false)
   const [rebuilding, setRebuilding] = useState(false)
@@ -38,6 +39,7 @@ export function VaultDetailPanel({ vault, onClose, onSaved }: Props) {
     setCoverImage(vault?.coverImage ?? '')
     setTitleProperty(vault?.titleProperty ?? '')
     setCoverProperty(vault?.coverProperty ?? '')
+    setComments(vault?.comments === true)
     setError(null)
     setRebuildMsg(null)
   }, [vault])
@@ -61,6 +63,7 @@ export function VaultDetailPanel({ vault, onClose, onSaved }: Props) {
         coverImage,
         titleProperty,
         coverProperty: coverProperty.trim() === '' ? null : coverProperty.trim(),
+        comments,
       }
       const res = isNew
         ? await fetch('/api/admin/vaults', {
@@ -206,6 +209,14 @@ export function VaultDetailPanel({ vault, onClose, onSaved }: Props) {
             className={inputCls}
           />
           <p className={helperCls}>{t('admin.vaultDetail.coverPropHelp')}</p>
+        </div>
+
+        <div>
+          <label className={`${labelCls} flex items-center gap-2`}>
+            <input type="checkbox" checked={comments} onChange={(e) => setComments(e.target.checked)} />
+            {t('admin.vaultDetail.comments')}
+          </label>
+          <p className={helperCls}>{t('admin.vaultDetail.commentsHelp')}</p>
         </div>
 
         {rebuildMsg && (

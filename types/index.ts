@@ -14,6 +14,9 @@ export interface VaultConfig {
   // for the focal position. When null/absent, the builder tries "cover" then
   // "banner".
   coverProperty?: string | null
+  // Comentários nas notas. Desligada por padrão (ausente = false). Só o viewer
+  // e a API leem; o builder ignora a flag.
+  comments?: boolean
 }
 
 export interface VaultsConfigFile {
@@ -32,11 +35,13 @@ export interface UserRow {
   password_hash: string
   is_admin: number // SQLite stores boolean as 0 or 1
   created_at: string
+  display_name: string | null
 }
 
 export interface UserPublic {
   id: number
   username: string
+  displayName: string | null
   isAdmin: boolean
   createdAt: string
   vaultSlugs: string[]

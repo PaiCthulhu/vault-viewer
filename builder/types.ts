@@ -10,6 +10,24 @@ export interface PageMeta {
   // Barra de abas (nota-filha `note_type: tab`): só na mãe e nas abas dela, a
   // mesma lista nas duas, com a mãe primeiro. Ausente nas outras páginas.
   tabs?: PageTab[]
+  // Presente (true) só em página que pode receber comentários.
+  commentable?: boolean
+  // Conversas anexadas à página; presente só quando há ao menos uma.
+  comments?: CommentThread[]
+}
+
+export interface PageComment {
+  path: string             // caminho no vault, sem .md
+  author: string           // `author` do frontmatter como texto ('' se ausente)
+  createdAt: string | null // ISO UTC
+  updatedAt: string | null // ISO UTC; null antes da primeira edição
+  body: string             // markdown cru, sem frontmatter (para editar)
+  html: string             // render restrito
+}
+
+export interface CommentThread {
+  comment: PageComment
+  replies: PageComment[]
 }
 
 export interface PageTab {

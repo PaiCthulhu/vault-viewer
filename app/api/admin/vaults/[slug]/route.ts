@@ -100,6 +100,13 @@ export async function PATCH(
     updates.coverProperty = cover === '' ? null : cover
   }
 
+  if ('comments' in body) {
+    if (typeof body.comments !== 'boolean') {
+      return NextResponse.json({ error: 'comments deve ser booleano' }, { status: 400 })
+    }
+    updates.comments = body.comments
+  }
+
   // --- Read fresh, mutate, write back ---
   const filePath = path.join(process.cwd(), 'vaults.config.json')
   let config: VaultsConfigFile

@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import type { VaultConfig } from '@/types'
-import type { PageMeta } from './types'
+import type { PageMeta, PageComment, CommentThread } from './types'
 import { scanVault, scanCanvases, scanImages, countFolders, noteTime } from './scanner'
 import { loadVaultIgnore } from './vault-ignore'
 import { extractFrontmatter, extractTags } from './frontmatter'
@@ -19,7 +19,8 @@ import { renderMarkdown } from './markdown'
 import { buildGraph } from './graph-builder'
 import { writeOutput, writePage, writeSummaries, writeAssets, toSummaries } from './writer'
 import { readPrevScanMs, selectFirstPages } from './first-pages'
-import { resolveFamilies, noteFamilyFields } from './note-family'
+import { resolveFamilies, noteFamilyFields, isInCommentsFolder } from './note-family'
+import { COMMENTS_MARKER, groupComments, sortThreads, toPageComment } from './comments'
 
 // Normalize a rendered <h1>'s text (or a plain title) for a tolerant comparison:
 // strip tags, decode common entities, unify dash/quote variants, collapse
@@ -74,6 +75,10 @@ export function resolveTitle(
   return filenameTitle
 }
 
+function isEnoent(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'ENOENT'
+}
+
 export async function buildVault(vault: VaultConfig, opts: { first?: string[]; dataRoot?: string } = {}): Promise<void> {
   console.log(`\n[${vault.slug}] Iniciando build de "${vault.name}"`)
   console.log(`[${vault.slug}] Vault path: ${vault.path}`)
@@ -86,7 +91,9 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   const startedAt = new Date().toISOString()
   const ig = loadVaultIgnore(vault.path)
   const files = scanVault(vault.path, ig)
-  const canvasFiles = scanCanvases(vault.path, ig)
+  // Canvas dentro de `_comments/` fica fora de tudo (resolver, listas, grafo, render): o
+  // texto dos nós passaria pelo `renderBody`, que roda dataviewjs.
+  const canvasFiles = scanCanvases(vault.path, ig).filter(c => !isInCommentsFolder(c.relativePath))
   const imageIndex = scanImages(vault.path, ig)
   const folderCount = countFolders(vault.path, ig)
   // Canvas files entram no resolver para [[Página Inicial]] resolver, mas NÃO nos stubs.
@@ -120,6 +127,9 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // busca e do grafo; comentários nem geram página; mãe e abas ganham a barra de abas.
   // O Dataview continua vendo todas (os stubs não mudam).
   const families = resolveFamilies(stubs)
+  // Conversas por mãe (caminhos); o conteúdo é lido do disco só ao renderizar a mãe.
+  const threadRefs = groupComments(families)
+  const fileIndex = new Map(files.map((f, i) => [f.relativePath, i]))
 
   // ── Passe 2: Renderização completa ──────────────────────────────────────────
   const pages: PageMeta[] = []
@@ -218,20 +228,77 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
       { familyNote: noteFamilyFields(stub.frontmatter).noteType !== null },
     )
 
-    const fullHtml = banner + `<article class="vault-content">${titleHtml}${propsHtml}${bodyHtml}</article>`
+    // Comentável: nota com bloco de Propriedades que não é aba. O marcador marca onde
+    // o viewer encaixa a área de comentários.
+    const commentable = propsHtml !== '' && !families.hidden.has(stub.path)
 
-    // `tabs` só existe na mãe e nas abas: as outras páginas saem como antes.
+    const fullHtml = banner + `<article class="vault-content">${titleHtml}${propsHtml}${commentable ? COMMENTS_MARKER : ''}${bodyHtml}</article>`
+
+    // `tabs`, `commentable` e `comments` só existem quando se aplicam: as outras
+    // páginas saem como antes.
     const tabs = families.tabsOf.get(stub.path)
-    return tabs
-      ? { ...stub, html: fullHtml, css: pageCss.join('\n'), tabs }
-      : { ...stub, html: fullHtml, css: pageCss.join('\n') }
+    const page: PageMeta = { ...stub, html: fullHtml, css: pageCss.join('\n') }
+    if (tabs) page.tabs = tabs
+    if (commentable) {
+      page.commentable = true
+      const threads = loadThreads(stub.path)
+      if (threads.length > 0) page.comments = threads
+    }
+    return page
+  }
+
+  // Conversas anexadas à nota `motherPath`, lidas do disco e já ordenadas. O corpo só
+  // passa pelo render restrito de comentário, nunca pelo `renderBody` (dataviewjs).
+  function loadThreads(motherPath: string): CommentThread[] {
+    const refs = threadRefs.get(motherPath)
+    if (!refs) return []
+    const opts = { vaultSlug: vault.slug, resolveLink: (t: string) => linkResolver.resolve(t) }
+    // Comentário apagado entre a varredura e a leitura (ENOENT) é pulado; outro erro lança.
+    const load = (p: string): PageComment | null => {
+      const file = files[fileIndex.get(p)!]
+      let raw: string
+      try {
+        raw = fs.readFileSync(file.absolutePath, 'utf-8').replace(/\r\n/g, '\n')
+      } catch (e) {
+        if (isEnoent(e)) return null
+        throw e
+      }
+      const { frontmatter, body } = extractFrontmatter(raw, file.title)
+      return toPageComment({ path: p, frontmatter, body }, opts)
+    }
+    const threads: CommentThread[] = []
+    for (const r of refs) {
+      // Sem o principal, as respostas não têm onde aparecer: a conversa inteira sai.
+      const comment = load(r.principal)
+      if (!comment) continue
+      const replies = r.replies.map(load).filter((c): c is PageComment => c !== null)
+      threads.push({ comment, replies })
+    }
+    return sortThreads(threads)
   }
 
   // ── Frente: notas pedidas (--first) e alteradas desde o último build ────────
-  // Comentário não gera página: não entra na frente, nem pedido, nem alterado.
+  // Comentário não gera página: não entra na frente, nem pedido, nem alterado. Mas o
+  // tempo da mãe é o maior entre o dela e o dos comentários das conversas dela, para um
+  // comentário alterado pôr a mãe na frente.
+  // Comentário que sumiu (ENOENT) não conta; outro erro lança.
+  const timeOf = (p: string): number => {
+    try {
+      return noteTime(fs.statSync(files[fileIndex.get(p)!].absolutePath))
+    } catch (e) {
+      if (isEnoent(e)) return 0
+      throw e
+    }
+  }
   const noteTimes = files
     .filter(f => !families.noPage.has(f.relativePath))
-    .map(f => ({ path: f.relativePath, t: noteTime(fs.statSync(f.absolutePath)) }))
+    .map(f => {
+      let t = noteTime(fs.statSync(f.absolutePath))
+      for (const r of threadRefs.get(f.relativePath) ?? []) {
+        for (const c of [r.principal, ...r.replies]) t = Math.max(t, timeOf(c))
+      }
+      return { path: f.relativePath, t }
+    })
   const front = selectFirstPages(opts.first ?? [], noteTimes, prevScanMs)
   const rendered = new Map<number, PageMeta>()
   const alreadyWritten: string[] = []
@@ -248,9 +315,8 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
       if (Array.isArray(prev)) prevAssets = prev.filter((a): a is string => typeof a === 'string')
     } catch { /* sem assets.json anterior */ }
 
-    const indexOf = new Map(files.map((f, i) => [f.relativePath, i]))
     for (let n = 0; n < front.length; n++) {
-      const i = indexOf.get(front[n])!
+      const i = fileIndex.get(front[n])!
       const page = await renderPage(i)
       rendered.set(i, page)
       // assets.json antes da página: as imagens novas dela têm de abrir assim que ela aparecer.

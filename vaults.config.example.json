@@ -8,7 +8,8 @@
       "homePage": "00_Index",
       "coverImage": "assets/banner.png",
       "titleProperty": null,
-      "coverProperty": "cover"
+      "coverProperty": "cover",
+      "comments": false
     }
   ]
 }

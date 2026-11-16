@@ -16,6 +16,7 @@ export default async function AdminPage() {
   const users: UserPublic[] = dbGetAllUsers().map((u) => ({
     id: u.id,
     username: u.username,
+    displayName: u.display_name ?? null,
     isAdmin: Boolean(u.is_admin),
     createdAt: u.created_at,
     vaultSlugs: dbGetUserPermissions(u.id),
