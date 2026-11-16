@@ -1,6 +1,7 @@
 // Renders a page's frontmatter as a collapsible "Propriedades" block (key on the
-// left, value on the right), Obsidian-style. Wikilink values become real links;
-// image-valued wikilinks/paths become clickable lightbox thumbnails.
+// left, value on the right), Obsidian-style. Wikilink values become real links,
+// http(s) URL values become external links, and image-valued wikilinks/paths
+// become clickable lightbox thumbnails.
 
 // Presentation/internal keys that shouldn't appear in the properties list.
 const HIDDEN_PROP_KEYS = /^(cover|cover_y|banner|banner_height|cssclasses|notion-id)$/i
@@ -10,8 +11,16 @@ const IMAGE_WIKILINK_RE = /^\[\[(.+\.(?:png|jpe?g|gif|webp|svg|avif))(?:\|[^\]]*
 // Matches a bare image path (no brackets) ending in an image extension.
 const IMAGE_PATH_RE = /^.+\.(?:png|jpe?g|gif|webp|svg|avif)$/i
 
+// A value that is, as a whole, an http(s) URL. Obsidian has no "URL" property
+// type: a text property whose value is a URL is simply shown as a clickable link.
+const URL_RE = /^https?:\/\/\S+$/
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/"/g, '&quot;')
 }
 
 // Formats a date value (Date object from YAML, or an ISO-ish string) as pt-BR
@@ -44,10 +53,22 @@ function renderScalar(
   resolveImage: (p: string) => string,
 ): string {
   if (v == null) return ''
+  // Unquoted YAML true/false — Obsidian's Checkbox type. Read-only, same markup
+  // as a rendered task list item.
+  if (typeof v === 'boolean') {
+    return `<input type="checkbox" class="vault-prop-checkbox"${v ? ' checked' : ''} disabled>`
+  }
   const dateStr = formatDate(v)
   if (dateStr) return escapeHtml(dateStr)
   const s = String(v).trim()
   if (s === '') return ''
+
+  // URL → external link (before the image checks: a URL ending in .png is not a
+  // vault image). The viewer opens http(s) links in a new tab.
+  if (URL_RE.test(s)) {
+    const url = escapeAttr(s)
+    return `<a href="${url}">${url}</a>`
+  }
 
   // Image wikilink: extract the inner path (before any `|alias`) → thumbnail.
   const wl = IMAGE_WIKILINK_RE.exec(s)

@@ -43,4 +43,65 @@ describe('renderProperties', () => {
     const html = renderProperties({ Nota: 'a & b' }, replaceWikilinks, resolveImage)
     expect(html).toContain('a &amp; b')
   })
+
+  describe('valor booleano (tipo Checkbox do Obsidian)', () => {
+    it('false vira checkbox desmarcado, não o texto "false"', () => {
+      const html = renderProperties({ 'Atualização Pendente': false }, replaceWikilinks, resolveImage)
+      expect(html).toContain('<span class="vault-prop-val"><input type="checkbox" class="vault-prop-checkbox" disabled></span>')
+    })
+
+    it('true vira checkbox marcado', () => {
+      const html = renderProperties({ Zerado: true }, replaceWikilinks, resolveImage)
+      expect(html).toContain('<span class="vault-prop-val"><input type="checkbox" class="vault-prop-checkbox" checked disabled></span>')
+    })
+
+    it('texto "false" entre aspas continua texto', () => {
+      const html = renderProperties({ Nota: 'false' }, replaceWikilinks, resolveImage)
+      expect(html).toContain('<span class="vault-prop-val">false</span>')
+    })
+  })
+
+  describe('valor que é uma URL', () => {
+    it('vira link clicável, como no Obsidian', () => {
+      const url = 'https://example.com/threads/some-game.12345/'
+      const html = renderProperties({ url }, replaceWikilinks, resolveImage)
+      expect(html).toContain(`<a href="${url}">${url}</a>`)
+    })
+
+    it('aceita http e ignora espaço em volta', () => {
+      const html = renderProperties({ url: '  http://example.com/a  ' }, replaceWikilinks, resolveImage)
+      expect(html).toContain('<a href="http://example.com/a">http://example.com/a</a>')
+    })
+
+    it('cada item de uma lista de URLs vira link', () => {
+      const html = renderProperties(
+        { links: ['https://a.example/', 'https://b.example/'] },
+        replaceWikilinks,
+        resolveImage,
+      )
+      expect(html).toContain('<a href="https://a.example/">https://a.example/</a>, <a href="https://b.example/">https://b.example/</a>')
+    })
+
+    it('URL de imagem vira link, não miniatura do vault', () => {
+      const html = renderProperties({ url: 'https://cdn.example/capa.png' }, replaceWikilinks, resolveImage)
+      expect(html).toContain('<a href="https://cdn.example/capa.png">https://cdn.example/capa.png</a>')
+      expect(html).not.toContain('vault-prop-thumb')
+    })
+
+    it('escapa aspas e & no href e no texto', () => {
+      const html = renderProperties({ url: 'https://x.example/?a=1&b="2"' }, replaceWikilinks, resolveImage)
+      expect(html).toContain('<a href="https://x.example/?a=1&amp;b=&quot;2&quot;">https://x.example/?a=1&amp;b=&quot;2&quot;</a>')
+    })
+
+    it('não linka outros esquemas', () => {
+      const html = renderProperties({ url: 'javascript:alert(1)' }, replaceWikilinks, resolveImage)
+      expect(html).not.toContain('<a ')
+      expect(html).toContain('javascript:alert(1)')
+    })
+
+    it('não linka valor com espaço no meio (texto que só contém uma URL)', () => {
+      const html = renderProperties({ Nota: 'ver https://a.example/ depois' }, replaceWikilinks, resolveImage)
+      expect(html).not.toContain('<a ')
+    })
+  })
 })

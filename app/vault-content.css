@@ -63,6 +63,8 @@
 .vault-prop-val a { color: rgb(165, 168, 255); text-decoration: none; }
 .vault-prop-val a:hover { text-decoration: underline; }
 
+.vault-prop-checkbox { margin: 0; vertical-align: middle; }
+
 .vault-prop-thumb {
   height: 56px;
   width: 56px;
