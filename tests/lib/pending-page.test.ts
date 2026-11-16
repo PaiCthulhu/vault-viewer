@@ -101,6 +101,19 @@ describe('noteFor', () => {
     expect(noteFor(vault, 'Real/Dentro')).not.toBeNull()
     expect(noteFor(vault, 'Atalho/Dentro')).toBeNull()
   })
+  it('nada dentro de _comments/ da raiz é página, em qualquer caixa e profundidade', () => {
+    note('_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9')
+    fs.writeFileSync(path.join(vaultDir, '_comments', 'Mapa.canvas'), '{}')
+    expect(noteFor(vault, '_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9')).toBeNull()
+    expect(noteFor(vault, '_COMMENTS/Jogos/Nova/2026-11-16 153012 ana-k3f9')).toBeNull()
+    expect(noteFor(vault, '_comments/Mapa')).toBeNull()
+  })
+  it('_comments fora da raiz e _comments.md na raiz continuam sendo notas', () => {
+    note('Jogos/_comments/x')
+    note('_comments')
+    expect(noteFor(vault, 'Jogos/_comments/x')).not.toBeNull()
+    expect(noteFor(vault, '_comments')).not.toBeNull()
+  })
   it('com .md e .canvas de mesmo nome usa o maior t', () => {
     const md = noteFor(vault, 'Jogos/Nova')!.t
     const canvas = path.join(vaultDir, 'Jogos', 'Nova.canvas')
@@ -213,6 +226,13 @@ describe('isPending', () => {
     const d = deps(state())
     expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(false)
     expect(d.requestBuild).not.toHaveBeenCalled()
+  })
+  it('arquivo de _comments/ nunca é pendente nem pede build', () => {
+    note('_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9')
+    const d = deps(state())
+    expect(isPending(vault, '_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9', { trigger: true }, d)).toBe(false)
+    expect(d.requestBuild).not.toHaveBeenCalled()
+    expect(pageStatus(vault, '_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9', d)).toBe('missing')
   })
   it('sem nota devolve false', () => {
     expect(isPending(vault, 'Nao/Existe', { trigger: true }, deps(state()))).toBe(false)
