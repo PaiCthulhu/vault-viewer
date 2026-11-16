@@ -79,7 +79,10 @@ export default async function VaultPage({ params }: Props) {
   }
 
   // Parse HTML server-side
-  const segments = parseHtmlSegments(page.html)
+  // A faixa de comentários só existe com a flag do vault ligada e em página comentável.
+  const segments = parseHtmlSegments(page.html, {
+    comments: vault.comments === true && page.commentable === true,
+  })
   const toc = extractToc(page.html)
 
   // Nomes dos autores dos comentários: à parte, nunca dentro do `page` (a versão é o hash do JSON do disco).

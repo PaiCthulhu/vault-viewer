@@ -51,6 +51,7 @@ export function VaultViewer({
   isAdmin,
   pending,
   pageVersion,
+  displayNames,
 }: VaultViewerProps) {
   const { t } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -163,6 +164,12 @@ export function VaultViewer({
               slug={vault.slug}
               pagePath={page.path}
               tabs={page.tabs}
+              comments={
+                // A flag do vault é aplicada aqui: o `PageMeta` traz os comentários mesmo com ela desligada.
+                vault.comments === true && page.commentable === true
+                  ? { threads: page.comments, displayNames: displayNames ?? {}, username, isAdmin }
+                  : undefined
+              }
               noticePlacement={pending?.mode === 'generating' ? 'after' : 'overlay'}
               notice={
                 pending ? (

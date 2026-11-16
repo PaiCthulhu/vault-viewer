@@ -7,12 +7,22 @@ import { useI18n } from '@/components/i18n/I18nProvider'
 import { DataviewTable } from './DataviewTable'
 import { DataviewList } from './DataviewList'
 import { LinkPreview, type LinkPreviewState, type PreviewData, type ExternalPreviewData } from './LinkPreview'
-import type { HtmlSegment } from '@/lib/parse-html-segments'
+import { sameSegments, type HtmlSegment } from '@/lib/parse-html-segments'
 import { galleryGroup } from '@/lib/gallery-group'
 import { chipsToRestore, queryToRestore, type FilterMemory } from '@/lib/filter-memory'
 import { normalizeForSearch, searchTokens, matchesSearch } from '@/lib/gallery-search'
 import { NoteTabs } from './NoteTabs'
-import type { PageTab } from '@/builder/types'
+import { CommentStrip } from './CommentStrip'
+import type { CommentThread, PageTab } from '@/builder/types'
+
+// O que a faixa de comentários precisa além da página. Presente só quando o vault tem
+// comentários ligados e a página é comentável; a faixa aparece no segmento `comments`.
+export interface ContentPanelComments {
+  threads?: CommentThread[]
+  displayNames: Record<string, string | null>
+  username: string
+  isAdmin: boolean
+}
 
 interface ContentPanelProps {
   segments: HtmlSegment[]
@@ -28,6 +38,7 @@ interface ContentPanelProps {
   noticePlacement?: 'overlay' | 'after'
   // Barra de abas (mãe e abas da nota-filha), no topo, fora do artigo.
   tabs?: PageTab[]
+  comments?: ContentPanelComments
 }
 
 const BG_URL_RE = /url\(['"]?([^'")]+)['"]?\)/
@@ -44,7 +55,24 @@ const externalPreviewCache = new Map<string, Promise<ExternalPreviewData>>()
 const PREVIEW_DELAY = 350
 const CARD_WIDTH = 320
 
-export function ContentPanel({ segments, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay', tabs }: ContentPanelProps) {
+export function ContentPanel({ segments: incoming, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay', tabs, comments }: ContentPanelProps) {
+  // Um router.refresh() entrega um `segments` novo mesmo quando o HTML não mudou (só os
+  // comentários mudaram, por exemplo). Com o conteúdo igual na mesma página, fica o
+  // array antigo: os elementos memoizados continuam os mesmos, o React não reaplica o
+  // innerHTML e os efeitos de DOM não rodam de novo. Assim um <details> aberto, os
+  // filtros da galeria e a rolagem sobrevivem ao refresh. `checked` evita comparar de
+  // novo a cada render. `articleClass` entra na conta porque os elementos memoizados
+  // dependem dela: se só ela muda (um `cssclasses` novo, que não aparece no HTML), o
+  // innerHTML é reaplicado e os efeitos de DOM têm de rodar de novo, então vale o array novo.
+  const [held, setHeld] = useState({ path: pagePath, articleClass, segments: incoming, checked: incoming })
+  let segments = held.segments
+  if (held.checked !== incoming || held.path !== pagePath || held.articleClass !== articleClass) {
+    const keep =
+      held.path === pagePath && held.articleClass === articleClass && sameSegments(held.segments, incoming)
+    if (!keep) segments = incoming
+    setHeld({ path: pagePath, articleClass, segments, checked: incoming })
+  }
+
   const router = useRouter()
   const { t } = useI18n()
   const articleRef = useRef<HTMLDivElement>(null)
@@ -336,9 +364,11 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
     let cancelled = false
 
     async function renderMermaid(root: HTMLDivElement) {
-      const codes = root.querySelectorAll<HTMLElement>(
-        'pre > code.language-mermaid',
-      )
+      // Nunca dentro da faixa de comentários: o texto é de um usuário (não vai para o
+      // mermaid) e o nó é do React (não pode ser trocado por fora).
+      const codes = Array.from(
+        root.querySelectorAll<HTMLElement>('pre > code.language-mermaid'),
+      ).filter(code => !code.closest('.vault-comments'))
       if (codes.length === 0) return
 
       const { default: mermaid } = await import('mermaid')
@@ -353,7 +383,7 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
         mermaidInitialized = true
       }
 
-      for (const code of Array.from(codes)) {
+      for (const code of codes) {
         const pre = code.parentElement
         if (!pre || !pre.isConnected) continue
         // Skip if already processed (e.g. effect re-ran on same DOM).
@@ -901,7 +931,24 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
         onMouseOver={handleMouseOver}
         onMouseOut={handleMouseOut}
       >
-        {memoizedSegments}
+        {memoizedSegments.map((el, i) => {
+          if (segments[i].type !== 'comments') return el
+          if (!comments) return null
+          // A chave por página zera o estado da faixa (rascunho, "Ver todos") ao navegar;
+          // num refresh da mesma página ela é a mesma e o rascunho fica.
+          return (
+            <div key={`comments:${slug}:${pagePath}`} className={`${articleClass} vault-comments-wrap`}>
+              <CommentStrip
+                slug={slug}
+                pagePath={pagePath}
+                threads={comments.threads}
+                displayNames={comments.displayNames}
+                username={comments.username}
+                isAdmin={comments.isAdmin}
+              />
+            </div>
+          )
+        })}
       </div>
 
       {noticePlacement === 'after' && notice}
