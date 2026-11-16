@@ -62,6 +62,9 @@ export const en: Record<string, string> = {
   // ── Dataview: gallery filters ──
   'content.filters': '⚙ Filters',
   'content.addFilter': '+ Add filter',
+  'content.search': 'Search',
+  'content.searchPlaceholder': 'Type to search…',
+  'content.clearSearch': 'Clear search',
   'content.allValues': 'all',
   'content.removeFilter': 'Remove {key} filter',
   'content.itemCountOne': '{count} item',

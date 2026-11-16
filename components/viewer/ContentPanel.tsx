@@ -9,7 +9,8 @@ import { DataviewList } from './DataviewList'
 import { LinkPreview, type LinkPreviewState, type PreviewData, type ExternalPreviewData } from './LinkPreview'
 import type { HtmlSegment } from '@/lib/parse-html-segments'
 import { galleryGroup } from '@/lib/gallery-group'
-import { chipsToRestore, type FilterMemory } from '@/lib/filter-memory'
+import { chipsToRestore, queryToRestore, type FilterMemory } from '@/lib/filter-memory'
+import { normalizeForSearch, searchTokens, matchesSearch } from '@/lib/gallery-search'
 
 interface ContentPanelProps {
   segments: HtmlSegment[]
@@ -45,8 +46,11 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
   const articleRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
-  // Chips ativos da barra de filtro, na ordem; sobrevive à remontagem da barra (refresh).
+  // Chips ativos e texto da busca da barra de filtro, na ordem; sobrevive à remontagem da barra (refresh).
   const filterMemoryRef = useRef<FilterMemory | null>(null)
+  // Whether the search input had focus when the bar was last torn down (a refresh
+  // swaps the segment innerHTML and the old input vanishes without a blur).
+  const searchFocusedRef = useRef(false)
 
   // Vault CSS written for Obsidian themes itself with `.theme-dark` /
   // `.theme-light` on <body>; next-themes only sets `.dark`/`.light` on <html>.
@@ -380,7 +384,8 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
     }
   }, [segments])
 
-  // Notion-style page-level filter bar: collect every .dv-card[data-props]
+  // Notion-style page-level filter bar: collect every .dv-card
+  // (the text search covers all; the chips use those with data-props)
   // across the whole article (all galleries are groupings of the same
   // database), build ONE on-demand filter bar from the union of their
   // properties. Filters are added as chips via a "+ Adicionar filtro" popover
@@ -391,7 +396,10 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
   // the same page (router.refresh() hands over fresh segments). A layout effect so
   // the bar and chips are back before the browser paints the fresh innerHTML.
   useLayoutEffect(() => {
-    if (filterMemoryRef.current?.path !== pagePath) filterMemoryRef.current = null
+    if (filterMemoryRef.current?.path !== pagePath) {
+      filterMemoryRef.current = null
+      searchFocusedRef.current = false
+    }
     const el = articleRef.current
     if (!el) return
 
@@ -404,14 +412,15 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
     if (galleries.length === 0) return
     const firstGallery = galleries[0]
 
-    // Collect all cards that carry filterable props.
-    const cards = Array.from(el.querySelectorAll<HTMLElement>('.dv-card[data-props]'))
-    if (cards.length < 4) return
+    // Every card of the article takes part in the text search; only those that
+    // carry data-props take part in the property chips.
+    const allCards = Array.from(el.querySelectorAll<HTMLElement>('.dv-card'))
+    if (allCards.length < 4) return
 
     // Parse each card's props once.
     type Props = Record<string, string[]>
     const cardProps = new Map<HTMLElement, Props>()
-    for (const card of cards) {
+    for (const card of allCards) {
       const raw = card.dataset.props
       if (!raw) continue
       try {
@@ -421,7 +430,21 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
         /* ignore malformed props */
       }
     }
-    if (cardProps.size === 0) return
+
+    // Search haystack per card, computed once: visible text + every string value
+    // of every prop (never the note's content). Already normalized.
+    const haystacks = new Map<HTMLElement, string>()
+    for (const card of allCards) {
+      const parts: string[] = [card.textContent ?? '']
+      const props = cardProps.get(card)
+      if (props) {
+        for (const vals of Object.values(props)) {
+          if (typeof vals === 'string') parts.push(vals)
+          else if (Array.isArray(vals)) for (const v of vals) if (typeof v === 'string') parts.push(v)
+        }
+      }
+      haystacks.set(card, normalizeForSearch(parts.join(' ')))
+    }
 
     // Build union of keys → unique values, and count cards that carry each key.
     const valuesByKey = new Map<string, Set<string>>()
@@ -470,7 +493,7 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
     }
     // Most useful (fewest unique values) first; tie-break alphabetical pt-BR.
     keys.sort((a, b) => a.uniq - b.uniq || a.key.localeCompare(b.key, 'pt-BR'))
-    if (keys.length === 0) return
+    // No useful key: the bar still shows, with the search only.
 
     const keyByName = new Map(keys.map(k => [k.key, k]))
 
@@ -500,6 +523,29 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
     menu.className = 'dv-filter-menu'
     bar.appendChild(menu)
 
+    // Search: an always-open text field with a magnifier (Notion style).
+    const searchWrap = document.createElement('span')
+    searchWrap.className = 'dv-filter-search'
+    const searchIcon = document.createElement('span')
+    searchIcon.className = 'dv-filter-search-icon'
+    searchIcon.setAttribute('aria-hidden', 'true')
+    searchIcon.innerHTML =
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>'
+    const searchInput = document.createElement('input')
+    searchInput.type = 'text'
+    searchInput.className = 'dv-filter-search-input'
+    searchInput.placeholder = t('content.searchPlaceholder')
+    searchInput.setAttribute('aria-label', t('content.search'))
+    searchInput.spellcheck = false
+    searchInput.autocomplete = 'off'
+    const searchClear = document.createElement('button')
+    searchClear.type = 'button'
+    searchClear.className = 'dv-filter-search-clear'
+    searchClear.setAttribute('aria-label', t('content.clearSearch'))
+    searchClear.textContent = '✕'
+    searchWrap.append(searchIcon, searchInput, searchClear)
+    bar.appendChild(searchWrap)
+
     const count = document.createElement('span')
     count.className = 'dv-filter-count'
     bar.appendChild(count)
@@ -519,18 +565,22 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
       filterMemoryRef.current = {
         path: pagePath,
         chips: [...activeChips].map(([key, select]) => ({ key, value: select.value })),
+        query: searchInput.value,
       }
       const active: { key: string; value: string }[] = []
       for (const [key, select] of activeChips) {
         if (select.value) active.push({ key, value: select.value })
       }
 
-      clearBtn.style.display = activeChips.size > 0 ? '' : 'none'
+      const tokens = searchTokens(searchInput.value)
+      clearBtn.style.display = activeChips.size > 0 || searchInput.value !== '' ? '' : 'none'
+      // The X shows only with text; `visibility` keeps its room so the field doesn't shift.
+      searchClear.style.visibility = searchInput.value === '' ? 'hidden' : ''
 
       let visible = 0
-      for (const card of cards) {
+      for (const card of allCards) {
         const props = cardProps.get(card)
-        // Cards without parsed props always match (no properties).
+        // Cards without parsed props always match the chips (no properties).
         let show = true
         if (props && active.length > 0) {
           show = active.every(({ key, value }) => {
@@ -538,6 +588,7 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
             return Array.isArray(vals) && vals.includes(value)
           })
         }
+        if (show) show = matchesSearch(haystacks.get(card) ?? '', tokens)
         card.style.display = show ? '' : 'none'
         if (show) visible++
       }
@@ -660,9 +711,46 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
       applyFilters()
     }
 
+    // ─── Search field behavior ──────────────────────────────────────────────
+    let blurTimer: ReturnType<typeof setTimeout> | null = null
+    // The magnifier and the X keep the focus in the field: stop their mousedown
+    // from taking it before the click.
+    for (const el of [searchIcon, searchClear]) {
+      el.addEventListener('mousedown', e => e.preventDefault())
+    }
+    searchIcon.addEventListener('click', () => searchInput.focus())
+    // Esc and the X clear the text and leave the focus in the field (the X hides
+    // once the text is gone, so the focus can't stay on it).
+    const clearSearch = () => {
+      searchInput.value = ''
+      searchInput.focus()
+      applyFilters()
+    }
+    searchInput.addEventListener('input', applyFilters)
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Escape') clearSearch()
+    })
+    searchClear.addEventListener('click', clearSearch)
+    searchInput.addEventListener('focus', () => {
+      searchFocusedRef.current = true
+    })
+    searchInput.addEventListener('blur', () => {
+      // An input removed by an innerHTML swap keeps the remembered focus.
+      if (blurTimer) clearTimeout(blurTimer)
+      blurTimer = setTimeout(() => {
+        blurTimer = null
+        if (searchInput.isConnected && document.activeElement !== searchInput) {
+          searchFocusedRef.current = false
+        }
+      }, 0)
+    })
+
     clearBtn.addEventListener('click', () => {
       activeChips.clear()
       chipsWrap.textContent = ''
+      searchInput.value = ''
+      searchFocusedRef.current = false
+      searchInput.blur()
       rebuildMenu()
       applyFilters()
     })
@@ -703,8 +791,11 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
     topmost.parentNode?.insertBefore(bar, topmost)
     rebuildMenu()
 
-    // Restore the chips of the previous bar when it is the same page. Read the
-    // memory before anything below rewrites it (addChip -> applyFilters).
+    // Restore the chips and the search text of the previous bar when it is the
+    // same page. Read the memory before anything below rewrites it
+    // (addChip -> applyFilters).
+    const queryRestore = queryToRestore(filterMemoryRef.current, pagePath)
+    if (queryRestore !== '') searchInput.value = queryRestore
     const restore = chipsToRestore(
       filterMemoryRef.current,
       pagePath,
@@ -717,7 +808,14 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
     }
     applyFilters()
 
+    if (searchFocusedRef.current) {
+      searchInput.focus({ preventScroll: true })
+      const end = searchInput.value.length
+      searchInput.setSelectionRange(end, end)
+    }
+
     return () => {
+      if (blurTimer) clearTimeout(blurTimer)
       if (docClickHandler) document.removeEventListener('click', docClickHandler)
     }
   }, [segments, t, pagePath])

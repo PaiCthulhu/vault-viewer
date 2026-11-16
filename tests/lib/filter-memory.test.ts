@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chipsToRestore, type FilterMemory } from '@/lib/filter-memory'
+import { chipsToRestore, queryToRestore, type FilterMemory } from '@/lib/filter-memory'
 
 const offered = new Map([
   ['Engine', ["Ren'Py", 'Unity']],
@@ -31,5 +31,19 @@ describe('chipsToRestore', () => {
     expect(chipsToRestore(mem([{ key: 'Engine', value: '' }]), 'Views/X', offered)).toEqual([
       { key: 'Engine', value: '' },
     ])
+  })
+})
+
+describe('queryToRestore', () => {
+  it('memória nula dá vazio', () => {
+    expect(queryToRestore(null, 'Views/X')).toBe('')
+  })
+  it('mesma página devolve o texto; outra dá vazio', () => {
+    const m: FilterMemory = { path: 'Views/X', chips: [], query: 'ksar' }
+    expect(queryToRestore(m, 'Views/X')).toBe('ksar')
+    expect(queryToRestore(m, 'Views/Y')).toBe('')
+  })
+  it('memória sem query dá vazio', () => {
+    expect(queryToRestore({ path: 'Views/X', chips: [] }, 'Views/X')).toBe('')
   })
 })

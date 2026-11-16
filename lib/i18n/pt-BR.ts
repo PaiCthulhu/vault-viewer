@@ -61,6 +61,9 @@ export const ptBR: Record<string, string> = {
   // ── Dataview: filtros de galeria ──
   'content.filters': '⚙ Filtros',
   'content.addFilter': '+ Adicionar filtro',
+  'content.search': 'Buscar',
+  'content.searchPlaceholder': 'Digite para buscar…',
+  'content.clearSearch': 'Limpar busca',
   'content.allValues': 'todas',
   'content.removeFilter': 'Remover filtro {key}',
   'content.itemCountOne': '{count} item',

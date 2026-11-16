@@ -495,7 +495,29 @@ body.vault-resizing * {
 }
 .dv-filter-chip-remove:hover { color: var(--accent); }
 
-.dv-filter-count { font-size: 0.78rem; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+.dv-filter-count { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+
+/* Search: always-open text field with a magnifier. margin-left:auto pushes the
+   search, the count and "Clear" to the right. */
+.dv-filter-search {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 0.2rem;
+  max-width: 100%; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg); padding-right: 0.3rem;
+}
+.dv-filter-search:focus-within { outline: 2px solid var(--accent); }
+.dv-filter-search-icon, .dv-filter-search-clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; background: transparent; color: var(--text-muted);
+  padding: 0.3rem 0.45rem; border-radius: 999px;
+  font-size: 0.78rem; line-height: 1;
+}
+.dv-filter-search-icon { cursor: text; padding-right: 0.15rem; }
+.dv-filter-search-clear { cursor: pointer; }
+.dv-filter-search-clear:hover { color: var(--accent); }
+.dv-filter-search-input {
+  display: block; width: 12rem; min-width: 0; max-width: 100%; border: 0; outline: none;
+  background: transparent; color: var(--text); font-size: 0.8rem; padding: 0.3rem 0;
+}
 .dv-filter-clear {
   font-size: 0.78rem; font-weight: 600; color: var(--accent);
   cursor: pointer; border: 1px solid var(--accent);
