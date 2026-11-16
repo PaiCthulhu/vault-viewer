@@ -175,13 +175,13 @@ describe('buildTree folder notes', () => {
 
   it('uses the display title as the leaf name even when it differs from the path basename', () => {
     const tree = buildTree([
-      { path: 'Personagens/00_Index', title: 'Projeto Ignis', file: '00_Index', tags: [] },
+      { path: 'Personagens/00_Index', title: 'Minha Coleção', file: '00_Index', tags: [] },
     ])
     const folder = tree.find(n => n.name === 'Personagens')
     expect(folder?.isFolder).toBe(true)
     const leaf = folder?.children[0]
     // Leaf name reflects the resolved display title, not the filename.
-    expect(leaf?.name).toBe('Projeto Ignis')
+    expect(leaf?.name).toBe('Minha Coleção')
     expect(leaf?.path).toBe('Personagens/00_Index')
   })
 

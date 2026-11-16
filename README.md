@@ -11,6 +11,8 @@ A self-hosted, multi-vault, access-controlled viewer for [Obsidian](https://obsi
 
 > **In short:** yet another Obsidian publish tool. It exists because the existing ones didn't cover my case: faithful rendering of the plugins I rely on, fully self-hosted, multiple vaults from one instance, and per-user access control.
 
+> **Where it is going:** the project is growing from a reader of vaults into a manager of them, a self-hosted, home-made Notion, under the name **Vaultwright**. See the [roadmap](docs/roadmap.md).
+
 ---
 
 ## Why another one?
@@ -52,11 +54,17 @@ There are great tools for publishing Obsidian vaults — [Quartz](https://quartz
 - **Image lightbox**, dark/light theme, mobile drawers, and SPA navigation.
 - **Localized UI** — ships with **English** and **Brazilian Portuguese (pt-BR)**, with a language switcher in the top bar. The browser language is used on first visit (falling back to English); the choice is then remembered per user. Adding a language is plug-and-play — see [Adding a language](#adding-a-language).
 
+### Child notes, tabs and comments
+
+- **Child notes** — a note whose frontmatter has `note_type: tab` or `note_type: comment` and `parent: "[[path/of/mother]]"` belongs to that mother note. It is left out of the file tree, the search and the graph. Membership is by `parent` alone (a path from the vault root, quoted), whatever folder the file is in.
+- **Tabs** — a `note_type: tab` child is a page of its own, reached through a **tab bar** shown on its mother and on every sibling tab. The mother comes first (labelled with its `tab_label`, or its title), then the tabs by `order`. Each tab has its own URL, so reload, back and copied links work.
+- **Comments** — on a vault with `comments` turned on, every note with a Properties block gets a **comment strip** between the properties and the body: the latest conversations, one level of replies, edit and delete. Anyone who can see the vault can comment; only the author edits; the author or an admin deletes. A comment is a markdown file the app writes under `_comments/` in the vault (the only thing it ever writes there), rendered in a restricted way: no raw HTML, no Dataview execution, no images or embeds. See [Comments](#comments).
+
 ### Hosting & administration
 
 - **Multiple vaults** from one instance, each with its own config.
-- **Accounts** with admin/reader roles; **per-vault access** granted per user (admins see everything).
-- **Admin panel** to manage users and vaults (create/edit/delete a vault, set its home page, cover/title property, and trigger rebuilds — all from the browser).
+- **Accounts** with admin/reader roles; **per-vault access** granted per user (admins see everything). A user can have a **display name**, set by an admin and shown on their comments.
+- **Admin panel** to manage users and vaults (create/edit/delete a vault, set its home page, cover/title property, turn comments on, and trigger rebuilds — all from the browser).
 - **`.viewerignore`** (gitignore syntax) per vault to hide files/folders from the build.
 
 ---
@@ -132,7 +140,8 @@ Then edit it **or** add vaults from the admin UI (step 6).
       "homePage": "00_Index",             // filename (or title) of the landing page
       "coverImage": "assets/banner.png",  // relative path to the card image (or null)
       "titleProperty": "title",           // optional: frontmatter property to use as page title
-      "coverProperty": "cover"            // optional: frontmatter property holding the banner (cover/banner)
+      "coverProperty": "cover",           // optional: frontmatter property holding the banner (cover/banner)
+      "comments": false                   // optional: turn comments on for this vault (default: off)
     }
   ]
 }
@@ -179,7 +188,7 @@ Log in with the admin account you seeded. Admins see all vaults; create reader a
 ### From the admin UI (`/admin` → **Vaults**)
 
 - **Create** a vault (name + absolute path; the slug is derived automatically).
-- **Edit** name, path, description, home page, cover image, and the title/cover frontmatter properties.
+- **Edit** name, path, description, home page, cover image, the title/cover frontmatter properties, and whether comments are on.
 - **Regenerate build** — runs the builder for that vault from the browser.
 - **Delete** a vault (removes it from the config and its built data).
 
@@ -194,7 +203,7 @@ npx tsx builder/index.ts --all            # all vaults
 
 ### Managing users
 
-In `/admin` → **Users**: create reader/admin accounts, set passwords, and grant per-vault access. The first admin is created with the seed script above.
+In `/admin` → **Users**: create reader/admin accounts, set passwords and display names, and grant per-vault access. The first admin is created with the seed script above.
 
 ---
 
@@ -220,6 +229,32 @@ Anything matched is excluded from pages, search, the graph, and link resolution.
 - **`coverProperty`** — which frontmatter property holds the banner image (`cover`, `banner`, …). The builder also reads `<prop>_x` / `<prop>_y` for the focal crop position.
 
 Both can be set in `vaults.config.json` or via the admin UI.
+
+---
+
+## Tabs
+
+Give a note a tab bar by creating child notes that point at it:
+
+```yaml
+---
+note_type: tab
+parent: "[[Notes/My Note]]"
+order: 1
+---
+```
+
+`parent` is the mother's path from the vault root, without `.md`, and it must be quoted (unquoted, YAML reads `[[...]]` as a list). `order` is an optional integer; tabs without it go last. The tab's label is its title; the mother's own tab is labelled with its `tab_label` property, or its title. Tabs have one level: a tab of a tab, or a tab whose `parent` doesn't resolve, is shown as an ordinary note, so nothing disappears silently.
+
+## Comments
+
+Comments are off by default. Turn them on per vault with `"comments": true` in `vaults.config.json`, or with the checkbox in the admin UI. No rebuild is needed to switch them on or off; with the option off the strip is hidden and the API refuses writes, and the files stay where they are.
+
+- The strip shows on notes that have a Properties block (frontmatter) and are not tabs.
+- Each comment is a file at `_comments/<path of the note>/<date time> <username>-<4 chars>.md` in the vault, with frontmatter the server writes (`note_type: comment`, `parent`, `author`, `created_at`, and `updated_at` after the first edit). A reply is a comment whose `parent` is another comment.
+- A new comment shows at once for its author; other people get it after the vault's next build, which the app starts by itself. A comment written by hand in Obsidian shows after the next build too.
+- Deleting a comment removes its file for good, and deleting the first comment of a conversation removes its replies with it.
+- The app must be able to write to the vault folder. If `.viewerignore` hides `_comments/`, comments can't be created.
 
 ---
 
@@ -263,5 +298,6 @@ components/   # viewer + admin React components
 lib/          # auth, db, vault data loaders, helpers
 data/         # build output per vault (gitignored)
 scripts/      # seed-admin
+docs/         # roadmap, screenshots
 vaults.config.json   # vault definitions
 ```

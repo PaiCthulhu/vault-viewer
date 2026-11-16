@@ -21,7 +21,7 @@ async function main(): Promise<void> {
 
   const slug = args.vault
   if (!slug) {
-    console.error('Erro: --vault requer um slug. Ex: --vault drachegotter')
+    console.error('Erro: --vault requer um slug. Ex: --vault my-vault')
     process.exit(1)
   }
 

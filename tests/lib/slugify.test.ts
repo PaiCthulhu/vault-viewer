@@ -7,8 +7,8 @@ describe('slugify', () => {
   })
 
   it('strips diacritics', () => {
-    expect(slugify('Drachegötter')).toBe('drachegotter')
-    expect(slugify('Projeto Ignís')).toBe('projeto-ignis')
+    expect(slugify('Müsli')).toBe('musli')
+    expect(slugify('Coleção Índice')).toBe('colecao-indice')
   })
 
   it('collapses non-alphanumeric runs into a single hyphen', () => {

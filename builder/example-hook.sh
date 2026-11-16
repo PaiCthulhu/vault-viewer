@@ -6,8 +6,8 @@
 #
 # Ajustar VAULT_VIEWER_DIR e VAULT_SLUG conforme seu ambiente.
 
-VAULT_VIEWER_DIR="E:/Code/JS/vault-viewer"
-VAULT_SLUG="drachegotter"
+VAULT_VIEWER_DIR="/path/to/vault-viewer"
+VAULT_SLUG="my-vault"
 
 echo "[post-commit] Rebuilding vault '${VAULT_SLUG}'..."
 cd "$VAULT_VIEWER_DIR" && npx tsx builder/index.ts --vault "$VAULT_SLUG"

@@ -190,8 +190,8 @@ describe('executeDataviewJS', () => {
         attr: { 'data-href': 'Cosmologia/Astros/Donner', href: 'Cosmologia/Astros/Donner' },
       })
     `
-    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
-    expect(html).toContain('href="/vault/drachegotter/Cosmologia/Astros/Donner"')
+    const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
+    expect(html).toContain('href="/vault/my-vault/Cosmologia/Astros/Donner"')
     // The standalone href is rewritten (data-href may stay raw, which is fine).
     expect(html).not.toMatch(/(\s)href="Cosmologia\/Astros\/Donner"/)
   })
@@ -208,9 +208,9 @@ describe('executeDataviewJS', () => {
         attr: { href: 'Personalidades & Facções/Nações/Ntoto Ileri' },
       })
     `
-    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
     expect(html).toContain(
-      'href="/vault/drachegotter/Personalidades%20%26%20Fac%C3%A7%C3%B5es/Na%C3%A7%C3%B5es/Ntoto%20Ileri"',
+      'href="/vault/my-vault/Personalidades%20%26%20Fac%C3%A7%C3%B5es/Na%C3%A7%C3%B5es/Ntoto%20Ileri"',
     )
     expect(html).not.toContain('%26amp%3B')
   })
@@ -221,7 +221,7 @@ describe('executeDataviewJS', () => {
       c.createEl('a', { cls: 'internal-link', text: 'A', attr: { href: '/vault/x/Y' } })
       c.createEl('a', { cls: 'internal-link', text: 'B', attr: { href: 'https://example.com' } })
     `
-    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
     expect(html).toContain('href="/vault/x/Y"')
     expect(html).toContain('href="https://example.com"')
   })
@@ -244,7 +244,7 @@ describe('executeDataviewJS', () => {
       const c = dv.container.createEl('div')
       c.createEl('a', { cls: 'outra-classe', text: 'A', attr: { href: 'Raw/Path' } })
     `
-    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
     expect(html).toContain('href="Raw/Path"')
   })
 
@@ -256,12 +256,12 @@ describe('executeDataviewJS', () => {
       const link = '<a class="internal-link" href="Cosmologia/Astros/Donner">Donner</a>'
       dv.table(["Astro"], [[link]])
     `
-    const { html } = await executeDataviewJS(code, pages, current, 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
     expect(html).toContain('class="dataview-result"')
     expect(html).toContain('data-type="table"')
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const rows = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
-    expect(rows[0][0]).toContain('href="/vault/drachegotter/Cosmologia/Astros/Donner"')
+    expect(rows[0][0]).toContain('href="/vault/my-vault/Cosmologia/Astros/Donner"')
     expect(rows[0][0]).not.toMatch(/href="Cosmologia\/Astros\/Donner"/)
   })
 
@@ -325,7 +325,7 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
   }
 
   it('estampa data-props com chaves incluídas, normalizadas e Tags', async () => {
-    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'my-vault', noopResolve)
     const props = decodeProps(html)
     expect(props).toHaveLength(2)
 
@@ -342,7 +342,7 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
   })
 
   it('exclui chaves de cover/ID/Created/URL e strings vazias', async () => {
-    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'my-vault', noopResolve)
     const aldor = decodeProps(html).find(p => p.Tier?.[0] === 'Lendário')!
     expect(aldor.cover).toBeUndefined()
     expect(aldor.ID).toBeUndefined()
@@ -361,7 +361,7 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
         attr: { "data-href": "Personalidades/Aldor" },
       });
     `
-    const { html } = await executeDataviewJS(code, cardPages, cardPages[0], 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, cardPages, cardPages[0], 'my-vault', noopResolve)
     const props = decodeProps(html)
     expect(props).toHaveLength(1)
     expect(props[0].Tier).toEqual(['Lendário'])
@@ -370,8 +370,8 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
   it('usa o data-href cru (não o href reescrito) para resolver a página', async () => {
     // Mesmo após rewriteInternalLinks alterar href, data-props deve ter sido
     // resolvido pelo caminho cru e estar presente.
-    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'drachegotter', noopResolve)
-    expect(html).toContain('href="/vault/drachegotter/Personalidades/Aldor"')
+    const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'my-vault', noopResolve)
+    expect(html).toContain('href="/vault/my-vault/Personalidades/Aldor"')
     expect(html).toContain('data-props=')
   })
 
@@ -384,7 +384,7 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
         attr: { "data-href": "Nao/Existe" },
       });
     `
-    const { html } = await executeDataviewJS(code, cardPages, cardPages[0], 'drachegotter', noopResolve)
+    const { html } = await executeDataviewJS(code, cardPages, cardPages[0], 'my-vault', noopResolve)
     expect(html).toContain('class="dv-card"')
     expect(html).not.toContain('data-props=')
   })
@@ -431,13 +431,13 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
     const resolved: string[] = []
     const resolveImage = (p: string) => {
       resolved.push(p)
-      return `/vault-assets/drachegotter/${p}`
+      return `/vault-assets/my-vault/${p}`
     }
     const { html, css } = await executeDataviewJS(
       GALLERY_SCRIPT,
       galleryPages,
       galleryPage,
-      'drachegotter',
+      'my-vault',
       resolveImage,
     )
 
@@ -448,8 +448,8 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
     expect(html).toContain('dv-inline-gallery')
     expect(html).toContain('dv-inline-gallery-card')
     // src resolvido (sem brackets de wikilink)
-    expect(html).toContain('src="/vault-assets/drachegotter/Imagens/Galerias/X_1.png"')
-    expect(html).toContain('src="/vault-assets/drachegotter/Imagens/Galerias/X_2.png"')
+    expect(html).toContain('src="/vault-assets/my-vault/Imagens/Galerias/X_1.png"')
+    expect(html).toContain('src="/vault-assets/my-vault/Imagens/Galerias/X_2.png"')
     // resolveImage chamado com os caminhos limpos
     expect(resolved).toContain('Imagens/Galerias/X_1.png')
     expect(resolved).toContain('Imagens/Galerias/X_2.png')
@@ -461,7 +461,7 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
   })
 
   it('dedup: getElementById impede injeção dupla de CSS quando o script roda duas vezes', async () => {
-    const resolveImage = (p: string) => `/vault-assets/drachegotter/${p}`
+    const resolveImage = (p: string) => `/vault-assets/my-vault/${p}`
     // Roda o mesmo script duas vezes no MESMO contexto (mesma página).
     // Cada execução é envolvida em um bloco para isolar as declarações `const`,
     // mas o estado de `document` (head/getElementById) é compartilhado.
@@ -470,7 +470,7 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
       doubled,
       galleryPages,
       galleryPage,
-      'drachegotter',
+      'my-vault',
       resolveImage,
     )
     // O guard de getElementById deve impedir a segunda injeção do <style>

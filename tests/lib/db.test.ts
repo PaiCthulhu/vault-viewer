@@ -46,7 +46,7 @@ describe('users', () => {
   it('cascade delete remove permissões ao deletar usuário', () => {
     testDb.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('joao', 'hash')
     const user = testDb.prepare('SELECT id FROM users WHERE username = ?').get('joao') as { id: number }
-    testDb.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (?, ?)').run(user.id, 'drachegotter')
+    testDb.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (?, ?)').run(user.id, 'my-vault')
     testDb.prepare('DELETE FROM users WHERE id = ?').run(user.id)
     const perms = testDb.prepare('SELECT * FROM vault_permissions WHERE user_id = ?').all(user.id)
     expect(perms).toHaveLength(0)
@@ -57,8 +57,8 @@ describe('vault_permissions', () => {
   it('atribui e recupera permissões', () => {
     testDb.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('maria', 'hash')
     const user = testDb.prepare('SELECT id FROM users WHERE username = ?').get('maria') as { id: number }
-    testDb.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (?, ?)').run(user.id, 'drachegotter')
+    testDb.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (?, ?)').run(user.id, 'my-vault')
     const perms = testDb.prepare('SELECT vault_slug FROM vault_permissions WHERE user_id = ?').all(user.id) as { vault_slug: string }[]
-    expect(perms.map(p => p.vault_slug)).toContain('drachegotter')
+    expect(perms.map(p => p.vault_slug)).toContain('my-vault')
   })
 })
