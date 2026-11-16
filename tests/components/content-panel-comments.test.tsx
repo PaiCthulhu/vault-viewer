@@ -169,6 +169,49 @@ describe('ContentPanel: faixa de comentários', () => {
   })
 })
 
+describe('ContentPanel: prévia de link no hover', () => {
+  const fetchMock = vi.fn<(url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>>(
+    async () => ({ ok: true, json: async () => ({ title: 'Título' }) }),
+  )
+  const previewCalls = (kind: string) => fetchMock.mock.calls.filter(([u]) => String(u).startsWith(kind))
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    fetchMock.mockClear()
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  // Passa o mouse e espera mais que o atraso da prévia (350 ms).
+  const hover = (a: Element) => {
+    fireEvent.mouseOver(a)
+    act(() => { vi.advanceTimersByTime(400) })
+  }
+
+  it('link externo dentro da faixa não busca a prévia externa', () => {
+    const html = '<p><a href="https://comentario.example/">fora</a></p>'
+    const { container } = render(panel(pageHtml(), on([th(comment('c1', { html }))])))
+    hover(container.querySelector('.vault-comment-body a')!)
+    expect(previewCalls('/api/link-preview')).toHaveLength(0)
+  })
+
+  it('link externo do corpo da nota continua buscando a prévia externa', () => {
+    const { container } = render(
+      panel(pageHtml('<p><a href="https://corpo.example/">fora</a></p>'), on([th(comment('c1'))])),
+    )
+    hover(container.querySelector('a[href="https://corpo.example/"]')!)
+    expect(previewCalls('/api/link-preview')).toHaveLength(1)
+  })
+
+  it('link interno dentro da faixa continua com a prévia interna', () => {
+    const html = '<p><a href="/vault/my-vault/Notas/Terceira">ver</a></p>'
+    const { container } = render(panel(pageHtml(), on([th(comment('c1', { html }))])))
+    hover(container.querySelector('.vault-comment-body a')!)
+    expect(previewCalls('/api/vault/my-vault/preview')).toHaveLength(1)
+  })
+})
+
 describe('ContentPanel: mesmo HTML, classe da nota diferente', () => {
   it('um cssclasses novo reaplica o HTML e os efeitos de DOM rodam de novo', async () => {
     const html = pageHtml('<p><a href="https://example.com/">fora</a></p>')

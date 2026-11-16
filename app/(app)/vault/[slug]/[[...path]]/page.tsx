@@ -88,10 +88,15 @@ export default async function VaultPage({ params }: Props) {
   // Nomes dos autores dos comentários: à parte, nunca dentro do `page` (a versão é o hash do JSON do disco).
   const displayNames = vault.comments === true ? pageDisplayNames(page, user.username) : {}
 
+  // A versão é o hash do `PageMeta` do disco (o mesmo do `currentPageVersion`). Só depois, e só
+  // no que vai ao navegador, a flag desligada esvazia os comentários: esconder a faixa não basta.
+  const version = pending ? null : pageVersion(page)
+  const clientPage = vault.comments !== true && page.comments !== undefined ? { ...page, comments: [] } : page
+
   return (
     <VaultViewer
       vault={vault}
-      page={page}
+      page={clientPage}
       segments={segments}
       toc={toc}
       pagesIndex={pagesIndex}
@@ -100,7 +105,7 @@ export default async function VaultPage({ params }: Props) {
       username={user.username}
       isAdmin={user.isAdmin}
       pending={pending}
-      pageVersion={pending ? null : pageVersion(page)}
+      pageVersion={version}
       displayNames={displayNames}
     />
   )

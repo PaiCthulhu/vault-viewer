@@ -20,7 +20,7 @@ import type { VaultConfig } from '@/types'
 import type { PageComment, PageMeta } from '@/builder/types'
 import { isInCommentsFolder, noteFamilyFields, parentRef } from '@/builder/note-family'
 import { commentTime, toPageComment } from '@/builder/comments'
-import type { CommentRenderOptions } from '@/builder/comment-render'
+import { renderComment, type CommentRenderOptions } from '@/builder/comment-render'
 import { LinkResolver } from '@/builder/link-resolver'
 import { isScannedPath, scanCanvases, scanVault } from '@/builder/scanner'
 import { loadVaultIgnore, type VaultIgnore } from '@/builder/vault-ignore'
@@ -474,6 +474,13 @@ export function createComment(
       }
     }
 
+    // Renderizado antes de criar pasta ou gravar: um render que lança sai daqui com o disco
+    // intacto (500 sem build). As mesmas opções servem para ler de volta depois de gravar: o
+    // arquivo novo entra no conjunto do build, mas o nome dele (com sufixo sorteado) não é
+    // alvo de link nenhum do corpo.
+    const opts = renderOptions(vault, ig)
+    renderComment(input.body, opts)
+
     const dir = ensureCommentDir(vault.path, relDir)
     for (const name of names) {
       const abs = path.join(dir, `${name}.md`)
@@ -485,7 +492,7 @@ export function createComment(
         throw new CommentError(400, 'Caminho de nota não suportado')
       }
       try {
-        return { comment: toComment(note, renderOptions(vault, ig)), replyTo, mother }
+        return { comment: toComment(note, opts), replyTo, mother }
       } catch (e) {
         throw afterWrite(e, mother)
       }
@@ -514,6 +521,7 @@ export function editComment(
     if (!isAuthor(note, input.username)) throw new CommentError(403, 'Só o autor edita o comentário')
     const mother = climb(vault, ig, note).mother
 
+    const opts = renderOptions(vault, ig)
     const createdAt = parseTime(note.frontmatter.created_at)
     const current = {
       body: note.body,
@@ -522,7 +530,7 @@ export function editComment(
     }
     if (commentVersion(current) !== input.version) {
       throw new CommentError(409, 'O comentário mudou desde que foi aberto', {
-        comment: toComment(note, renderOptions(vault, ig)),
+        comment: toComment(note, opts),
       })
     }
 
@@ -546,12 +554,15 @@ export function editComment(
       if (e instanceof CommentError) throw e
       throw new CommentError(422, 'O frontmatter do comentário não pôde ser regravado')
     }
+    // Renderizado antes de gravar, como no criar: um render que lança deixa o arquivo como
+    // estava (500 sem build).
+    renderComment(input.body, opts)
     await replaceFile(note.abs, content)
 
     try {
       const after = readNote(note.abs, note.path)
       if (!after) throw new CommentError(404, 'Comentário não encontrado')
-      return { comment: toComment(after, renderOptions(vault, ig)), mother }
+      return { comment: toComment(after, opts), mother }
     } catch (e) {
       throw afterWrite(e, mother)
     }

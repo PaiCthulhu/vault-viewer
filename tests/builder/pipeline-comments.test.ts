@@ -5,12 +5,19 @@ import os from 'os'
 import type { VaultConfig } from '../../types'
 import { buildVault } from '../../builder/pipeline'
 import { COMMENTS_MARKER } from '../../builder/comments'
+import { renderComment, renderCommentFallback } from '../../builder/comment-render'
 import { executeDataviewJS } from '../../builder/plugins/dataview'
 
 // O `executeDataviewJS` real, espionado: prova direta de qual código o build executou.
 vi.mock('../../builder/plugins/dataview', async importOriginal => {
   const m = await importOriginal<typeof import('../../builder/plugins/dataview')>()
   return { ...m, executeDataviewJS: vi.fn(m.executeDataviewJS) }
+})
+
+// O `renderComment` real, espionado: um teste o faz lançar.
+vi.mock('../../builder/comment-render', async importOriginal => {
+  const m = await importOriginal<typeof import('../../builder/comment-render')>()
+  return { ...m, renderComment: vi.fn(m.renderComment) }
 })
 
 // Códigos de dataviewjs que o build mandou executar.
@@ -74,8 +81,10 @@ beforeEach(() => {
   write(`${ORFAO}.md`, comentario('Não Existe', '', 'x'))
   vault = { slug: 'v', name: 'V', path: path.join(TMP, 'vault') } as VaultConfig
   vi.mocked(executeDataviewJS).mockClear()
+  vi.mocked(renderComment).mockReset() // volta ao render real (um teste o faz lançar)
   vi.spyOn(process, 'cwd').mockReturnValue(TMP)
   vi.spyOn(console, 'log').mockImplementation(() => {})
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 })
 
@@ -208,7 +217,7 @@ describe('buildVault — comentários', () => {
     expect(threads.map(t => t.comment.path)).toEqual([ANTIGO])
   })
 
-  it('erro que não é ENOENT em comentário continua derrubando o build', async () => {
+  it('erro de leitura que não é ENOENT pula o comentário com aviso e o build termina', async () => {
     const alvo = path.join(TMP, 'vault', `${RESPOSTA}.md`)
     let n = 0
     const realRead = fs.readFileSync
@@ -216,7 +225,51 @@ describe('buildVault — comentários', () => {
       if (String(f) === alvo && ++n > 1) throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
       return (realRead as (...a: unknown[]) => unknown)(f, o)
     }) as typeof fs.readFileSync)
-    await expect(buildVault(vault, { dataRoot: path.join(TMP, 'out') })).rejects.toThrow('EACCES')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const threads = read(out, 'pages/Notas/Minha Nota.json').comments as { comment: { path: string }; replies: { path: string }[] }[]
+    expect(threads.map(t => t.comment.path)).toEqual([NOVO, ANTIGO])
+    expect(threads[1].replies.map(r => r.path)).toEqual([RESPOSTA_DE_RESPOSTA, DATAVIEW])
+    expect(warn.mock.calls.map(c => c.join(' ')).some(m => m.includes(RESPOSTA) && m.includes('EACCES'))).toBe(true)
+  })
+})
+
+describe('buildVault — comentário que o render não aguenta', () => {
+  const FUNDO = `${DIR}/2026-11-16 130000 ana-fund`
+  const LISTA = `${DIR}/2026-11-16 130001 ana-list`
+  const avisos = (warn: { mock: { calls: unknown[][] } }) => warn.mock.calls.map(c => c.map(String).join(' '))
+
+  it('corpo fundo demais não derruba o build: a conversa sai com o fallback e um aviso com o caminho', async () => {
+    const fundo = '>'.repeat(3000)
+    const lista = '- '.repeat(4990).trimEnd()
+    write(`${FUNDO}.md`, comentario('Notas/Minha Nota', 'created_at: "2026-11-16T13:00:00Z"\n', fundo))
+    write(`${LISTA}.md`, comentario('Notas/Minha Nota', 'created_at: "2026-11-16T13:00:01Z"\n', lista))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const threads = read(out, 'pages/Notas/Minha Nota.json').comments as { comment: { path: string; body: string; html: string } }[]
+    const de = (p: string) => threads.find(t => t.comment.path === p)!.comment
+    expect(de(FUNDO).body).toBe(fundo)
+    expect(de(FUNDO).html).toBe(renderCommentFallback(fundo))
+    expect(de(LISTA).html).toBe(renderCommentFallback(lista))
+    // As outras conversas continuam com o render normal.
+    expect(de(ANTIGO).html).toBe('<p>comentário <strong>antigo</strong></p>')
+    expect(avisos(warn).some(m => m.includes(FUNDO))).toBe(true)
+    expect(avisos(warn).some(m => m.includes(LISTA))).toBe(true)
+  })
+
+  it('renderComment que lança cai no fallback, com aviso, e o build termina', async () => {
+    vi.mocked(renderComment).mockImplementation(() => {
+      throw new RangeError('Maximum call stack size exceeded')
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const threads = read(out, 'pages/Notas/Minha Nota.json').comments as { comment: { path: string; html: string } }[]
+    const antigo = threads.find(t => t.comment.path === ANTIGO)!.comment
+    expect(antigo.html).toBe(renderCommentFallback('comentário **antigo**'))
+    expect(avisos(warn).some(m => m.includes(ANTIGO) && m.includes('Maximum call stack'))).toBe(true)
   })
 })
 

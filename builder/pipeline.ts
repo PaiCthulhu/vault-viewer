@@ -253,15 +253,16 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
     const refs = threadRefs.get(motherPath)
     if (!refs) return []
     const opts = { vaultSlug: vault.slug, resolveLink: (t: string) => linkResolver.resolve(t) }
-    // Comentário apagado entre a varredura e a leitura (ENOENT) é pulado; outro erro lança.
+    // Comentário que não dá para ler é pulado com um aviso: apagado entre a varredura e a
+    // leitura (ENOENT) ou qualquer outro erro. Um arquivo de comentário nunca derruba o build.
     const load = (p: string): PageComment | null => {
       const file = files[fileIndex.get(p)!]
       let raw: string
       try {
         raw = fs.readFileSync(file.absolutePath, 'utf-8').replace(/\r\n/g, '\n')
       } catch (e) {
-        if (isEnoent(e)) return null
-        throw e
+        console.warn(`[comments] ${p}: não consegui ler, fica de fora: ${(e as Error).message}`)
+        return null
       }
       const { frontmatter, body } = extractFrontmatter(raw, file.title)
       return toPageComment({ path: p, frontmatter, body }, opts)

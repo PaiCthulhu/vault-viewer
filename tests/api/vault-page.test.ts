@@ -89,12 +89,32 @@ describe('página do vault com comentários', () => {
     expect(Object.keys(props.page as object)).not.toContain('displayNames')
   })
 
-  it('flag desligada: sem consulta de nomes, comentários continuam no page', async () => {
+  it('flag desligada: sem consulta de nomes e o page vai ao cliente com comments vazio', async () => {
     mockComments = false
     const props = await render()
     expect(props.displayNames).toEqual({})
     expect(dbGetDisplayNames).not.toHaveBeenCalled()
-    expect((props.page as PageMeta).comments).toBeDefined()
+    expect(props.page).toEqual({ ...diskPage, comments: [] })
     expect(props.pageVersion).toBe(currentPageVersion('v', 'Notas/Minha Nota'))
+  })
+
+  it('a versão é a mesma com a flag ligada e desligada, e é o hash do JSON do disco', async () => {
+    const on = await render()
+    mockComments = false
+    const off = await render()
+    expect((on.page as PageMeta).comments).toEqual(diskPage.comments)
+    expect((off.page as PageMeta).comments).toEqual([])
+    expect(off.pageVersion).toBe(on.pageVersion)
+    expect(on.pageVersion).toBe(currentPageVersion('v', 'Notas/Minha Nota'))
+  })
+
+  it('flag desligada numa página sem comments: o page vai como está, sem a chave', async () => {
+    const plain: Partial<PageMeta> = { ...diskPage }
+    delete plain.comments
+    fs.writeFileSync(path.join(tmp, 'data', 'v', 'pages', 'Notas', 'Minha Nota.json'), JSON.stringify(plain))
+    mockComments = false
+    const props = await render()
+    expect(props.page).toEqual(plain)
+    expect(Object.keys(props.page as object)).not.toContain('comments')
   })
 })

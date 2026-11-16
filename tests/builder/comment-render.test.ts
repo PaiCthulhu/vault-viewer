@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { renderComment } from '../../builder/comment-render'
+import { describe, it, expect, vi } from 'vitest'
+import {
+  MAX_COMMENT_NESTING,
+  commentTooDeep,
+  renderComment,
+  renderCommentFallback,
+} from '../../builder/comment-render'
 
 const mapa: Record<string, string> = { 'notas/x': 'Notas/X', x: 'Notas/X' }
 const opts = {
@@ -59,6 +64,34 @@ describe('renderComment', () => {
     )
     for (const md of ['[a](/vault/v/Notas/X)', '[a](#sec)', '[a](mailto:a@b.c)']) {
       expect(renderComment(md, opts)).toContain('<a href')
+    }
+  })
+
+  it('link relativo ao protocolo (//host e variantes com contrabarra) perde o href', () => {
+    // URLs como o navegador as veria depois de tirar tab/LF/CR e as pontas. No markdown, a
+    // contrabarra antes de pontuação é escape: `\\` vira uma contrabarra só.
+    const destinos = [
+      '//evil.example/x',
+      String.raw`/\evil.example`,
+      String.raw`\\/evil.example`,
+      String.raw`\\\\evil.example`,
+      '</\t/evil.example>',
+      '<\t//evil.example>',
+      '< //evil.example>',
+    ]
+    for (const d of destinos) {
+      for (const md of [`[x](${d})`, `[x][r]\n\n[r]: ${d}`]) {
+        const html = renderComment(md, opts)
+        expect(html, md).not.toContain('<a')
+        expect(html, md).not.toMatch(/href="[^"]*evil\.example/)
+        expect(html, md).toContain('x')
+      }
+    }
+  })
+
+  it('link relativo comum continua virando <a>', () => {
+    for (const md of ['[x](/vault/x)', '[x](x/y)', '[x][r]\n\n[r]: /vault/x', '[x][r]\n\n[r]: x/y']) {
+      expect(renderComment(md, opts), md).toContain('<a href')
     }
   })
 
@@ -167,5 +200,127 @@ describe('renderComment', () => {
     const h = renderComment('# T', opts)
     expect(h).toContain('<h1>T</h1>')
     expect(h).not.toContain('id=')
+  })
+})
+
+describe('limite de aninhamento', () => {
+  const N = MAX_COMMENT_NESTING
+  // Os três casos confirmados de estouro de pilha (todos dentro do teto de 10.000 caracteres).
+  const confirmados: [string, string][] = [
+    ['3.000 ">"', '>'.repeat(3000)],
+    ['"- " × 4.990', '- '.repeat(4990)],
+    ['"1. " × 3.300', '1. '.repeat(3300)],
+  ]
+
+  it('o limite é 32', () => {
+    expect(N).toBe(32)
+  })
+
+  for (const [nome, corpo] of confirmados) {
+    it(`${nome}: passa do limite, não lança e devolve o fallback`, () => {
+      expect(commentTooDeep(corpo)).toBe(true)
+      const onFallback = vi.fn()
+      const html = renderComment(corpo, { ...opts, onFallback })
+      expect(html).toBe(renderCommentFallback(corpo))
+      expect(onFallback).toHaveBeenCalledTimes(1)
+    })
+  }
+
+  it('fallback: texto escapado, CRLF normalizado, <br> em cada quebra, dentro de <p>', () => {
+    expect(renderCommentFallback('a<b\r\nc & "d" >e\rf')).toBe('<p>a&lt;b<br>\nc &amp; &quot;d&quot; &gt;e<br>\nf</p>')
+  })
+
+  it('aninhamento inline profundo passa do limite', () => {
+    const corpo = '*a '.repeat(40) + 'b' + ' a*'.repeat(40)
+    expect(commentTooDeep(corpo)).toBe(true)
+    expect(renderComment(corpo, opts)).toBe(renderCommentFallback(corpo))
+  })
+
+  it('citação: 32 níveis passam, 33 não', () => {
+    expect(commentTooDeep('>'.repeat(N) + ' a')).toBe(false)
+    expect(commentTooDeep('>'.repeat(N + 1) + ' a')).toBe(true)
+    expect(renderComment('>'.repeat(N) + ' a', opts).match(/<blockquote>/g)).toHaveLength(N)
+  })
+
+  it('lista: 32 níveis passam, 33 não', () => {
+    expect(commentTooDeep('- '.repeat(N) + 'a')).toBe(false)
+    expect(commentTooDeep('- '.repeat(N + 1) + 'a')).toBe(true)
+    expect(commentTooDeep('1. '.repeat(N) + 'a')).toBe(false)
+    expect(commentTooDeep('1. '.repeat(N + 1) + 'a')).toBe(true)
+    expect(renderComment('- '.repeat(N) + 'a', opts).match(/<ul>/g)).toHaveLength(N)
+  })
+
+  it('lista aninhada por recuo: 32 níveis passam, 33 não', () => {
+    const recuo = (n: number) => Array.from({ length: n }, (_, i) => `${'  '.repeat(i)}- item ${i}`).join('\n')
+    expect(commentTooDeep(recuo(N))).toBe(false)
+    expect(commentTooDeep(recuo(N + 1))).toBe(true)
+  })
+
+  it('níveis de bloco e inline somam no mesmo caminho', () => {
+    const corpo = '>'.repeat(20) + ' ' + '*a '.repeat(13) + 'b' + ' a*'.repeat(13)
+    expect(commentTooDeep(corpo)).toBe(true)
+    const no = '>'.repeat(20) + ' ' + '*a '.repeat(12) + 'b' + ' a*'.repeat(12)
+    expect(commentTooDeep(no)).toBe(false)
+  })
+
+  it('recuo que continua as listas das linhas de cima também conta', () => {
+    // Cada linha continua pelo recuo (com tabs) os itens das anteriores e abre mais 32.
+    let corpo = ''
+    for (let depth = 0; corpo.length < 9000; depth += 32) {
+      corpo += `${'\t'.repeat(Math.floor((depth * 2) / 4))}${'  '.repeat(depth % 2)}${'- '.repeat(32)}a\n`
+    }
+    expect(commentTooDeep(corpo)).toBe(true)
+    expect(() => renderComment(corpo, opts)).not.toThrow()
+  })
+
+  it('delimitadores inline demais num parágrafo passam do limite', () => {
+    expect(commentTooDeep(']'.repeat(10000))).toBe(true)
+    expect(commentTooDeep('*'.repeat(5000) + 'a' + '*'.repeat(5000))).toBe(true)
+    // Separados por linha em branco, a conta recomeça em cada parágrafo.
+    expect(commentTooDeep(Array(40).fill('**a** _b_ ~~c~~ [[x]]').join('\n\n'))).toBe(false)
+  })
+
+  it('células de tabela demais no corpo passam do limite (o parse cresce com o quadrado delas)', () => {
+    expect(commentTooDeep('|a|\n|-|\n' + 'a\n'.repeat(4995))).toBe(true)
+    expect(commentTooDeep('|a|b|\n|-|-|\n' + '|1|2|\n'.repeat(1600))).toBe(true)
+    expect(commentTooDeep(`${'|a'.repeat(2400)}|\n${'|-'.repeat(2400)}|`)).toBe(true)
+    // O custo é do total do corpo: muitas tabelas pequenas também contam.
+    expect(commentTooDeep('|a|b|\n|-|-|\n|1|2|\n\n'.repeat(300))).toBe(true)
+    // Tabela de tamanho comum, e a mesma quantidade de linhas sem tabela nenhuma.
+    const tabela = '|a|b|\n|-|-|\n' + '|1|2|\n'.repeat(50)
+    expect(commentTooDeep(tabela)).toBe(false)
+    expect(renderComment(tabela, opts)).toContain('<table>')
+    expect(commentTooDeep('a\n'.repeat(4995))).toBe(false)
+  })
+
+  it('corpo comum continua com o render normal', () => {
+    const corpo = '> citação **forte**\n\n- item\n  - sub [[x]]\n\n1. um'
+    expect(commentTooDeep(corpo)).toBe(false)
+    const onFallback = vi.fn()
+    const html = renderComment(corpo, { ...opts, onFallback })
+    expect(html).toContain('<blockquote>')
+    expect(html).toContain('<strong>forte</strong>')
+    expect(html).toContain('<a href="/vault/v/Notas/X">x</a>')
+    expect(html).toContain('<ol>')
+    expect(onFallback).not.toHaveBeenCalled()
+  })
+
+  it('pior caso em bem menos de 1 s (os números precisos vão para o relatório)', () => {
+    const piores = [
+      ...confirmados.map(([, c]) => c),
+      '>'.repeat(10000),
+      '*'.repeat(5000) + 'a' + '*'.repeat(5000),
+      '['.repeat(5000) + ']'.repeat(5000),
+      ']'.repeat(10000),
+      '*a '.repeat(1666),
+      '|a|\n|-|\n' + 'a\n'.repeat(4995),
+      // O pior medido com render normal: lista plana, custo linear do remark.
+      '- a\n'.repeat(2500),
+    ]
+    for (const corpo of piores) {
+      const t = performance.now()
+      renderComment(corpo, opts)
+      expect(performance.now() - t).toBeLessThan(1000)
+    }
   })
 })

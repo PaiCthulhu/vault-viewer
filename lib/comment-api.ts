@@ -8,6 +8,7 @@ import { dbGetUserById, dbUserHasVaultAccess } from '@/lib/db'
 import { getVaultBySlug } from '@/lib/vault-config'
 import { runRebuild } from '@/lib/rebuild'
 import { CommentError, MAX_COMMENT_CHARS, normalizeBody, wroteMother } from '@/lib/comment-store'
+import { commentTooDeep } from '@/builder/comment-render'
 
 // Teto do corpo da requisição: 10.000 caracteres de comentário, no pior caso do JSON
 // (`\uXXXX` para cada um), mais os outros campos.
@@ -91,13 +92,16 @@ export function pathField(v: unknown): string | null {
   return typeof v === 'string' && v !== '' && v.length <= MAX_PATH_CHARS ? v : null
 }
 
-// Corpo do comentário, normalizado, ou a resposta de erro.
+// Corpo do comentário, normalizado, ou a resposta de erro. Um corpo fundo demais para o
+// render restrito (`commentTooDeep`) é recusado aqui, antes de qualquer escrita: no build ele
+// só sairia como texto.
 export function bodyField(v: unknown): string | NextResponse {
   const body = normalizeBody(v)
   if (body === null || body === '') return fail(400, 'O comentário não pode ficar vazio')
   if (body.length > MAX_COMMENT_CHARS) {
     return fail(400, `O comentário passa de ${MAX_COMMENT_CHARS} caracteres`)
   }
+  if (commentTooDeep(body)) return fail(400, 'O comentário tem aninhamento demais')
   return body
 }
 

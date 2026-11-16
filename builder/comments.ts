@@ -3,7 +3,7 @@
 // (`comment-render.ts`), nunca pelo render completo da página (que roda dataviewjs).
 import type { CommentThread, PageComment } from './types'
 import type { NoteFamilies } from './note-family'
-import { renderComment, type CommentRenderOptions } from './comment-render'
+import { renderComment, renderCommentFallback, type CommentRenderOptions } from './comment-render'
 
 // Onde o viewer encaixa a área de comentários: logo depois das Propriedades.
 export const COMMENTS_MARKER = '<div class="vault-comments-slot"></div>'
@@ -19,6 +19,9 @@ export function commentTime(v: unknown): string | null {
   return null
 }
 
+// Nunca lança por causa do render: um corpo fundo demais ou um render que lança viram o
+// fallback (texto escapado) com um aviso, e o comentário fica na conversa para o autor ou um
+// admin poder apagá-lo.
 export function toPageComment(
   note: { path: string; frontmatter: Record<string, unknown>; body: string },
   opts: CommentRenderOptions,
@@ -30,7 +33,19 @@ export function toPageComment(
     createdAt: commentTime(note.frontmatter.created_at),
     updatedAt: commentTime(note.frontmatter.updated_at),
     body: note.body,
-    html: renderComment(note.body, opts),
+    html: safeRender(note.path, note.body, opts),
+  }
+}
+
+function safeRender(path: string, body: string, opts: CommentRenderOptions): string {
+  try {
+    return renderComment(body, {
+      ...opts,
+      onFallback: () => console.warn(`[comments] ${path}: aninhamento demais, mostrado como texto`),
+    })
+  } catch (err) {
+    console.warn(`[comments] ${path}: o render falhou, mostrado como texto: ${(err as Error).message}`)
+    return renderCommentFallback(body)
   }
 }
 

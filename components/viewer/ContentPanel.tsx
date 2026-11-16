@@ -256,7 +256,9 @@ export function ContentPanel({ segments: incoming, css, articleClass, slug, page
           if (currentAnchor.current === anchor) setPreview(null)
         })
       }, PREVIEW_DELAY)
-    } else if (href.startsWith('http')) {
+    } else if (href.startsWith('http') && !anchor.closest('.vault-comments')) {
+      // Link de comentário não ganha prévia externa: quem escreveu escolhe o host, e a prévia
+      // mostraria a quem passa o mouse a imagem desse host (que veria o IP de quem a carregou).
       currentAnchor.current = anchor
       clearTimer()
       hoverTimer.current = setTimeout(() => {

@@ -51,6 +51,13 @@ import { buildVault } from '@/builder/pipeline'
 import { extractFrontmatter } from '@/builder/frontmatter'
 import { commentVersion } from '@/lib/comment-version'
 import { commentHooks } from '@/lib/comment-store'
+import { renderComment } from '@/builder/comment-render'
+
+// O `renderComment` real, espionado: um teste o faz lançar.
+vi.mock('@/builder/comment-render', async importOriginal => {
+  const m = await importOriginal<typeof import('@/builder/comment-render')>()
+  return { ...m, renderComment: vi.fn(m.renderComment) }
+})
 
 const MOTHER = 'Notas/Minha Nota'
 const HANDLERS = { POST, PATCH, DELETE }
@@ -121,6 +128,7 @@ beforeEach(async () => {
   mockToken = 'ana'
   runRebuild.mockReset()
   runRebuild.mockResolvedValue({ ok: true, output: '' })
+  vi.mocked(renderComment).mockReset() // volta ao render real
 })
 
 afterEach(() => {
@@ -756,6 +764,67 @@ describe('DELETE: apagar', () => {
     expect((await call('POST', { parent: '_comments/x/a', body: 'oi' })).status).toBe(400)
     expect((await call('DELETE', { path: '_comments/x/a' })).status).toBe(200)
     expect(exists('_comments/x/b')).toBe(true)
+  })
+})
+
+describe('corpo fundo demais e render que lança', () => {
+  const FUNDO = '>'.repeat(3000)
+  const ERRO = 'O comentário tem aninhamento demais'
+  // Arquivos de `_comments/` com o conteúdo, para provar que nada foi criado nem alterado.
+  const snapshot = () =>
+    allFiles()
+      .filter(f => f.startsWith('_comments/'))
+      .map(f => [f, fs.readFileSync(path.join(vaultDir, f), 'utf-8')])
+
+  it('POST com aninhamento demais: 400 com a mensagem fixa, sem gravar nem pedir build', async () => {
+    const res = await call('POST', { parent: MOTHER, body: FUNDO })
+    expect(res.status).toBe(400)
+    expect(res.json).toEqual({ error: ERRO })
+    expect(snapshot()).toEqual([])
+    expect(runRebuild).not.toHaveBeenCalled()
+  })
+
+  it('PATCH com aninhamento demais: 400 com a mensagem fixa, o arquivo fica como estava', async () => {
+    const c = await create(MOTHER, 'v1')
+    const before = snapshot()
+    runRebuild.mockClear()
+    const res = await call('PATCH', { path: c.path, body: FUNDO, version: commentVersion(c) })
+    expect(res.status).toBe(400)
+    expect(res.json).toEqual({ error: ERRO })
+    expect(snapshot()).toEqual(before)
+    expect(runRebuild).not.toHaveBeenCalled()
+  })
+
+  it('sem sessão continua 401 antes de olhar o corpo fundo', async () => {
+    const c = await create(MOTHER, 'v1')
+    mockToken = undefined
+    expect((await call('POST', { parent: MOTHER, body: FUNDO })).status).toBe(401)
+    expect((await call('PATCH', { path: c.path, body: FUNDO, version: commentVersion(c) })).status).toBe(401)
+  })
+
+  it('render que lança no POST: 500 antes de gravar, sem pedir build', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.mocked(renderComment).mockImplementation(() => {
+      throw new Error('render quebrou')
+    })
+    const res = await call('POST', { parent: MOTHER, body: 'oi' })
+    expect(res.status).toBe(500)
+    expect(allFiles().some(f => f.startsWith('_comments/'))).toBe(false)
+    expect(runRebuild).not.toHaveBeenCalled()
+  })
+
+  it('render que lança no PATCH: 500 antes de gravar, sem pedir build', async () => {
+    const c = await create(MOTHER, 'v1')
+    const before = snapshot()
+    runRebuild.mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.mocked(renderComment).mockImplementation(() => {
+      throw new Error('render quebrou')
+    })
+    const res = await call('PATCH', { path: c.path, body: 'v2', version: commentVersion(c) })
+    expect(res.status).toBe(500)
+    expect(snapshot()).toEqual(before)
+    expect(runRebuild).not.toHaveBeenCalled()
   })
 })
 
