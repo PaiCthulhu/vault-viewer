@@ -125,7 +125,8 @@ export function writeOutput(
   graph: BuildGraph,
   index: VaultIndex,
   dataRoot: string = path.join(process.cwd(), 'data'),
-  opts: { assets?: string[]; alreadyWritten?: Iterable<string> } = {},
+  // `summaries`: o que entra no pages-index/tree (o pipeline tira as notas-filhas); sem ele, todas as páginas.
+  opts: { assets?: string[]; alreadyWritten?: Iterable<string>; summaries?: PageSummary[] } = {},
 ): void {
   const dataDir = path.join(dataRoot, slug)
   fs.mkdirSync(dataDir, { recursive: true })
@@ -140,7 +141,7 @@ export function writeOutput(
     written.add(writePage(dataDir, page))
   }
 
-  writeSummaries(dataDir, toSummaries(pages))
+  writeSummaries(dataDir, opts.summaries ?? toSummaries(pages))
   writeFileAtomic(path.join(dataDir, 'graph.json'), JSON.stringify(graph, null, 2))
   if (opts.assets) writeAssets(dataDir, opts.assets)
 

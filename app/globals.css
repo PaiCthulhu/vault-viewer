@@ -282,6 +282,44 @@ body.vault-resizing * {
   z-index: 1;
 }
 
+/* ─── Tab bar (child notes, note_type: tab) ──────────────────── */
+/* Full-width strip at the top of the content pane, above the banner and the
+   title; scrolls sideways when the tabs don't fit. */
+.vault-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 2.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  scrollbar-width: thin;
+}
+
+.vault-tab {
+  flex: 0 0 auto;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.vault-tab:hover { color: var(--text); }
+
+/* Drawn inside the tab: the bar clips anything past its edges. */
+.vault-tab.is-active {
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.vault-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
 /* ─── Vault Content: Typography ──────────────────────────────── */
 
 .vault-article {

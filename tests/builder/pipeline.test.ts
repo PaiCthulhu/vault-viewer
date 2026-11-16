@@ -149,3 +149,151 @@ describe('buildVault --first', () => {
     expect(primeira?.file).toMatch(/\/pages\/Jogos\/A\.json$/)
   })
 })
+
+describe('buildVault — nota-filha e abas', () => {
+  const COMENTARIO = '_comments/Jogos/A/2026-11-16 153012 ana-k3f9'
+  const FILHAS = ['Visões/Lista', 'Visões/Zerados', 'Visões/Arquivo', 'Só Filhas/Aba X', COMENTARIO]
+
+  beforeEach(() => {
+    // A mãe cita uma aba e o comentário: nem isso vira aresta.
+    write('Visões/Visões.md', `---\ntab_label: Jogando\n---\n# Visões\n\n[[Jogos/B]] [[Visões/Lista]] [[${COMENTARIO}]]\n`)
+    write('Visões/Lista.md', '---\nnote_type: tab\nparent: "[[Visões/Visões]]"\norder: 1\n---\n[[Jogos/A]]\n')
+    write('Visões/Zerados.md', '---\nnote_type: tab\nparent: "[[visões/VISÕES]]"\norder: 2\n---\nz\n')
+    write('Visões/Arquivo.md', '---\nnote_type: tab\nparent: "[[Visões/Visões]]"\n---\nx\n')
+    write('Só Filhas/Aba X.md', '---\nnote_type: tab\nparent: "[[Jogos/A]]"\n---\n[[Jogos/B]]\n')
+    write(`${COMENTARIO}.md`, '---\nnote_type: comment\nparent: "[[Jogos/A]]"\nauthor: ana\n---\n[[Jogos/B]]\n')
+    write('Órfã.md', '---\nnote_type: tab\nparent: "[[Não Existe]]"\n---\nórfã\n')
+  })
+
+  const read = (out: string, rel: string) => JSON.parse(fs.readFileSync(path.join(out, 'v', rel), 'utf-8'))
+
+  it('comentário não gera página; abas e aba órfã geram', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const files = listFiles(path.join(out, 'v', 'pages'))
+    expect(files.some(f => f.startsWith('_comments/'))).toBe(false)
+    for (const f of ['Visões/Lista.json', 'Visões/Zerados.json', 'Visões/Arquivo.json', 'Só Filhas/Aba X.json', 'Órfã.json']) {
+      expect(files).toContain(f)
+    }
+    expect(read(out, 'index.json').pageCount).toBe(files.length)
+  })
+
+  it('filhas ficam fora do pages-index; a aba órfã e a mãe ficam', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const paths = (read(out, 'pages-index.json') as { path: string }[]).map(p => p.path)
+    for (const p of FILHAS) expect(paths).not.toContain(p)
+    expect(paths).toContain('Visões/Visões')
+    expect(paths).toContain('Órfã')
+  })
+
+  it('árvore: some a pasta só de filhas e _comments; a mãe nota de pasta segue absorvida, sem as abas', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    type N = { name: string; path: string | null; isFolder: boolean; children: N[] }
+    const tree = read(out, 'tree.json') as N[]
+    const names = tree.map(n => n.name)
+    expect(names).not.toContain('Só Filhas')
+    expect(names).not.toContain('_comments')
+    const visoes = tree.find(n => n.isFolder && n.name === 'Visões')!
+    expect(visoes.path).toBe('Visões/Visões')
+    expect(visoes.children).toEqual([])
+    expect(tree.find(n => n.path === 'Órfã')).toBeDefined()
+  })
+
+  it('grafo sem nós de filha e sem arestas de/para filha', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const g = read(out, 'graph.json') as { nodes: { id: string }[]; edges: { source: string; target: string }[] }
+    const ids = g.nodes.map(n => n.id)
+    for (const f of FILHAS) expect(ids).not.toContain(f)
+    for (const e of g.edges) {
+      expect(FILHAS).not.toContain(e.source)
+      expect(FILHAS).not.toContain(e.target)
+    }
+    // A aba Lista cita Jogos/A, mas não vira backlink dela.
+    expect(g.edges.filter(e => e.target === 'Jogos/A').map(e => e.source)).toEqual(['Inicio'])
+    expect(g.edges.filter(e => e.source === 'Visões/Visões').map(e => e.target)).toEqual(['Jogos/B'])
+  })
+
+  it('canvas com o mesmo caminho de uma filha continua listado, e a frente bate com o final', async () => {
+    write('Só Filhas/Aba X.canvas', JSON.stringify({ nodes: [], edges: [] }))
+    const out = path.join(TMP, 'out')
+    const writes = spyWrites()
+    await buildVault(vault, { dataRoot: out, first: ['Visões/Lista'] })
+    const finalIndex = fs.readFileSync(path.join(out, 'v', 'pages-index.json'), 'utf-8')
+    expect((JSON.parse(finalIndex) as { path: string }[]).map(p => p.path)).toContain('Só Filhas/Aba X')
+    const frente = writes.filter(w => w.file.endsWith('/pages-index.json'))
+    expect(frente.length).toBeGreaterThan(1)
+    for (const w of frente) expect(w.content).toBe(finalIndex)
+  })
+
+  it('mãe e abas levam a mesma barra; nota comum não ganha a chave tabs', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const esperado = [
+      { path: 'Visões/Visões', label: 'Jogando' },
+      { path: 'Visões/Lista', label: 'Lista' },
+      { path: 'Visões/Zerados', label: 'Zerados' },
+      { path: 'Visões/Arquivo', label: 'Arquivo' },
+    ]
+    for (const p of ['Visões/Visões', 'Visões/Lista', 'Visões/Zerados', 'Visões/Arquivo']) {
+      expect(read(out, `pages/${p}.json`).tabs).toEqual(esperado)
+    }
+    // Jogos/A é a mãe da aba que mora em "Só Filhas".
+    expect(read(out, 'pages/Jogos/A.json').tabs).toEqual([
+      { path: 'Jogos/A', label: 'A' },
+      { path: 'Só Filhas/Aba X', label: 'Aba X' },
+    ])
+    expect('tabs' in read(out, 'pages/Jogos/B.json')).toBe(false)
+    expect('tabs' in read(out, 'pages/Órfã.json')).toBe(false)
+  })
+
+  it('Propriedades: aba sem os campos do formato; a mãe sem tab_label', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    expect(read(out, 'pages/Visões/Lista.json').html).not.toContain('vault-properties')
+    expect(read(out, 'pages/Órfã.json').html).not.toContain('vault-prop-key">parent')
+    expect(read(out, 'pages/Visões/Visões.json').html).not.toContain('tab_label')
+  })
+
+  it('o Dataview continua vendo as filhas', async () => {
+    write('Consulta.md', '```dataview\nLIST FROM "_comments"\n```\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const html: string = read(out, 'pages/Consulta.json').html
+    const m = /data-result="([^"]*)"/.exec(html)!
+    expect(Buffer.from(m[1], 'base64').toString('utf-8')).toContain('ana-k3f9')
+  })
+
+  it('--first: comentário pedido ou alterado não vai para a frente nem grava JSON; saída idêntica', async () => {
+    const ref = path.join(TMP, 'ref')
+    await buildVault(vault, { dataRoot: ref })
+
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const futuro = new Date(Date.now() + 60_000)
+    fs.utimesSync(path.join(TMP, 'vault', `${COMENTARIO}.md`), futuro, futuro)
+
+    const writes = spyWrites()
+    await buildVault(vault, { dataRoot: out, first: [COMENTARIO, 'Visões/Lista'] })
+
+    expect(writes.some(w => w.file.includes('/pages/_comments/'))).toBe(false)
+    const primeira = writes.find(w => /\/pages\/.+\.json$/.test(w.file))
+    expect(primeira?.file).toMatch(/\/pages\/Visões\/Lista\.json$/)
+    // Todo pages-index/tree gravado na frente é igual ao do fim.
+    const finalIndex = fs.readFileSync(path.join(out, 'v', 'pages-index.json'), 'utf-8')
+    const finalTree = fs.readFileSync(path.join(out, 'v', 'tree.json'), 'utf-8')
+    for (const w of writes) {
+      if (w.file.endsWith('/pages-index.json')) expect(w.content).toBe(finalIndex)
+      if (w.file.endsWith('/tree.json')) expect(w.content).toBe(finalTree)
+    }
+
+    const a = listFiles(path.join(ref, 'v'))
+    expect(listFiles(path.join(out, 'v'))).toEqual(a)
+    for (const f of a) {
+      if (f === 'index.json') continue
+      expect(fs.readFileSync(path.join(out, 'v', f), 'utf-8'), f).toBe(fs.readFileSync(path.join(ref, 'v', f), 'utf-8'))
+    }
+  })
+})

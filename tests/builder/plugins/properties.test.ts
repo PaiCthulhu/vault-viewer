@@ -105,3 +105,37 @@ describe('renderProperties', () => {
     })
   })
 })
+
+describe('renderProperties — campos da nota-filha', () => {
+  const keys = (html: string) =>
+    [...html.matchAll(/<span class="vault-prop-key">([^<]*)<\/span>/g)].map(m => m[1])
+
+  it('nota comum mostra parent, order e note_type desconhecido, e esconde tab_label', () => {
+    const html = renderProperties(
+      { parent: '[[Pai]]', order: 3, note_type: 'character', tab_label: 'Jogando', autor: 'Ana' },
+      replaceWikilinks,
+      resolveImage,
+    )
+    expect(keys(html)).toEqual(['parent', 'order', 'note_type', 'autor'])
+  })
+
+  it('nota da família (aba ou comentário) esconde os quatro campos do formato', () => {
+    const html = renderProperties(
+      { note_type: 'tab', parent: '[[Mãe]]', order: 1, tab_label: 'X', autor: 'Ana' },
+      replaceWikilinks,
+      resolveImage,
+      { familyNote: true },
+    )
+    expect(keys(html)).toEqual(['autor'])
+  })
+
+  it('aba só com os campos do formato não tem bloco de Propriedades', () => {
+    const html = renderProperties(
+      { note_type: 'tab', parent: '[[Mãe]]', order: 1 },
+      replaceWikilinks,
+      resolveImage,
+      { familyNote: true },
+    )
+    expect(html).toBe('')
+  })
+})

@@ -19,6 +19,7 @@ import { renderMarkdown } from './markdown'
 import { buildGraph } from './graph-builder'
 import { writeOutput, writePage, writeSummaries, writeAssets, toSummaries } from './writer'
 import { readPrevScanMs, selectFirstPages } from './first-pages'
+import { resolveFamilies, noteFamilyFields } from './note-family'
 
 // Normalize a rendered <h1>'s text (or a plain title) for a tolerant comparison:
 // strip tags, decode common entities, unify dash/quote variants, collapse
@@ -115,6 +116,11 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
     }
   })
 
+  // Notas-filhas (`note_type` tab/comment + `parent`): as filhas saem da árvore, da
+  // busca e do grafo; comentários nem geram página; mãe e abas ganham a barra de abas.
+  // O Dataview continua vendo todas (os stubs não mudam).
+  const families = resolveFamilies(stubs)
+
   // ── Passe 2: Renderização completa ──────────────────────────────────────────
   const pages: PageMeta[] = []
 
@@ -205,15 +211,27 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
 
     // Collapsible "Propriedades" block from the frontmatter, at the top of the
     // article (right after the title / below the banner).
-    const propsHtml = renderProperties(stub.frontmatter, s => linkResolver.replaceWikilinks(s, vault.slug), p => imageHandler.resolve(p))
+    const propsHtml = renderProperties(
+      stub.frontmatter,
+      s => linkResolver.replaceWikilinks(s, vault.slug),
+      p => imageHandler.resolve(p),
+      { familyNote: noteFamilyFields(stub.frontmatter).noteType !== null },
+    )
 
     const fullHtml = banner + `<article class="vault-content">${titleHtml}${propsHtml}${bodyHtml}</article>`
 
-    return { ...stub, html: fullHtml, css: pageCss.join('\n') }
+    // `tabs` só existe na mãe e nas abas: as outras páginas saem como antes.
+    const tabs = families.tabsOf.get(stub.path)
+    return tabs
+      ? { ...stub, html: fullHtml, css: pageCss.join('\n'), tabs }
+      : { ...stub, html: fullHtml, css: pageCss.join('\n') }
   }
 
   // ── Frente: notas pedidas (--first) e alteradas desde o último build ────────
-  const noteTimes = files.map(f => ({ path: f.relativePath, t: noteTime(fs.statSync(f.absolutePath)) }))
+  // Comentário não gera página: não entra na frente, nem pedido, nem alterado.
+  const noteTimes = files
+    .filter(f => !families.noPage.has(f.relativePath))
+    .map(f => ({ path: f.relativePath, t: noteTime(fs.statSync(f.absolutePath)) }))
   const front = selectFirstPages(opts.first ?? [], noteTimes, prevScanMs)
   const rendered = new Map<number, PageMeta>()
   const alreadyWritten: string[] = []
@@ -221,7 +239,7 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   if (front.length > 0) {
     console.log(`[${vault.slug}] Na frente: ${front.length} páginas`)
     const summaries = toSummaries([
-      ...stubs,
+      ...stubs.filter(s => !families.hidden.has(s.path)),
       ...canvasFiles.map(c => ({ path: c.relativePath, title: c.title, tags: [] as string[] })),
     ])
     let prevAssets: string[] = []
@@ -242,9 +260,15 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
     }
   }
 
+  // Páginas de notas-filhas, pelo objeto: um canvas com o mesmo caminho de uma filha
+  // (`X.md` e `X.canvas`) continua listado.
+  const hiddenPages = new Set<PageMeta>()
   for (let i = 0; i < files.length; i++) {
+    if (families.noPage.has(files[i].relativePath)) continue
     process.stdout.write(`\r[${vault.slug}] Processando ${i + 1}/${files.length}: ${files[i].title.slice(0, 40).padEnd(40)}`)
-    pages.push(rendered.get(i) ?? await renderPage(i))
+    const page = rendered.get(i) ?? await renderPage(i)
+    if (families.hidden.has(page.path)) hiddenPages.add(page)
+    pages.push(page)
   }
 
   process.stdout.write('\n')
@@ -300,13 +324,15 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   }
 
   // ── Graph + Write ─────────────────────────────────────────────────────────
-  const graph = buildGraph(pages)
+  // Árvore, busca e grafo só com as páginas listadas (sem as notas-filhas).
+  const listed = pages.filter(p => !hiddenPages.has(p))
+  const graph = buildGraph(listed)
   const builtAt = new Date().toISOString()
   writeOutput(
     vault.slug, pages, graph,
     { pageCount: pages.length, folderCount, builtAt, startedAt },
     opts.dataRoot,
-    { assets: imageHandler.assets(), alreadyWritten },
+    { assets: imageHandler.assets(), alreadyWritten, summaries: toSummaries(listed) },
   )
 
   console.log(`[${vault.slug}] Build concluído: ${pages.length} páginas, ${graph.edges.length} edges`)

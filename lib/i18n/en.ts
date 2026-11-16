@@ -58,6 +58,7 @@ export const en: Record<string, string> = {
 
   // ── Properties block (label injected client-side over the built HTML) ──
   'properties.title': 'Properties',
+  'tabs.nav': 'Tabs',
 
   // ── Dataview: gallery filters ──
   'content.filters': '⚙ Filters',

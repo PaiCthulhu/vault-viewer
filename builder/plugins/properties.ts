@@ -4,7 +4,11 @@
 // become clickable lightbox thumbnails.
 
 // Presentation/internal keys that shouldn't appear in the properties list.
-const HIDDEN_PROP_KEYS = /^(cover|cover_y|banner|banner_height|cssclasses|notion-id)$/i
+// `tab_label` is the mother note's label in the tab bar (see builder/note-family.ts).
+const HIDDEN_PROP_KEYS = /^(cover|cover_y|banner|banner_height|cssclasses|notion-id|tab_label)$/i
+// Child-note format fields: hidden only on a note whose `note_type` is recognized
+// (tab or comment). On any other note they are ordinary properties.
+const FAMILY_PROP_KEYS = new Set(['parent', 'note_type', 'order'])
 
 // Matches an image wikilink `[[path/to/img.png]]` or `[[img.png|alias]]`.
 const IMAGE_WIKILINK_RE = /^\[\[(.+\.(?:png|jpe?g|gif|webp|svg|avif))(?:\|[^\]]*)?\]\]$/i
@@ -104,10 +108,12 @@ export function renderProperties(
   frontmatter: Record<string, unknown>,
   replaceWikilinks: (s: string) => string,
   resolveImage: (p: string) => string,
+  opts: { familyNote?: boolean } = {},
 ): string {
   const rows: string[] = []
   for (const [key, raw] of Object.entries(frontmatter)) {
     if (HIDDEN_PROP_KEYS.test(key)) continue
+    if (opts.familyNote && FAMILY_PROP_KEYS.has(key)) continue
     const valHtml = renderValue(raw, replaceWikilinks, resolveImage)
     if (!valHtml) continue
     rows.push(

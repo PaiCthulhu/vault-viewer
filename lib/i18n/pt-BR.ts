@@ -57,6 +57,7 @@ export const ptBR: Record<string, string> = {
 
   // ── Properties block ──
   'properties.title': 'Propriedades',
+  'tabs.nav': 'Abas',
 
   // ── Dataview: filtros de galeria ──
   'content.filters': '⚙ Filtros',

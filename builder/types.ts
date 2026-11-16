@@ -7,6 +7,14 @@ export interface PageMeta {
   outlinks: string[]                   // paths de páginas linkadas (resolvidos)
   tags: string[]                       // de frontmatter.tags ou frontmatter.Tags
   css: string                          // CSS capturado de DataviewJS scripts
+  // Barra de abas (nota-filha `note_type: tab`): só na mãe e nas abas dela, a
+  // mesma lista nas duas, com a mãe primeiro. Ausente nas outras páginas.
+  tabs?: PageTab[]
+}
+
+export interface PageTab {
+  path: string  // caminho da página (mãe ou aba)
+  label: string // rótulo na barra
 }
 
 export interface VaultIndex {

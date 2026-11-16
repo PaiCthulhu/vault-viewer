@@ -159,6 +159,7 @@ export function VaultViewer({
               articleClass={articleClass}
               slug={vault.slug}
               pagePath={page.path}
+              tabs={page.tabs}
               noticePlacement={pending?.mode === 'generating' ? 'after' : 'overlay'}
               notice={
                 pending ? (

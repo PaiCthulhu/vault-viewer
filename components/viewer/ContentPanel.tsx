@@ -11,6 +11,8 @@ import type { HtmlSegment } from '@/lib/parse-html-segments'
 import { galleryGroup } from '@/lib/gallery-group'
 import { chipsToRestore, queryToRestore, type FilterMemory } from '@/lib/filter-memory'
 import { normalizeForSearch, searchTokens, matchesSearch } from '@/lib/gallery-search'
+import { NoteTabs } from './NoteTabs'
+import type { PageTab } from '@/builder/types'
 
 interface ContentPanelProps {
   segments: HtmlSegment[]
@@ -24,6 +26,8 @@ interface ContentPanelProps {
   notice?: React.ReactNode
   // 'overlay': antes de tudo (faixa sobreposta). 'after': depois dos segmentos (logo abaixo do título).
   noticePlacement?: 'overlay' | 'after'
+  // Barra de abas (mãe e abas da nota-filha), no topo, fora do artigo.
+  tabs?: PageTab[]
 }
 
 const BG_URL_RE = /url\(['"]?([^'")]+)['"]?\)/
@@ -40,7 +44,7 @@ const externalPreviewCache = new Map<string, Promise<ExternalPreviewData>>()
 const PREVIEW_DELAY = 350
 const CARD_WIDTH = 320
 
-export function ContentPanel({ segments, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay' }: ContentPanelProps) {
+export function ContentPanel({ segments, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay', tabs }: ContentPanelProps) {
   const router = useRouter()
   const { t } = useI18n()
   const articleRef = useRef<HTMLDivElement>(null)
@@ -886,6 +890,8 @@ export function ContentPanel({ segments, css, articleClass, slug, pagePath, noti
       style={{ background: 'var(--bg)' }}
     >
       {noticePlacement === 'overlay' && notice}
+
+      <NoteTabs slug={slug} tabs={tabs} currentPath={pagePath} />
 
       {css && <style dangerouslySetInnerHTML={{ __html: css }} />}
 
