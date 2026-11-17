@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTree } from '../../lib/vault-tree'
+import { buildTree, countTreeFolders } from '../../lib/vault-tree'
 import type { PageSummary } from '../../builder/types'
 
 const pages: PageSummary[] = [
@@ -197,5 +197,50 @@ describe('buildTree folder notes', () => {
     expect(folder?.path).toBe('Império/Império')
     expect(folder?.children).toHaveLength(1)
     expect(folder?.children[0].name).toBe('Cidade')
+  })
+})
+
+// Página só pelo caminho: título e arquivo saem do último segmento.
+const pg = (p: string): PageSummary => {
+  const file = p.split('/').pop() ?? p
+  return { path: p, title: file, file, tags: [] }
+}
+const count = (paths: string[]) => countTreeFolders(buildTree(paths.map(pg)))
+
+describe('countTreeFolders', () => {
+  it('árvore vazia ou só com arquivos na raiz não tem pasta', () => {
+    expect(count([])).toBe(0)
+    expect(count(['Alpha', 'Beta'])).toBe(0)
+  })
+
+  it('conta a pasta comum e a aninhada', () => {
+    expect(count(['Alpha', 'Personagens/Aldor', 'Personagens/Ragnar', 'Facções/Cavaleiros/Ordem'])).toBe(3)
+  })
+
+  it('a nota de pasta dentro não vira pasta extra', () => {
+    expect(count(['Império/Império', 'Império/Cidade'])).toBe(1)
+  })
+
+  it('a pasta que só tem a nota de pasta dentro continua contando', () => {
+    expect(count(['Só/Só'])).toBe(1)
+  })
+
+  it('a nota de pasta irmã é absorvida: a pasta conta uma vez só', () => {
+    expect(count(['Nações', 'Nações/Brasil'])).toBe(1)
+  })
+
+  it('as duas convenções na mesma pasta contam uma vez só', () => {
+    expect(count(['Reino/Reino', 'Reino', 'Reino/Vila'])).toBe(1)
+  })
+
+  it('nota de pasta aninhada: cada nível conta uma vez', () => {
+    expect(count(['A/A', 'A/B/B', 'A/B/C'])).toBe(2)
+  })
+
+  it('não muda a árvore', () => {
+    const tree = buildTree(['Nações', 'Nações/Brasil', 'A/B/C'].map(pg))
+    const before = JSON.stringify(tree)
+    countTreeFolders(tree)
+    expect(JSON.stringify(tree)).toBe(before)
   })
 })

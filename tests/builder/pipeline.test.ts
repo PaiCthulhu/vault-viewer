@@ -297,3 +297,44 @@ describe('buildVault — nota-filha e abas', () => {
     }
   })
 })
+
+describe('buildVault — folderCount', () => {
+  type N = { folderPath: string | null; isFolder: boolean; children: N[] }
+  // Caminhos dos nós de pasta da árvore, em qualquer nível, contados aqui sem a função do builder.
+  const folderPaths = (nodes: N[]): string[] =>
+    nodes.flatMap(n => (n.isFolder ? [n.folderPath!, ...folderPaths(n.children)] : []))
+  const read = (out: string, rel: string) => JSON.parse(fs.readFileSync(path.join(out, 'v', rel), 'utf-8'))
+
+  beforeEach(() => {
+    // Base do arquivo: Jogos/A, Jogos/B (contam), Imagens/ só com imagens (não conta), Mapa.canvas na raiz.
+    write('Notas/Sub/C.md', '# C\n')
+    write('Visões/Visões.md', '# Visões\n')
+    write('Nações.md', '# Nações\n')
+    write('Nações/Brasil.md', '# Brasil\n')
+    write('Só Filhas/Aba X.md', '---\nnote_type: tab\nparent: "[[Jogos/A]]"\n---\naba\n')
+    write('_comments/Jogos/A/2026-11-16 153012 ana-k3f9.md', '---\nnote_type: comment\nparent: "[[Jogos/A]]"\nauthor: ana\n---\noi\n')
+    write('_comments/Lixo/quebrado.md', 'sem frontmatter\n')
+    fs.mkdirSync(path.join(TMP, 'vault', 'Vazia'))
+    fs.mkdirSync(path.join(TMP, 'vault', 'Jogos', 'Vazia'))
+    write('Anexos/doc.pdf', 'pdf')
+    write('Mapas/Mundo.canvas', JSON.stringify({ nodes: [], edges: [] }))
+    write('Rascunhos/R.md', '# R\n')
+    write('.viewerignore', 'Rascunhos/\n')
+  })
+
+  it('conta só as pastas da árvore da barra lateral', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const pastas = folderPaths(read(out, 'tree.json') as N[]).sort()
+    expect(pastas).toEqual(['Jogos', 'Mapas', 'Nações', 'Notas', 'Notas/Sub', 'Visões'])
+    expect(read(out, 'index.json').folderCount).toBe(pastas.length)
+  })
+
+  it('--first não muda o folderCount', async () => {
+    const A = path.join(TMP, 'outA')
+    const B = path.join(TMP, 'outB')
+    await buildVault(vault, { dataRoot: A })
+    await buildVault(vault, { dataRoot: B, first: ['Notas/Sub/C', 'Jogos/A'] })
+    expect(read(B, 'index.json').folderCount).toBe(read(A, 'index.json').folderCount)
+  })
+})

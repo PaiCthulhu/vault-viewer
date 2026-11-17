@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { scanVault, scanImages, countFolders } from '../../builder/scanner'
+import { scanVault, scanImages } from '../../builder/scanner'
 
 let tmpDir: string
 
@@ -60,11 +60,5 @@ describe('scanImages', () => {
     for (const key of images.keys()) {
       expect(key).not.toMatch(/\.md$/)
     }
-  })
-})
-
-describe('countFolders', () => {
-  it('conta pastas não-ocultas', () => {
-    expect(countFolders(tmpDir)).toBe(1) // só "Subpasta"; ".obsidian" ignorado
   })
 })

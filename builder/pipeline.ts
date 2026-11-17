@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import type { VaultConfig } from '@/types'
 import type { PageMeta, PageComment, CommentThread } from './types'
-import { scanVault, scanCanvases, scanImages, countFolders, noteTime } from './scanner'
+import { scanVault, scanCanvases, scanImages, noteTime } from './scanner'
 import { loadVaultIgnore } from './vault-ignore'
 import { extractFrontmatter, extractTags } from './frontmatter'
 import { LinkResolver } from './link-resolver'
@@ -21,6 +21,7 @@ import { writeOutput, writePage, writeSummaries, writeAssets, toSummaries } from
 import { readPrevScanMs, selectFirstPages } from './first-pages'
 import { resolveFamilies, noteFamilyFields, isInCommentsFolder } from './note-family'
 import { COMMENTS_MARKER, groupComments, sortThreads, toPageComment } from './comments'
+import { buildTree, countTreeFolders } from '@/lib/vault-tree'
 
 // Normalize a rendered <h1>'s text (or a plain title) for a tolerant comparison:
 // strip tags, decode common entities, unify dash/quote variants, collapse
@@ -95,7 +96,6 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // texto dos nós passaria pelo `renderBody`, que roda dataviewjs.
   const canvasFiles = scanCanvases(vault.path, ig).filter(c => !isInCommentsFolder(c.relativePath))
   const imageIndex = scanImages(vault.path, ig)
-  const folderCount = countFolders(vault.path, ig)
   // Canvas files entram no resolver para [[Página Inicial]] resolver, mas NÃO nos stubs.
   const linkResolver = new LinkResolver([...files, ...canvasFiles])
   const imageHandler = new ImageHandler(vault.path, vault.slug, imageIndex)
@@ -103,7 +103,7 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // Garante que a imagem de capa do vault seja registrada na lista de assets (assets.json).
   if (vault.coverImage) imageHandler.resolve(vault.coverImage)
 
-  console.log(`[${vault.slug}] Encontrados: ${files.length} páginas, ${canvasFiles.length} canvases, ${imageIndex.size} imagens, ${folderCount} pastas`)
+  console.log(`[${vault.slug}] Encontrados: ${files.length} páginas, ${canvasFiles.length} canvases, ${imageIndex.size} imagens`)
 
   // Stubs para DataviewJS queries no passe 2
   const stubs: PageMeta[] = files.map(file => {
@@ -393,14 +393,17 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // ── Graph + Write ─────────────────────────────────────────────────────────
   // Árvore, busca e grafo só com as páginas listadas (sem as notas-filhas).
   const listed = pages.filter(p => !hiddenPages.has(p))
+  const listedSummaries = toSummaries(listed)
+  // Pastas da mesma árvore que vai para o tree.json: o card do vault mostra o que a barra lateral mostra.
+  const folderCount = countTreeFolders(buildTree(listedSummaries))
   const graph = buildGraph(listed)
   const builtAt = new Date().toISOString()
   writeOutput(
     vault.slug, pages, graph,
     { pageCount: pages.length, folderCount, builtAt, startedAt },
     opts.dataRoot,
-    { assets: imageHandler.assets(), alreadyWritten, summaries: toSummaries(listed) },
+    { assets: imageHandler.assets(), alreadyWritten, summaries: listedSummaries },
   )
 
-  console.log(`[${vault.slug}] Build concluído: ${pages.length} páginas, ${graph.edges.length} edges`)
+  console.log(`[${vault.slug}] Build concluído: ${pages.length} páginas, ${folderCount} pastas, ${graph.edges.length} edges`)
 }

@@ -94,19 +94,3 @@ export function scanImages(vaultPath: string, ig: VaultIgnore = NOOP_IGNORE): Ma
   })
   return result
 }
-
-export function countFolders(vaultPath: string, ig: VaultIgnore = NOOP_IGNORE): number {
-  let count = 0
-  function walk(dir: string): void {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name.startsWith('.')) continue
-      if (!entry.isDirectory()) continue
-      const full = path.join(dir, entry.name)
-      if (ig.ignoresDir(relOf(vaultPath, full))) continue
-      count++
-      walk(full)
-    }
-  }
-  walk(vaultPath)
-  return count
-}

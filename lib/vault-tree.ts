@@ -54,6 +54,18 @@ export function buildTree(pages: PageSummary[]): TreeNode[] {
   return root
 }
 
+// Number of folder nodes at any depth: the folders the sidebar shows. The
+// builder stores it as `folderCount` in index.json, so the vault card and the
+// tree come from one source (an empty folder, one holding only child notes or
+// attachments, `_comments/` and ignored folders never reach the tree).
+export function countTreeFolders(nodes: TreeNode[]): number {
+  let count = 0
+  for (const node of nodes) {
+    if (node.isFolder) count += 1 + countTreeFolders(node.children)
+  }
+  return count
+}
+
 // Notion-style folder notes, two conventions:
 //   1. INSIDE  — a folder contains a direct child file whose name equals the
 //      folder's own name (e.g. `Império/Império.md`).
