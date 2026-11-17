@@ -13,7 +13,8 @@ import { chipsToRestore, queryToRestore, type FilterMemory } from '@/lib/filter-
 import { normalizeForSearch, searchTokens, matchesSearch } from '@/lib/gallery-search'
 import { NoteTabs } from './NoteTabs'
 import { CommentStrip } from './CommentStrip'
-import type { CommentThread, PageTab } from '@/builder/types'
+import { PropertiesBlock } from './PropertiesBlock'
+import type { CommentThread, PageProperty, PageTab } from '@/builder/types'
 
 // O que a faixa de comentários precisa além da página. Presente só quando o vault tem
 // comentários ligados e a página é comentável; a faixa aparece no segmento `comments`.
@@ -39,6 +40,8 @@ interface ContentPanelProps {
   // Barra de abas (mãe e abas da nota-filha), no topo, fora do artigo.
   tabs?: PageTab[]
   comments?: ContentPanelComments
+  // Linhas do bloco Propriedades (`PageMeta.properties`), montado no segmento `properties`.
+  properties?: PageProperty[]
 }
 
 const BG_URL_RE = /url\(['"]?([^'")]+)['"]?\)/
@@ -55,7 +58,7 @@ const externalPreviewCache = new Map<string, Promise<ExternalPreviewData>>()
 const PREVIEW_DELAY = 350
 const CARD_WIDTH = 320
 
-export function ContentPanel({ segments: incoming, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay', tabs, comments }: ContentPanelProps) {
+export function ContentPanel({ segments: incoming, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay', tabs, comments, properties }: ContentPanelProps) {
   // Um router.refresh() entrega um `segments` novo mesmo quando o HTML não mudou (só os
   // comentários mudaram, por exemplo). Com o conteúdo igual na mesma página, fica o
   // array antigo: os elementos memoizados continuam os mesmos, o React não reaplica o
@@ -856,8 +859,9 @@ export function ContentPanel({ segments: incoming, css, articleClass, slug, page
     }
   }, [segments, t, pagePath])
 
-  // Relabel builder-emitted nodes (e.g. the Properties block summary) to the
-  // active locale. The built HTML carries <span data-i18n="properties.title">…</span>.
+  // Relabel builder-emitted nodes (e.g. the Properties block summary of the old
+  // HTML) to the active locale. The built HTML carries <span data-i18n="properties.title">…</span>.
+  // O PropertiesBlock do formato novo é React e já usa o `t`: não tem data-i18n.
   useEffect(() => {
     const el = articleRef.current
     if (!el) return
@@ -934,6 +938,17 @@ export function ContentPanel({ segments: incoming, css, articleClass, slug, page
         onMouseOut={handleMouseOut}
       >
         {memoizedSegments.map((el, i) => {
+          if (segments[i].type === 'properties') {
+            // Sem linhas, nada: o segmento também sai de um slot escrito à mão no corpo.
+            if (!properties || properties.length === 0) return null
+            // Fora do memo, como a faixa: um refresh com propriedades novas atualiza só os
+            // valores, e a chave por página mantém o <details> (aberto ou não) no refresh.
+            return (
+              <div key={`properties:${slug}:${pagePath}`} className={`${articleClass} vault-properties-wrap`}>
+                <PropertiesBlock properties={properties} />
+              </div>
+            )
+          }
           if (segments[i].type !== 'comments') return el
           if (!comments) return null
           // A chave por página zera o estado da faixa (rascunho, "Ver todos") ao navegar;

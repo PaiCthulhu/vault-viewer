@@ -47,7 +47,10 @@ export async function GET(
     }
   }
 
-  const { image, imagePosition, snippet } = buildPreview(page.html)
+  // No formato novo o bloco Propriedades não está no HTML: a miniatura vem do `properties`.
+  const { image, imagePosition, snippet } = buildPreview(page.html, {
+    propertiesHtml: page.properties?.map(p => p.html),
+  })
 
   return NextResponse.json(
     { title: page.title, image, snippet, imagePosition },

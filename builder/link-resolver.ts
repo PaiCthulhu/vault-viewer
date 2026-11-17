@@ -1,6 +1,21 @@
 import { slug } from 'github-slugger'
 import type { ScannedFile } from './scanner'
 
+const identity = (s: string): string => s
+
+// Barra invertida final (pipe escapado em tabelas), com espaços depois dela.
+const TRAILING_BACKSLASH = /\\\s*$/
+
+// Escapa & < > " ' para texto e para atributo.
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export class LinkResolver {
   private titleToPath = new Map<string, string>()
   private pathToPath = new Map<string, string>() // relativePath (lowercase) → relativePath
@@ -41,45 +56,63 @@ export class LinkResolver {
     while ((match = pattern.exec(content)) !== null) {
       // Dentro de tabelas, o pipe do wikilink é escapado como `\|`; o regex
       // captura a barra invertida no fim do alvo — removida aqui.
-      const resolved = this.resolve(match[1].replace(/\\\s*$/, '').trim())
+      const resolved = this.resolve(match[1].replace(TRAILING_BACKSLASH, '').trim())
       if (resolved) seen.add(resolved)
     }
     return [...seen]
   }
 
+  /** Comportamento histórico: display cru (o corpo passa depois por remark/rehype). */
   replaceWikilinks(content: string, vaultSlug: string): string {
-    return content.replace(
-      /\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g,
-      (original, title, heading, alias) => {
-        // Dentro de tabelas, o pipe do wikilink é escapado como `\|` (e `#` como
-        // `\#`); o regex captura a barra invertida no fim do título/heading que
-        // precede o pipe. Removida aqui para o alvo resolver corretamente.
-        const titleStr = (title ?? '').replace(/\\\s*$/, '').trim()
-        const headingStr = (heading ?? '').replace(/\\\s*$/, '').trim()
-        const aliasStr = alias?.trim()
+    return this.substituirWikilinks(content, vaultSlug, identity)
+  }
 
-        // Sem título e sem heading: não é um wikilink válido, mantém original.
-        if (!titleStr && !headingStr) return original
+  /** Variante para as Propriedades: texto, display e href saem escapados. */
+  replaceWikilinksEscaped(content: string, vaultSlug: string): string {
+    return this.substituirWikilinks(content, vaultSlug, escapeHtml)
+  }
 
-        // Link para heading na mesma página: [[#Heading|alias]]
-        if (!titleStr && headingStr) {
-          const display = aliasStr || headingStr
-          if (!display) return original
-          return `<a href="#${slug(headingStr)}">${display}</a>`
-        }
+  private substituirWikilinks(content: string, vaultSlug: string, esc: (s: string) => string): string {
+    const re = /\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g
+    let saida = ''
+    let ultimo = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(content)) !== null) {
+      saida += esc(content.slice(ultimo, m.index)) + this.wikilink(m, vaultSlug, esc)
+      ultimo = m.index + m[0].length
+    }
+    return saida + esc(content.slice(ultimo))
+  }
 
-        const resolved = this.resolve(titleStr)
-        const display = aliasStr || titleStr
-        // Display vazio (ex.: leftover de embed não-imagem): mantém original.
-        if (!display) return original
+  private wikilink(m: RegExpExecArray, vaultSlug: string, esc: (s: string) => string): string {
+    const [original, title, heading, alias] = m
+    // Dentro de tabelas, o pipe do wikilink é escapado como `\|` (e `#` como
+    // `\#`); o regex captura a barra invertida no fim do título/heading que
+    // precede o pipe. Removida aqui para o alvo resolver corretamente.
+    const titleStr = (title ?? '').replace(TRAILING_BACKSLASH, '').trim()
+    const headingStr = (heading ?? '').replace(TRAILING_BACKSLASH, '').trim()
+    const aliasStr = alias?.trim()
 
-        const fragment = headingStr ? `#${slug(headingStr)}` : ''
-        if (resolved) {
-          const href = `/vault/${vaultSlug}/${resolved.split('/').map(encodeURIComponent).join('/')}`
-          return `<a href="${href}${fragment}">${display}</a>`
-        }
-        return `<span class="vault-dead-link">${display}</span>`
-      },
-    )
+    // Sem título e sem heading: não é um wikilink válido, mantém original.
+    if (!titleStr && !headingStr) return esc(original)
+
+    // Link para heading na mesma página: [[#Heading|alias]]
+    if (!titleStr && headingStr) {
+      const display = aliasStr || headingStr
+      if (!display) return esc(original)
+      return `<a href="${esc(`#${slug(headingStr)}`)}">${esc(display)}</a>`
+    }
+
+    const resolved = this.resolve(titleStr)
+    const display = aliasStr || titleStr
+    // Display vazio (ex.: leftover de embed não-imagem): mantém original.
+    if (!display) return esc(original)
+
+    const fragment = headingStr ? `#${slug(headingStr)}` : ''
+    if (resolved) {
+      const href = `/vault/${vaultSlug}/${resolved.split('/').map(encodeURIComponent).join('/')}${fragment}`
+      return `<a href="${esc(href)}">${esc(display)}</a>`
+    }
+    return `<span class="vault-dead-link">${esc(display)}</span>`
   }
 }

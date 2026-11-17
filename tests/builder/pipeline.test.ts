@@ -4,6 +4,7 @@ import path from 'path'
 import os from 'os'
 import type { VaultConfig } from '../../types'
 import { buildVault } from '../../builder/pipeline'
+import { PROPERTIES_MARKER } from '../../builder/plugins/properties'
 
 let TMP: string
 let vault: VaultConfig
@@ -165,6 +166,8 @@ describe('buildVault — frontmatter só em YAML', () => {
     expect(page.title).toBe('Js')
     expect(page.tags).toEqual([])
     expect('commentable' in page).toBe(false)
+    expect('properties' in page).toBe(false)
+    expect(page.html).not.toContain(PROPERTIES_MARKER)
     expect(page.html).not.toContain('vault-prop')
     // O arquivo inteiro é o corpo: o texto do bloco aparece, sem rodar.
     expect(page.html).toContain('__pipelineNotaJsRan')
@@ -274,9 +277,19 @@ describe('buildVault — nota-filha e abas', () => {
   it('Propriedades: aba sem os campos do formato; a mãe sem tab_label', async () => {
     const out = path.join(TMP, 'out')
     await buildVault(vault, { dataRoot: out })
-    expect(read(out, 'pages/Visões/Lista.json').html).not.toContain('vault-properties')
-    expect(read(out, 'pages/Órfã.json').html).not.toContain('vault-prop-key">parent')
-    expect(read(out, 'pages/Visões/Visões.json').html).not.toContain('tab_label')
+    // Lista só tem campos do formato (note_type, parent, order): nenhuma linha, nenhum marcador.
+    const lista = read(out, 'pages/Visões/Lista.json')
+    expect('properties' in lista).toBe(false)
+    expect(lista.html).not.toContain(PROPERTIES_MARKER)
+    // A aba órfã continua nota-filha para as Propriedades: o parent fica escondido. Ela só
+    // tem note_type e parent, então um parent visível daria uma linha.
+    const orfa = read(out, 'pages/Órfã.json')
+    expect('properties' in orfa).toBe(false)
+    expect(orfa.html).not.toContain(PROPERTIES_MARKER)
+    // A mãe só tem tab_label, que é sempre escondido.
+    const mae = read(out, 'pages/Visões/Visões.json')
+    expect('properties' in mae).toBe(false)
+    expect(mae.html).not.toContain('tab_label')
   })
 
   it('o Dataview continua vendo as filhas', async () => {

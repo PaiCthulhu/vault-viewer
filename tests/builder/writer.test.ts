@@ -55,6 +55,24 @@ describe('writeOutput', () => {
     expect(JSON.parse(raw)).toEqual(['a/b.png', 'c.jpg'])
   })
 
+  it('grava property-values.json compacto, depois do assets.json e antes do index.json', () => {
+    const spy = vi.spyOn(fs, 'writeFileSync')
+    const values = { genres: ['Ação', 'RPG'], tags: ['solo'] }
+    writeOutput('test-vault', pages, graph, index, TMP, { assets: ['a.png'], propertyValues: values })
+    const raw = fs.readFileSync(path.join(TMP, 'test-vault', 'property-values.json'), 'utf-8')
+    expect(raw).toBe(JSON.stringify(values))
+    const files = spy.mock.calls.map(c => path.basename(String(c[0]).replace(/\.tmp-\d+$/, '')))
+    const iValues = files.indexOf('property-values.json')
+    expect(files.indexOf('assets.json')).toBeGreaterThan(-1)
+    expect(files.indexOf('assets.json')).toBeLessThan(iValues)
+    expect(iValues).toBeLessThan(files.indexOf('index.json'))
+  })
+
+  it('sem propertyValues não grava property-values.json', () => {
+    writeOutput('test-vault', pages, graph, index, TMP)
+    expect(fs.existsSync(path.join(TMP, 'test-vault', 'property-values.json'))).toBe(false)
+  })
+
   it('poda a página que não foi gravada e a pasta que ficou vazia', () => {
     const pagesDir = path.join(TMP, 'test-vault', 'pages')
     fs.mkdirSync(path.join(pagesDir, 'Velha'), { recursive: true })

@@ -1,138 +1,226 @@
-// Renders a page's frontmatter as a collapsible "Propriedades" block (key on the
-// left, value on the right), Obsidian-style. Wikilink values become real links,
-// http(s) URL values become external links, and image-valued wikilinks/paths
-// become clickable lightbox thumbnails.
+// Propriedades do frontmatter, no estilo do Obsidian.
+//
+// `buildPageProperties` transforma o frontmatter em linhas estruturadas
+// (`PageProperty[]`), cada uma com o tipo, o valor normalizado, o HTML de exibição
+// já escapado, a trava e o mismatch; o viewer monta o bloco onde a página tem
+// `PROPERTIES_MARKER`. `collectPropertyValues` junta os valores das propriedades
+// de lista do vault inteiro.
 
-// Presentation/internal keys that shouldn't appear in the properties list.
-// `tab_label` is the mother note's label in the tab bar (see builder/note-family.ts).
-const HIDDEN_PROP_KEYS = /^(cover|cover_y|banner|banner_height|cssclasses|notion-id|tab_label)$/i
-// Child-note format fields: hidden only on a note whose `note_type` is recognized
-// (tab or comment). On any other note they are ordinary properties.
-const FAMILY_PROP_KEYS = new Set(['parent', 'note_type', 'order'])
+import { escapeHtml as esc } from '../link-resolver'
+import {
+  inferValueType,
+  isNestedObject,
+  isReadonlyProperty,
+  LIST_PROPERTY_TYPES,
+  normalizePropertyValue,
+  resolvePropertyType,
+  toJsonSafe,
+  type PropertyConfig,
+} from '../property-types'
+import type { PageMeta, PageProperty, PropertyJson, PropertyLock, PropertyType, PropertyValue } from '../types'
+import { propertyColor } from '@/lib/property-color'
 
-// Matches an image wikilink `[[path/to/img.png]]` or `[[img.png|alias]]`.
+// Wikilink de imagem: `[[pasta/img.png]]` ou `[[img.png|alias]]`.
 const IMAGE_WIKILINK_RE = /^\[\[(.+\.(?:png|jpe?g|gif|webp|svg|avif))(?:\|[^\]]*)?\]\]$/i
-// Matches a bare image path (no brackets) ending in an image extension.
+// Caminho de imagem solto (sem colchetes), terminado numa extensão de imagem.
 const IMAGE_PATH_RE = /^.+\.(?:png|jpe?g|gif|webp|svg|avif)$/i
 
-// A value that is, as a whole, an http(s) URL. Obsidian has no "URL" property
-// type: a text property whose value is a URL is simply shown as a clickable link.
+// Valor que é, inteiro, uma URL http(s). O Obsidian não tem tipo "URL": uma
+// propriedade de texto cujo valor é uma URL só aparece como link clicável.
 const URL_RE = /^https?:\/\/\S+$/
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+/** Lugar do bloco Propriedades no HTML da página: o viewer monta o bloco ali. */
+export const PROPERTIES_MARKER = '<div class="vault-properties-slot"></div>'
+
+// Chaves de apresentação ou internas, escondidas em toda nota. `note_type` só
+// classifica a nota (aba, comentário, personagem...) e não é dado para exibir.
+const HIDDEN_PROPERTY_KEYS = /^(cover|cover_y|banner|banner_height|cssclasses|notion-id|tab_label|note_type)$/i
+// Campos do formato de nota-filha: escondidos só numa aba ou num comentário,
+// e só com o nome exato (minúsculo).
+const FAMILY_ONLY_KEYS = new Set(['parent', 'order'])
+
+// Data e data-hora já normalizadas (ver normalizePropertyValue).
+const DATE_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+const DATETIME_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
+
+export interface PropertyRenderContext {
+  /** Troca os wikilinks do texto por links; o texto, o display e o href saem escapados. */
+  renderWikilinks: (text: string) => string
+  /** Registra a imagem como asset da página e devolve a URL dela (`/vault-assets/...`). */
+  resolveImage: (p: string) => string
+  config: PropertyConfig
 }
 
-function escapeAttr(s: string): string {
-  return escapeHtml(s).replace(/"/g, '&quot;')
+export function isHiddenProperty(key: string, familyNote: boolean): boolean {
+  return HIDDEN_PROPERTY_KEYS.test(key) || (familyNote && FAMILY_ONLY_KEYS.has(key))
 }
 
-// Formats a date value (Date object from YAML, or an ISO-ish string) as pt-BR
-// `dd/MM/yyyy HH:mm` (date + time, no timezone). Returns null when not a date.
-// Uses the literal/UTC components so a YAML timestamp like 2024-01-12T23:27:00
-// shows exactly 12/01/2024 23:27 regardless of the build machine's timezone.
-function formatDate(v: unknown): string | null {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  if (v instanceof Date && !isNaN(v.getTime())) {
-    const date = `${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`
-    const hasTime = v.getUTCHours() || v.getUTCMinutes() || v.getUTCSeconds()
-    return hasTime ? `${date} ${pad(v.getUTCHours())}:${pad(v.getUTCMinutes())}` : date
+/** Caminho da imagem do vault que o valor cita, ou null. Uma URL nunca é imagem do vault. */
+function imageTarget(value: string): string | null {
+  const s = value.trim()
+  if (URL_RE.test(s)) return null
+  const wl = IMAGE_WIKILINK_RE.exec(s)
+  if (wl) return wl[1]
+  return !s.includes('[[') && IMAGE_PATH_RE.test(s) ? s : null
+}
+
+function thumbnail(p: string, ctx: PropertyRenderContext): string {
+  let src: string
+  try {
+    src = encodeURI(ctx.resolveImage(p))
+  } catch {
+    // Um surrogate solto no caminho faz o encodeURI lançar URIError: sem isso, uma
+    // propriedade derrubaria o build do vault inteiro. Fica o caminho como texto.
+    return esc(p)
   }
-  if (typeof v === 'string') {
-    const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(v.trim())
-    if (m) {
-      const [, y, mo, da, h, mi] = m
-      return h != null ? `${da}/${mo}/${y} ${h}:${mi}` : `${da}/${mo}/${y}`
+  return `<img class="vault-prop-thumb" src="${esc(src)}" alt="" />`
+}
+
+/** Texto solto, nesta ordem: URL inteira, imagem do vault, wikilinks, texto escapado. */
+function renderText(value: string, ctx: PropertyRenderContext): string {
+  const s = value.trim()
+  // URL antes da imagem: uma URL terminada em .png não é imagem do vault.
+  if (URL_RE.test(s)) return `<a href="${esc(s)}">${esc(s)}</a>`
+  const img = imageTarget(s)
+  if (img !== null) return thumbnail(img, ctx)
+  if (s.includes('[[')) return ctx.renderWikilinks(s)
+  return esc(s)
+}
+
+/** Texto de um valor qualquer; só importa quando a forma do valor não bate com o tipo. */
+function textOf(v: PropertyJson): string {
+  if (v === null) return ''
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  return JSON.stringify(v)
+}
+
+/** Itens de um valor de lista, como texto (um valor solto conta como um item). */
+function listItems(value: PropertyValue): string[] {
+  return (Array.isArray(value) ? value : [value]).map(textOf)
+}
+
+/** Item de lista: imagem vira miniatura solta; o resto vira chip colorido. */
+function renderListItem(key: string, item: string, ctx: PropertyRenderContext): string {
+  if (item.trim() === '') return ''
+  const img = imageTarget(item)
+  if (img !== null) return thumbnail(img, ctx)
+  return `<span class="vault-prop-chip" data-color="${propertyColor(key, item)}">${renderText(item, ctx)}</span>`
+}
+
+/** HTML de exibição de um valor já normalizado, no tipo dado. Tudo sai escapado. */
+export function renderPropertyValue(
+  key: string,
+  type: PropertyType,
+  value: PropertyValue,
+  ctx: PropertyRenderContext,
+): string {
+  if (value === null || (Array.isArray(value) && value.length === 0)) return ''
+  if (LIST_PROPERTY_TYPES.has(type)) {
+    return listItems(value).map(item => renderListItem(key, item, ctx)).join('')
+  }
+  switch (type) {
+    case 'checkbox':
+      // Somente leitura, com a mesma marcação de um item de task list.
+      if (typeof value === 'boolean') {
+        return `<input type="checkbox" class="vault-prop-checkbox"${value ? ' checked' : ''} disabled>`
+      }
+      break
+    case 'date': {
+      const m = typeof value === 'string' ? DATE_VALUE_RE.exec(value) : null
+      if (m) return `${m[3]}/${m[2]}/${m[1]}`
+      break
+    }
+    case 'datetime': {
+      const m = typeof value === 'string' ? DATETIME_VALUE_RE.exec(value) : null
+      if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`
+      break
+    }
+    case 'text':
+      if (typeof value === 'string') return renderText(value, ctx)
+      break
+    case 'number':
+      break
+  }
+  // Número, ou valor fora da forma do tipo: texto escapado, sem link nem imagem.
+  return esc(textOf(value))
+}
+
+/** O valor mostrado no tipo dado cita alguma imagem do vault (texto ou item de lista). */
+function citesImage(type: PropertyType, value: PropertyValue): boolean {
+  if (value === null) return false
+  if (LIST_PROPERTY_TYPES.has(type)) return listItems(value).some(item => imageTarget(item) !== null)
+  return type === 'text' && typeof value === 'string' && imageTarget(value) !== null
+}
+
+/** Uma linha do bloco Propriedades. As chaves `locked` e `mismatch` só existem quando se aplicam. */
+export function toPageProperty(key: string, raw: unknown, ctx: PropertyRenderContext): PageProperty {
+  const type = resolvePropertyType(key, raw, ctx.config)
+  const readonly = isReadonlyProperty(ctx.config, key)
+
+  if (isNestedObject(raw)) {
+    // Objeto aninhado não cabe em tipo nenhum: vai a cópia JSON-safe, mostrada como JSON.
+    const value = toJsonSafe(raw)
+    return { key, type, value, html: esc(JSON.stringify(value)), locked: readonly ? 'readonly' : 'object' }
+  }
+
+  const { value, mismatch } = normalizePropertyValue(type, raw)
+  // Com mismatch, o valor vem na forma do tipo inferido, e é nesse tipo que se mostra.
+  const shown = mismatch ? inferValueType(raw) : type
+  const row: PageProperty = { key, type, value, html: renderPropertyValue(key, shown, value, ctx) }
+  const locked: PropertyLock | null = readonly ? 'readonly' : citesImage(shown, value) ? 'image' : null
+  if (locked) row.locked = locked
+  if (mismatch) row.mismatch = true
+  return row
+}
+
+/** As linhas do bloco Propriedades, na ordem do frontmatter, vazias incluídas. */
+export function buildPageProperties(
+  frontmatter: Record<string, unknown>,
+  ctx: PropertyRenderContext,
+  opts: { familyNote: boolean },
+): PageProperty[] {
+  const rows: PageProperty[] = []
+  for (const [key, raw] of Object.entries(frontmatter)) {
+    if (isHiddenProperty(key, opts.familyNote)) continue
+    rows.push(toPageProperty(key, raw, ctx))
+  }
+  return rows
+}
+
+// Ordem pt-BR; o desempate por unidade de código deixa a ordem total e estável
+// (o localeCompare dá 0 para formas canônicas equivalentes, como NFC e NFD).
+function compareText(a: string, b: string): number {
+  return a.localeCompare(b, 'pt-BR') || (a < b ? -1 : a > b ? 1 : 0)
+}
+
+/**
+ * Índice dos valores das propriedades de lista: chave exata → valores distintos,
+ * chaves e valores em ordem pt-BR. Linha travada não entra; uma string solta com
+ * mismatch numa propriedade de lista entra aparada, porque vai virar item de lista
+ * (e os itens de lista já vêm aparados da normalização).
+ */
+export function collectPropertyValues(pages: Pick<PageMeta, 'properties'>[]): Record<string, string[]> {
+  const byKey = new Map<string, Set<string>>()
+  const add = (key: string, v: string) => {
+    if (v === '') return
+    const values = byKey.get(key)
+    if (values) values.add(v)
+    else byKey.set(key, new Set([v]))
+  }
+  for (const page of pages) {
+    for (const row of page.properties ?? []) {
+      if (row.locked) continue
+      if (Array.isArray(row.value)) {
+        for (const item of row.value) if (typeof item === 'string') add(row.key, item)
+      } else if (row.mismatch && LIST_PROPERTY_TYPES.has(row.type) && typeof row.value === 'string') {
+        add(row.key, row.value.trim())
+      }
     }
   }
-  return null
-}
-
-// Renders a single scalar value: image wikilinks/paths become lightbox thumbnail
-// `<img>` elements; non-image wikilinks (`[[X]]`, `[[X|Alias]]`) are resolved to
-// links; plain text is HTML-escaped. Vault content is trusted.
-function renderScalar(
-  v: unknown,
-  replaceWikilinks: (s: string) => string,
-  resolveImage: (p: string) => string,
-): string {
-  if (v == null) return ''
-  // Unquoted YAML true/false — Obsidian's Checkbox type. Read-only, same markup
-  // as a rendered task list item.
-  if (typeof v === 'boolean') {
-    return `<input type="checkbox" class="vault-prop-checkbox"${v ? ' checked' : ''} disabled>`
-  }
-  const dateStr = formatDate(v)
-  if (dateStr) return escapeHtml(dateStr)
-  const s = String(v).trim()
-  if (s === '') return ''
-
-  // URL → external link (before the image checks: a URL ending in .png is not a
-  // vault image). The viewer opens http(s) links in a new tab.
-  if (URL_RE.test(s)) {
-    const url = escapeAttr(s)
-    return `<a href="${url}">${url}</a>`
-  }
-
-  // Image wikilink: extract the inner path (before any `|alias`) → thumbnail.
-  const wl = IMAGE_WIKILINK_RE.exec(s)
-  if (wl) {
-    const url = resolveImage(wl[1])
-    return `<img class="vault-prop-thumb" src="${encodeURI(url)}" alt="" />`
-  }
-  // Bare image path (no brackets) → thumbnail.
-  if (!s.includes('[[') && IMAGE_PATH_RE.test(s)) {
-    const url = resolveImage(s)
-    return `<img class="vault-prop-thumb" src="${encodeURI(url)}" alt="" />`
-  }
-
-  return s.includes('[[') ? replaceWikilinks(s) : escapeHtml(s)
-}
-
-function renderValue(
-  raw: unknown,
-  replaceWikilinks: (s: string) => string,
-  resolveImage: (p: string) => string,
-): string {
-  if (Array.isArray(raw)) {
-    const items = raw.map(v => renderScalar(v, replaceWikilinks, resolveImage)).filter(Boolean)
-    if (items.length === 0) return ''
-    // All-thumbnail value → gallery strip (no separator); otherwise comma join.
-    const allThumbs = items.every(i => i.startsWith('<img ') && i.includes('class="vault-prop-thumb"'))
-    return items.join(allThumbs ? '' : ', ')
-  }
-  return renderScalar(raw, replaceWikilinks, resolveImage)
-}
-
-export function renderProperties(
-  frontmatter: Record<string, unknown>,
-  replaceWikilinks: (s: string) => string,
-  resolveImage: (p: string) => string,
-  opts: { familyNote?: boolean } = {},
-): string {
-  const rows: string[] = []
-  for (const [key, raw] of Object.entries(frontmatter)) {
-    if (HIDDEN_PROP_KEYS.test(key)) continue
-    if (opts.familyNote && FAMILY_PROP_KEYS.has(key)) continue
-    const valHtml = renderValue(raw, replaceWikilinks, resolveImage)
-    if (!valHtml) continue
-    rows.push(
-      `<div class="vault-prop">` +
-        `<span class="vault-prop-key">${escapeHtml(key)}</span>` +
-        `<span class="vault-prop-val">${valHtml}</span>` +
-        `</div>`,
-    )
-  }
-  if (rows.length === 0) return ''
-  return (
-    `<details class="vault-properties">` +
-    `<summary class="vault-properties-summary">` +
-    `<span class="vault-properties-chevron">▸</span>` +
-    // Built statically here; the viewer re-labels [data-i18n] nodes client-side
-    // per the user's locale (default English is the in-HTML fallback).
-    `<span data-i18n="properties.title">Properties</span>` +
-    `</summary>` +
-    `<div class="vault-properties-body">${rows.join('')}</div>` +
-    `</details>`
+  return Object.fromEntries(
+    [...byKey]
+      .sort(([a], [b]) => compareText(a, b))
+      .map(([key, values]) => [key, [...values].sort(compareText)]),
   )
 }

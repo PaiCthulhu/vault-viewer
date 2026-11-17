@@ -117,8 +117,9 @@ export function prunePages(dataDir: string, written: Iterable<string>): number {
   return removed
 }
 
-// Ordem: páginas → pages-index/tree → graph → assets → poda → index.json por último,
-// para o viewer saber que o build terminou quando o index.json novo aparece.
+// Ordem: páginas → pages-index/tree → graph → assets → property-values → poda →
+// index.json por último, para o viewer saber que o build terminou quando o index.json
+// novo aparece.
 export function writeOutput(
   slug: string,
   pages: PageMeta[],
@@ -126,7 +127,13 @@ export function writeOutput(
   index: VaultIndex,
   dataRoot: string = path.join(process.cwd(), 'data'),
   // `summaries`: o que entra no pages-index/tree (o pipeline tira as notas-filhas); sem ele, todas as páginas.
-  opts: { assets?: string[]; alreadyWritten?: Iterable<string>; summaries?: PageSummary[] } = {},
+  // `propertyValues`: índice dos valores das propriedades de lista (`property-values.json`).
+  opts: {
+    assets?: string[]
+    alreadyWritten?: Iterable<string>
+    summaries?: PageSummary[]
+    propertyValues?: Record<string, string[]>
+  } = {},
 ): void {
   const dataDir = path.join(dataRoot, slug)
   fs.mkdirSync(dataDir, { recursive: true })
@@ -144,6 +151,9 @@ export function writeOutput(
   writeSummaries(dataDir, opts.summaries ?? toSummaries(pages))
   writeFileAtomic(path.join(dataDir, 'graph.json'), JSON.stringify(graph, null, 2))
   if (opts.assets) writeAssets(dataDir, opts.assets)
+  if (opts.propertyValues) {
+    writeFileAtomic(path.join(dataDir, 'property-values.json'), JSON.stringify(opts.propertyValues))
+  }
 
   // Sem páginas, algo deu errado na varredura: não apaga o que já existe.
   if (pages.length > 0) prunePages(dataDir, written)

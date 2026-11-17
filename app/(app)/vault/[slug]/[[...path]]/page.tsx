@@ -80,8 +80,10 @@ export default async function VaultPage({ params }: Props) {
 
   // Parse HTML server-side
   // A faixa de comentários só existe com a flag do vault ligada e em página comentável.
+  // O bloco Propriedades só é cortado quando a página traz as linhas dele (formato novo).
   const segments = parseHtmlSegments(page.html, {
     comments: vault.comments === true && page.commentable === true,
+    properties: Array.isArray(page.properties),
   })
   const toc = extractToc(page.html)
 

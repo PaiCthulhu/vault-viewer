@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { parseHtmlSegments, sameSegments, COMMENTS_SLOT } from '../../lib/parse-html-segments'
+import { parseHtmlSegments, sameSegments, COMMENTS_SLOT, PROPERTIES_SLOT } from '../../lib/parse-html-segments'
 import { COMMENTS_MARKER } from '../../builder/comments'
+import { PROPERTIES_MARKER } from '../../builder/plugins/properties'
 
 const COLS_ENC = encodeURIComponent(JSON.stringify(['Arquivo', 'Status']))
 const ROWS_B64 = Buffer.from(JSON.stringify([['Alpha', 'done'], ['Beta', 'wip']])).toString('base64')
@@ -149,5 +150,61 @@ describe('sameSegments', () => {
     expect(sameSegments(a, parseHtmlSegments(html))).toBe(false)
     expect(sameSegments(a, a.slice(1))).toBe(false)
     expect(sameSegments([{ type: 'html', html: 'x' }], [{ type: 'banner', html: 'x' }])).toBe(false)
+  })
+})
+
+// ─── Slot de propriedades (formato novo) ────────────────────────────────────
+describe('parseHtmlSegments: slot de propriedades', () => {
+  const OPEN = '<article class="vault-content">'
+  const TITLE = '<h1 class="vault-page-title">T</h1>'
+  const BANNER = `<div class="vault-banner" style="height: 500px;"><div class="vault-banner-gradient"></div><h1 class="vault-banner-title">T</h1></div>`
+  const novo = `${OPEN}${TITLE}${PROPERTIES_SLOT}${COMMENTS_SLOT}<p>b</p></article>`
+  const both = { properties: true, comments: true }
+
+  it('o marcador é o mesmo que o builder escreve', () => {
+    expect(PROPERTIES_SLOT).toBe(PROPERTIES_MARKER)
+  })
+
+  it('sem banner: html, properties, comments, html', () => {
+    const segs = parseHtmlSegments(novo, both)
+    expect(segs.map(s => s.type)).toEqual(['html', 'properties', 'comments', 'html'])
+    expect((segs[0] as { html: string }).html.endsWith('</h1>')).toBe(true)
+    expect((segs[3] as { html: string }).html.startsWith('<p>b</p>')).toBe(true)
+  })
+
+  it('com banner: o pedaço só com a abertura do artigo some', () => {
+    const html = `${BANNER}${OPEN}${PROPERTIES_SLOT}<p>b</p></article>`
+    expect(parseHtmlSegments(html, { properties: true }).map(s => s.type)).toEqual(['banner', 'properties', 'html'])
+  })
+
+  it('properties false e comments true: o slot de propriedades fica no html', () => {
+    const segs = parseHtmlSegments(novo, { properties: false, comments: true })
+    expect(segs.map(s => s.type)).toEqual(['html', 'comments', 'html'])
+    expect((segs[0] as { html: string }).html).toContain(PROPERTIES_SLOT)
+  })
+
+  it('properties true sem comments: o slot de comentários fica no último html', () => {
+    const segs = parseHtmlSegments(novo, { properties: true })
+    expect(segs.map(s => s.type)).toEqual(['html', 'properties', 'html'])
+    expect((segs[2] as { html: string }).html.startsWith(COMMENTS_SLOT)).toBe(true)
+  })
+
+  it('o slot escrito no corpo não é cortado', () => {
+    const html = `${OPEN}${TITLE}<p>x</p>${PROPERTIES_SLOT}<p>b</p></article>`
+    expect(parseHtmlSegments(html, both)).toEqual([{ type: 'html', html }])
+  })
+
+  it('o slot depois de um título que não é o da página não é cortado', () => {
+    const html = `${OPEN}<h1>T</h1>${PROPERTIES_SLOT}<p>b</p></article>`
+    expect(parseHtmlSegments(html, both)).toEqual([{ type: 'html', html }])
+  })
+
+  it('formato antigo corta como antes, sem segmento properties', () => {
+    const html = `${OPEN}${TITLE}<details class="vault-properties"></details>${COMMENTS_SLOT}<p>b</p></article>`
+    expect(parseHtmlSegments(html, both).map(s => s.type)).toEqual(['html', 'comments', 'html'])
+  })
+
+  it('sameSegments trata properties como igual', () => {
+    expect(sameSegments([{ type: 'properties' }], [{ type: 'properties' }])).toBe(true)
   })
 })

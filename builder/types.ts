@@ -14,6 +14,23 @@ export interface PageMeta {
   commentable?: boolean
   // Conversas anexadas à página; presente só quando há ao menos uma.
   comments?: CommentThread[]
+  // Propriedades tipadas do frontmatter; presente só quando a página tem bloco Propriedades.
+  properties?: PageProperty[]
+}
+
+export type PropertyType = 'text' | 'multitext' | 'number' | 'checkbox' | 'date' | 'datetime' | 'tags' | 'aliases'
+export type PropertyJson = string | number | boolean | null | PropertyJson[] | { [key: string]: PropertyJson }
+// Valor normalizado: text/date/datetime → string|null; number → number|null; checkbox → boolean|null;
+// multitext/tags/aliases → string[]; objeto travado → cópia JSON-safe.
+export type PropertyValue = PropertyJson
+export type PropertyLock = 'readonly' | 'image' | 'object'
+export interface PageProperty {
+  key: string
+  type: PropertyType
+  value: PropertyValue
+  html: string
+  locked?: PropertyLock
+  mismatch?: true
 }
 
 export interface PageComment {

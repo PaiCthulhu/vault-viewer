@@ -5,6 +5,7 @@ import os from 'os'
 import type { VaultConfig } from '../../types'
 import { buildVault } from '../../builder/pipeline'
 import { COMMENTS_MARKER } from '../../builder/comments'
+import { PROPERTIES_MARKER } from '../../builder/plugins/properties'
 import { renderComment, renderCommentFallback } from '../../builder/comment-render'
 import { executeDataviewJS } from '../../builder/plugins/dataview'
 
@@ -136,7 +137,7 @@ describe('buildVault — comentários', () => {
     const marcador = html.indexOf(COMMENTS_MARKER)
     expect(marcador).toBeGreaterThan(-1)
     expect(html.indexOf(COMMENTS_MARKER, marcador + 1)).toBe(-1)
-    expect(html.slice(0, marcador).endsWith('</details>')).toBe(true)
+    expect(html.slice(0, marcador).endsWith(PROPERTIES_MARKER)).toBe(true)
     expect(html.indexOf('corpo')).toBeGreaterThan(marcador)
     for (const p of ['Notas/Sem Props', 'Abas/Aba']) {
       const page = read(out, `pages/${p}.json`)

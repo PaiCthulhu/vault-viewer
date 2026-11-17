@@ -66,7 +66,22 @@ export interface PreviewPayload {
   snippet: string
 }
 
-export function buildPreview(html: string): PreviewPayload {
+const VAULT_IMG_RE = /<img[^>]+src="(\/vault-assets\/[^"]+)"/
+
+// `src` da primeira imagem do vault no HTML, já sem as entidades (o HTML escapa `&`, `'`…).
+function firstVaultImage(html: string): string | null {
+  const m = VAULT_IMG_RE.exec(html)
+  return m ? decodeEntities(m[1]) : null
+}
+
+export interface PreviewOptions {
+  // O `html` de cada linha do bloco Propriedades (`PageMeta.properties`), em ordem. No
+  // formato novo o bloco não está no HTML da página, e a miniatura de uma propriedade
+  // vem antes do corpo, como vinha quando o bloco ficava dentro do artigo.
+  propertiesHtml?: string[]
+}
+
+export function buildPreview(html: string, opts: PreviewOptions = {}): PreviewPayload {
   let image: string | null = null
   let imagePosition: string | null = null
   let bodyHtml = html
@@ -81,14 +96,21 @@ export function buildPreview(html: string): PreviewPayload {
     if (end !== -1) bodyHtml = html.slice(end + BANNER_END.length)
   }
 
-  // Else: first vault-asset image in the page.
-  if (!image) {
-    const imgMatch = /<img[^>]+src="(\/vault-assets\/[^"]+)"/.exec(html)
-    if (imgMatch) image = imgMatch[1]
+  // Senão, a primeira imagem do vault nas propriedades, na ordem delas.
+  if (!image && opts.propertiesHtml) {
+    for (const propHtml of opts.propertiesHtml) {
+      image = firstVaultImage(propHtml)
+      if (image) break
+    }
   }
+
+  // Else: first vault-asset image in the page.
+  if (!image) image = firstVaultImage(html)
 
   // Snippet: drop the title heading and the collapsible "Propriedades" block
   // (it's metadata, not the page's prose), then strip tags, decode, collapse.
+  // O <details> só existe no HTML antigo; no novo o bloco é um slot vazio e os
+  // valores das propriedades nunca chegam ao trecho.
   const cleaned = bodyHtml
     .replace(/<details[^>]*class="vault-properties"[^>]*>[\s\S]*?<\/details>/i, ' ')
     .replace(/<h1[^>]*class="vault-page-title"[^>]*>[\s\S]*?<\/h1>/i, ' ')

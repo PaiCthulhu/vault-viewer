@@ -111,3 +111,46 @@ describe('LinkResolver.replaceWikilinks', () => {
     expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor#secao-um">veja</a>')
   })
 })
+
+describe('LinkResolver.replaceWikilinksEscaped', () => {
+  const lr = new LinkResolver([
+    { absolutePath: '/v/X.md', relativePath: 'Notes/X', title: 'X' },
+  ])
+
+  it('escapa texto fora e o display, mantendo o href', () => {
+    const r = lr.replaceWikilinksEscaped('a <b> [[Notes/X|<img src=x onerror=alert(1)>]] & c', 'my-vault')
+    expect(r).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(r).toContain('a &lt;b&gt;')
+    expect(r).toContain('&amp; c')
+    expect(r).not.toContain('<img')
+    expect(r).toContain('<a href="/vault/my-vault/Notes/X">')
+  })
+
+  it('link morto com display escapado', () => {
+    expect(lr.replaceWikilinksEscaped('[[Nope|<script>x</script>]]', 'my-vault')).toBe(
+      '<span class="vault-dead-link">&lt;script&gt;x&lt;/script&gt;</span>',
+    )
+  })
+
+  it('heading da mesma pagina sem aspas cruas no href', () => {
+    const r = lr.replaceWikilinksEscaped('[[#Sec "q"]]', 'my-vault')
+    expect(r).toMatch(/^<a href="#[^"]*">Sec &quot;q&quot;<\/a>$/)
+  })
+
+  it('escapa aspas simples', () => {
+    expect(lr.replaceWikilinksEscaped("it's", 'my-vault')).toBe('it&#39;s')
+  })
+
+  it('replaceWikilinks continua cru', () => {
+    expect(lr.replaceWikilinks('[[X|<b>B</b>]]', 's')).toBe('<a href="/vault/s/Notes/X"><b>B</b></a>')
+  })
+
+  it('wikilink invalido sai escapado', () => {
+    expect(lr.replaceWikilinksEscaped('[[|<b>]]', 'my-vault')).toBe('[[|&lt;b&gt;]]')
+  })
+
+  it('barra final antes do pipe e removida; alvo terminado em s fica intacto', () => {
+    expect(lr.replaceWikilinks('[[Notes/X\ |x]]', 's')).toBe('<a href="/vault/s/Notes/X">x</a>')
+    expect(lr.replaceWikilinks('[[Notes/Xs]]', 's')).toBe('<span class="vault-dead-link">Notes/Xs</span>')
+  })
+})

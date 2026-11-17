@@ -99,6 +99,57 @@ describe('buildPreview', () => {
   })
 })
 
+describe('buildPreview: imagem das Propriedades', () => {
+  const thumb = (src: string) => `<img class="vault-prop-thumb" src="${src}" alt="" />`
+  const page = '<article class="vault-content"><p>x</p><img src="/vault-assets/s/b.png"></article>'
+
+  it('a primeira miniatura das propriedades, em ordem, vem antes da imagem do corpo, decodificada', () => {
+    const { image } = buildPreview(page, { propertiesHtml: ['', thumb('/vault-assets/s/a%20b&amp;c.png')] })
+    expect(image).toBe('/vault-assets/s/a%20b&c.png')
+  })
+
+  it('entre várias propriedades com imagem vale a primeira', () => {
+    const { image } = buildPreview(page, {
+      propertiesHtml: ['texto', thumb('/vault-assets/s/1.png') + thumb('/vault-assets/s/2.png'), thumb('/vault-assets/s/3.png')],
+    })
+    expect(image).toBe('/vault-assets/s/1.png')
+  })
+
+  it('sem propertiesHtml, ou sem imagem nelas, a imagem é a do html, como antes', () => {
+    expect(buildPreview(page).image).toBe('/vault-assets/s/b.png')
+    expect(buildPreview(page, { propertiesHtml: ['', '<span class="vault-prop-chip" data-color="blue">RPG</span>'] }).image)
+      .toBe('/vault-assets/s/b.png')
+  })
+
+  it('a imagem do html também sai decodificada', () => {
+    const { image } = buildPreview('<p><img src="/vault-assets/s/it&#39;s &amp; me.png" alt=""></p>')
+    expect(image).toBe("/vault-assets/s/it's & me.png")
+  })
+
+  it('o banner continua valendo antes das propriedades', () => {
+    const html =
+      `<div class="vault-banner" style="background-image: url('/vault-assets/s/banner.jpg')">` +
+      '<div class="vault-banner-gradient"></div><h1 class="vault-banner-title">T</h1></div>' + page
+    const { image } = buildPreview(html, { propertiesHtml: [thumb('/vault-assets/s/a.png')] })
+    expect(image).toBe('/vault-assets/s/banner.jpg')
+  })
+
+  it('o valor das propriedades não entra no trecho; o <details> antigo continua fora dele', () => {
+    const newFormat = buildPreview(
+      '<article class="vault-content"><div class="vault-properties-slot"></div><p>corpo</p></article>',
+      { propertiesHtml: ['meta'] },
+    )
+    expect(newFormat.snippet).toBe('corpo')
+    const old = buildPreview(
+      '<article class="vault-content"><details class="vault-properties"><summary>Properties</summary>' +
+        `<div class="vault-prop"><span class="vault-prop-val">meta${thumb('/vault-assets/s/old.png')}</span></div>` +
+        '</details><p>corpo</p></article>',
+    )
+    expect(old.snippet).toBe('corpo')
+    expect(old.image).toBe('/vault-assets/s/old.png')
+  })
+})
+
 describe('buildSectionPreview', () => {
   const html =
     '<h1 class="vault-page-title" id="page">Page</h1>' +

@@ -164,6 +164,7 @@ export function VaultViewer({
               slug={vault.slug}
               pagePath={page.path}
               tabs={page.tabs}
+              properties={page.properties}
               comments={
                 // A flag do vault é aplicada aqui: o `PageMeta` traz os comentários mesmo com ela desligada.
                 vault.comments === true && page.commentable === true

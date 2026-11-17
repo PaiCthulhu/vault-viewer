@@ -77,11 +77,45 @@
   display: inline-block;
 }
 
+/* Item de uma propriedade de lista. A cor vem do builder (lib/property-color.ts):
+   a mesma etiqueta tem sempre a mesma. Fundo translúcido para servir nos dois temas. */
+.vault-prop-chip {
+  display: inline-block;
+  margin: 0.1rem 0.3rem 0.1rem 0;
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: rgba(155, 155, 155, 0.22);
+}
+.vault-prop-chip[data-color="brown"]  { background: rgba(159, 107, 83, 0.28); }
+.vault-prop-chip[data-color="orange"] { background: rgba(217, 115, 13, 0.25); }
+.vault-prop-chip[data-color="yellow"] { background: rgba(203, 145, 47, 0.28); }
+.vault-prop-chip[data-color="green"]  { background: rgba(68, 131, 97, 0.28); }
+.vault-prop-chip[data-color="blue"]   { background: rgba(51, 126, 169, 0.28); }
+.vault-prop-chip[data-color="purple"] { background: rgba(144, 101, 176, 0.28); }
+.vault-prop-chip[data-color="pink"]   { background: rgba(193, 76, 138, 0.28); }
+.vault-prop-chip[data-color="red"]    { background: rgba(212, 76, 71, 0.28); }
+
+/* No HTML novo o bloco é um segmento próprio, numa caixa .vault-article só dele.
+   Sem o padding vertical entre ele e as caixas vizinhas (o título antes, o corpo
+   depois), as margens do título, do <details> e do corpo colapsam como quando o
+   bloco vivia dentro do artigo, e o espaçamento fica o mesmo. */
+.vault-article.vault-properties-wrap { padding-bottom: 0; }
+.vault-article + .vault-article.vault-properties-wrap { padding-top: 0; }
+.vault-article:has(+ .vault-properties-wrap) { padding-bottom: 0; }
+.vault-properties-wrap + .vault-article { padding-top: 0; }
+
 /* ─── Comment strip (between the Properties block and the body) ───────────── */
 /* The strip is a segment of its own, so it sits in its own .vault-article box:
    drop that box's vertical padding and pull the strip up over the padding the
    Properties segment leaves below itself. */
 .vault-article.vault-comments-wrap { padding-top: 0; padding-bottom: 0; }
+/* Depois do bloco do HTML novo não há padding para cobrir: a margem negativa
+   colapsaria com a do <details> e a faixa subiria 0.5rem sobre o bloco. Sem ela, a
+   distância é a margem de baixo do <details> (1.5rem), a mesma do HTML antigo. */
+.vault-properties-wrap + .vault-comments-wrap > .vault-comments { margin-top: 0; }
 
 .vault-comments {
   margin: -2rem 0 -0.5rem;

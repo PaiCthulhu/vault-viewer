@@ -53,3 +53,10 @@ export interface UserPublic {
   createdAt: string
   vaults: VaultPermission[]
 }
+
+// Arquivo `.vaultwright/properties.json` na raiz do vault.
+export interface VaultwrightPropertySettings { readonly?: boolean }
+export interface VaultwrightPropertiesFile {
+  version: 1
+  properties: Record<string, VaultwrightPropertySettings>
+}

@@ -13,7 +13,8 @@ import { renderCaptions } from './plugins/captions'
 import { renderCallouts } from './plugins/callouts'
 import { applyObsidianCompat } from './plugins/obsidian-compat'
 import { renderCanvas, canvasTextSources } from './plugins/canvas'
-import { renderProperties } from './plugins/properties'
+import { buildPageProperties, collectPropertyValues, PROPERTIES_MARKER, type PropertyRenderContext } from './plugins/properties'
+import { loadPropertyConfig } from './property-types'
 import { executeDQL, executeDataviewJS } from './plugins/dataview'
 import { renderMarkdown } from './markdown'
 import { buildGraph } from './graph-builder'
@@ -99,6 +100,13 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // Canvas files entram no resolver para [[Página Inicial]] resolver, mas NÃO nos stubs.
   const linkResolver = new LinkResolver([...files, ...canvasFiles])
   const imageHandler = new ImageHandler(vault.path, vault.slug, imageIndex)
+  // Tipos (`.obsidian/types.json`) e travas (`.vaultwright/properties.json`), lidos uma
+  // vez por build. Arquivo ausente ou ilegível não derruba o build (só avisa).
+  const propertyCtx: PropertyRenderContext = {
+    renderWikilinks: s => linkResolver.replaceWikilinksEscaped(s, vault.slug),
+    resolveImage: p => imageHandler.resolve(p),
+    config: loadPropertyConfig(vault.path),
+  }
 
   // Garante que a imagem de capa do vault seja registrada na lista de assets (assets.json).
   if (vault.coverImage) imageHandler.resolve(vault.coverImage)
@@ -219,25 +227,27 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
       ? ''
       : `<h1 class="vault-page-title"${titleId ? ` id="${titleId}"` : ''}>${stub.title.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</h1>`
 
-    // Collapsible "Propriedades" block from the frontmatter, at the top of the
-    // article (right after the title / below the banner).
-    const propsHtml = renderProperties(
-      stub.frontmatter,
-      s => linkResolver.replaceWikilinks(s, vault.slug),
-      p => imageHandler.resolve(p),
-      { familyNote: noteFamilyFields(stub.frontmatter).noteType !== null },
-    )
+    // Linhas do bloco Propriedades, na ordem do frontmatter (vazias incluídas). O viewer
+    // monta o bloco no marcador, logo depois do título (ou no começo do artigo, com banner).
+    const properties = buildPageProperties(stub.frontmatter, propertyCtx, {
+      familyNote: noteFamilyFields(stub.frontmatter).noteType !== null,
+    })
+    const hasProperties = properties.length > 0
 
-    // Comentável: nota com bloco de Propriedades que não é aba. O marcador marca onde
-    // o viewer encaixa a área de comentários.
-    const commentable = propsHtml !== '' && !families.hidden.has(stub.path)
+    // Comentável: nota com bloco de Propriedades que não é aba. O marcador de comentários
+    // marca onde o viewer encaixa a área de comentários, logo depois do de propriedades.
+    const commentable = hasProperties && !families.hidden.has(stub.path)
 
-    const fullHtml = banner + `<article class="vault-content">${titleHtml}${propsHtml}${commentable ? COMMENTS_MARKER : ''}${bodyHtml}</article>`
+    const fullHtml =
+      banner +
+      `<article class="vault-content">${titleHtml}${hasProperties ? PROPERTIES_MARKER : ''}` +
+      `${commentable ? COMMENTS_MARKER : ''}${bodyHtml}</article>`
 
-    // `tabs`, `commentable` e `comments` só existem quando se aplicam: as outras
-    // páginas saem como antes.
+    // `properties`, `tabs`, `commentable` e `comments` só existem quando se aplicam: as
+    // outras páginas saem sem essas chaves.
     const tabs = families.tabsOf.get(stub.path)
     const page: PageMeta = { ...stub, html: fullHtml, css: pageCss.join('\n') }
+    if (hasProperties) page.properties = properties
     if (tabs) page.tabs = tabs
     if (commentable) {
       page.commentable = true
@@ -397,12 +407,15 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // Pastas da mesma árvore que vai para o tree.json: o card do vault mostra o que a barra lateral mostra.
   const folderCount = countTreeFolders(buildTree(listedSummaries))
   const graph = buildGraph(listed)
+  // Índice dos valores das propriedades de lista, das páginas gravadas: abas entram;
+  // comentários e o resto de `_comments/` não, porque não viram página.
+  const propertyValues = collectPropertyValues(pages)
   const builtAt = new Date().toISOString()
   writeOutput(
     vault.slug, pages, graph,
     { pageCount: pages.length, folderCount, builtAt, startedAt },
     opts.dataRoot,
-    { assets: imageHandler.assets(), alreadyWritten, summaries: listedSummaries },
+    { assets: imageHandler.assets(), alreadyWritten, summaries: listedSummaries, propertyValues },
   )
 
   console.log(`[${vault.slug}] Build concluído: ${pages.length} páginas, ${folderCount} pastas, ${graph.edges.length} edges`)
