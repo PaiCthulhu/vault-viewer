@@ -19,6 +19,13 @@ export interface VaultConfig {
   comments?: boolean
 }
 
+export type VaultLevel = 'reader' | 'editor'
+
+export interface VaultPermission {
+  slug: string
+  level: VaultLevel
+}
+
 export interface VaultsConfigFile {
   vaults: VaultConfig[]
 }
@@ -44,5 +51,5 @@ export interface UserPublic {
   displayName: string | null
   isAdmin: boolean
   createdAt: string
-  vaultSlugs: string[]
+  vaults: VaultPermission[]
 }

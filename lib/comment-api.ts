@@ -1,11 +1,8 @@
 // O que as rotas de comentário têm em comum: quem pode escrever, a leitura do corpo JSON e
 // o disparo do rebuild. A escrita no disco fica em `lib/comment-store.ts`.
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import type { VaultConfig } from '@/types'
-import { verifyToken, COOKIE_NAME } from '@/lib/auth'
-import { dbGetUserById, dbUserHasVaultAccess } from '@/lib/db'
-import { getVaultBySlug } from '@/lib/vault-config'
+import { json, vaultSession } from '@/lib/vault-session'
 import { runRebuild } from '@/lib/rebuild'
 import { CommentError, MAX_COMMENT_CHARS, normalizeBody, wroteMother } from '@/lib/comment-store'
 import { commentTooDeep } from '@/builder/comment-render'
@@ -15,11 +12,7 @@ import { commentTooDeep } from '@/builder/comment-render'
 const MAX_REQUEST_BYTES = 128 * 1024
 const MAX_PATH_CHARS = 1000
 
-const NO_STORE = { 'Cache-Control': 'no-store' }
-
-export function json(body: unknown, status = 200): NextResponse {
-  return NextResponse.json(body, { status, headers: NO_STORE })
-}
+export { json }
 
 const fail = (status: number, error: string): NextResponse => json({ error }, status)
 
@@ -29,26 +22,13 @@ export interface CommentSession {
   isAdmin: boolean
 }
 
-// Quem pode escrever comentários neste vault, nesta ordem: sessão válida; o usuário ainda
-// existe no banco (o JWT de um usuário apagado vale até expirar); acesso ao vault; o vault
-// existe; a flag `comments` ligada. O nome e o papel vêm do banco, não do token.
+// Quem pode escrever comentários neste vault: a sessão comum (`vaultSession`) e a flag
+// `comments` ligada. O nome e o papel vêm do banco, não do token.
 export async function commentSession(slug: string): Promise<CommentSession | NextResponse> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value
-  if (!token) return fail(401, 'Não autenticado')
-  const payload = await verifyToken(token)
-  if (!payload) return fail(401, 'Token inválido')
-
-  const user = dbGetUserById(payload.userId)
-  if (!user) return fail(401, 'Usuário não existe mais')
-  const isAdmin = Boolean(user.is_admin)
-
-  if (!isAdmin && !dbUserHasVaultAccess(user.id, slug)) return fail(403, 'Sem acesso')
-
-  const vault = getVaultBySlug(slug)
-  if (!vault) return fail(404, 'Vault não encontrado')
-  if (vault.comments !== true) return fail(403, 'Comentários desligados neste vault')
-
-  return { vault, username: user.username, isAdmin }
+  const session = await vaultSession(slug)
+  if (session instanceof NextResponse) return session
+  if (session.vault.comments !== true) return fail(403, 'Comentários desligados neste vault')
+  return { vault: session.vault, username: session.username, isAdmin: session.isAdmin }
 }
 
 // Corpo JSON obrigatório (`Content-Type: application/json`), com teto de tamanho, e tem de

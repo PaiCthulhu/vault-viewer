@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import path from 'path'
-import type { UserRow } from '@/types'
+import type { UserRow, VaultLevel, VaultPermission } from '@/types'
 
 const DB_PATH = path.join(process.cwd(), 'users.db')
 
@@ -44,6 +44,7 @@ export function applySchema(db: Database.Database): void {
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       vault_slug TEXT NOT NULL,
       granted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      level      TEXT NOT NULL DEFAULT 'reader' CHECK (level IN ('reader','editor')),
       PRIMARY KEY (user_id, vault_slug)
     );
   `)
@@ -52,6 +53,14 @@ export function applySchema(db: Database.Database): void {
   const cols = db.prepare('PRAGMA table_info(users)').all() as { name: string }[]
   if (!cols.some((c) => c.name === 'display_name')) {
     db.exec('ALTER TABLE users ADD COLUMN display_name TEXT')
+  }
+
+  // Banco antigo: acrescenta o nível de acesso; os acessos que já existiam viram reader
+  const permCols = db.prepare('PRAGMA table_info(vault_permissions)').all() as { name: string }[]
+  if (!permCols.some((c) => c.name === 'level')) {
+    db.exec(
+      "ALTER TABLE vault_permissions ADD COLUMN level TEXT NOT NULL DEFAULT 'reader' CHECK (level IN ('reader','editor'))",
+    )
   }
 }
 
@@ -139,16 +148,40 @@ export function dbGetUserPermissions(userId: number): string[] {
   return rows.map((r) => r.vault_slug)
 }
 
-export function dbSetUserPermissions(userId: number, vaultSlugs: string[]): void {
+export function dbGetUserVaultPermissions(userId: number): VaultPermission[] {
+  const rows = getDb()
+    .prepare('SELECT vault_slug, level FROM vault_permissions WHERE user_id = ? ORDER BY vault_slug')
+    .all(userId) as { vault_slug: string; level: VaultLevel }[]
+  return rows.map((r) => ({ slug: r.vault_slug, level: r.level }))
+}
+
+// Troca todos os acessos do usuário. INSERT simples: slug repetido ou nível fora do CHECK
+// lança e a transação desfaz tudo.
+export function dbSetUserPermissions(userId: number, perms: VaultPermission[]): void {
   const db = getDb()
   const del = db.prepare('DELETE FROM vault_permissions WHERE user_id = ?')
   const ins = db.prepare(
-    'INSERT OR IGNORE INTO vault_permissions (user_id, vault_slug) VALUES (?, ?)',
+    'INSERT INTO vault_permissions (user_id, vault_slug, level) VALUES (?, ?, ?)',
   )
   db.transaction(() => {
     del.run(userId)
-    for (const slug of vaultSlugs) ins.run(userId, slug)
+    for (const p of perms) ins.run(userId, p.slug, p.level)
   })()
+}
+
+// Apaga os acessos de todos os usuários a um vault (slug exato). Devolve quantos saíram.
+// O DELETE do vault chama depois de tirá-lo da config: o slug é determinístico, e um vault
+// recriado com o mesmo nome herdaria os acessos antigos, editor inclusive.
+export function dbDeleteVaultPermissions(vaultSlug: string): number {
+  return getDb().prepare('DELETE FROM vault_permissions WHERE vault_slug = ?').run(vaultSlug).changes
+}
+
+// null = sem acesso ao vault
+export function dbGetUserVaultLevel(userId: number, vaultSlug: string): VaultLevel | null {
+  const row = getDb()
+    .prepare('SELECT level FROM vault_permissions WHERE user_id = ? AND vault_slug = ?')
+    .get(userId, vaultSlug) as { level: VaultLevel } | undefined
+  return row ? row.level : null
 }
 
 export function dbUserHasVaultAccess(userId: number, vaultSlug: string): boolean {

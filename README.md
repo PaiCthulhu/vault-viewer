@@ -22,7 +22,7 @@ There are great tools for publishing Obsidian vaults — [Quartz](https://quartz
 - **Plugin/syntax compatibility** — banners, multi-column layouts, callouts (including custom ones), Dataview (DQL *and* DataviewJS), galleries, Mermaid, LaTeX, Canvas, etc. — rendered the way they look in Obsidian.
 - **Self-hosted** — runs on my own machine/server, no third-party publishing service.
 - **Multi-vault** — several vaults served from a single instance.
-- **Per-user access control** — accounts with admin/reader roles and per-vault permissions.
+- **Per-user access control** — accounts with admin/reader roles and per-vault permissions, each at the **reader** or **editor** level.
 
 **If that describes your case, make yourself at home.** If you just want a public, zero-auth digital garden, **Quartz** or **Digital Garden** will probably serve you better — they're more mature for that use case and don't carry the auth/multi-tenant machinery.
 
@@ -63,7 +63,7 @@ There are great tools for publishing Obsidian vaults — [Quartz](https://quartz
 ### Hosting & administration
 
 - **Multiple vaults** from one instance, each with its own config.
-- **Accounts** with admin/reader roles; **per-vault access** granted per user (admins see everything). A user can have a **display name**, set by an admin and shown on their comments.
+- **Accounts** with admin/reader roles; **per-vault access** granted per user, as **reader** or **editor** (admins see everything and count as editors in every vault). A user can have a **display name**, set by an admin and shown on their comments.
 - **Admin panel** to manage users and vaults (create/edit/delete a vault, set its home page, cover/title property, turn comments on, and trigger rebuilds — all from the browser).
 - **`.viewerignore`** (gitignore syntax) per vault to hide files/folders from the build.
 
@@ -203,7 +203,7 @@ npx tsx builder/index.ts --all            # all vaults
 
 ### Managing users
 
-In `/admin` → **Users**: create reader/admin accounts, set passwords and display names, and grant per-vault access. The first admin is created with the seed script above.
+In `/admin` → **Users**: create reader/admin accounts, set passwords and display names, and grant per-vault access: each vault has a three-way control (no access, reader, editor), and the users table marks the vaults where someone is an editor. The level is read from the database on every edit, so a change applies right away, without the user logging in again. An existing `users.db` gets the level on first start, and grants made before it become reader. The first admin is created with the seed script above.
 
 ---
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import { requireAdmin } from '@/lib/admin-guard'
+import { dbDeleteVaultPermissions } from '@/lib/db'
 import type { VaultsConfigFile } from '@/types'
 
 /**
@@ -164,6 +165,16 @@ export async function DELETE(
     return NextResponse.json({ error: 'Falha ao gravar vaults.config.json' }, { status: 500 })
   }
 
+  // Os acessos saem só agora, com o vault já fora da config (se a gravação acima falha, ninguém
+  // perde acesso a um vault que continua existindo). Sem isso, recriar um vault com o mesmo nome
+  // (o slug é determinístico) devolveria os acessos antigos, editor inclusive.
+  let grantsFailed = false
+  try {
+    dbDeleteVaultPermissions(slug)
+  } catch {
+    grantsFailed = true
+  }
+
   // Remoção best-effort dos dados do build (inclui o assets.json; as imagens
   // ficam na pasta do vault e não são copiadas).
   try {
@@ -172,5 +183,11 @@ export async function DELETE(
     /* não fatal */
   }
 
+  if (grantsFailed) {
+    return NextResponse.json(
+      { error: 'Vault removido, mas os acessos a ele não foram apagados' },
+      { status: 500 },
+    )
+  }
   return NextResponse.json({ ok: true })
 }

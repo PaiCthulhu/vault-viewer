@@ -140,6 +140,7 @@ export const ptBR: Record<string, string> = {
   'admin.users.roleReader': 'Leitor',
   'admin.users.allVaults': 'Todos (admin)',
   'admin.users.noVaults': 'Nenhum',
+  'admin.users.editorBadge': 'editor',
 
   // ── Admin: painel de detalhe do usuário ──
   'admin.userDetail.editTitle': 'Editar — {name}',
@@ -153,6 +154,12 @@ export const ptBR: Record<string, string> = {
   'admin.userDetail.required': 'Username e senha são obrigatórios',
   'admin.userDetail.deleteConfirm': 'Deletar usuário "{name}"?',
   'admin.userDetail.delete': '🗑 Excluir usuário',
+  'admin.userDetail.levelNone': 'Sem acesso',
+  'admin.userDetail.levelReader': 'Leitor',
+  'admin.userDetail.levelEditor': 'Editor',
+  'admin.userDetail.permissionsFailed': 'O acesso aos vaults não foi salvo: {error}',
+  'admin.userDetail.createdPermissionsFailed': 'Usuário criado, mas o acesso aos vaults não foi salvo: {error}',
+  'admin.userDetail.saveNetworkError': 'Erro de rede ao salvar',
 
   // ── Admin: vaults ──
   'admin.vaults.title': 'Vaults',

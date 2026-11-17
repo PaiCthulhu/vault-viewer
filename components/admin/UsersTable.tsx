@@ -44,10 +44,16 @@ export function UsersTable({ users, selectedId, onSelect }: Props) {
               <td className="px-4 py-3">
                 {u.isAdmin ? (
                   <span className="text-[var(--text-muted)] text-sm">{t('admin.users.allVaults')}</span>
-                ) : u.vaultSlugs.length > 0 ? (
-                  u.vaultSlugs.map((s) => (
-                    <span key={s} className="mr-1.5 inline-block rounded border border-indigo-500/25 bg-indigo-500/12 px-2 py-0.5 text-xs text-indigo-300">
-                      {s}
+                ) : u.vaults.length > 0 ? (
+                  u.vaults.map((v) => (
+                    <span key={v.slug} className="mr-1.5 inline-block rounded border border-indigo-500/25 bg-indigo-500/12 px-2 py-0.5 text-xs text-indigo-300">
+                      {v.slug}
+                      {v.level === 'editor' && (
+                        <>
+                          {' '}
+                          <span className="text-[0.65rem] opacity-70">{t('admin.users.editorBadge')}</span>
+                        </>
+                      )}
                     </span>
                   ))
                 ) : (

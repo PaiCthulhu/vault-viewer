@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { dbGetAllUsers, dbCreateUser, dbGetUserPermissions } from '@/lib/db'
+import { dbGetAllUsers, dbCreateUser, dbGetUserVaultPermissions } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
 import { requireAdmin } from '@/lib/admin-guard'
 import { validateDisplayName } from '@/lib/display-name'
@@ -16,7 +16,7 @@ export async function GET() {
     displayName: u.display_name ?? null,
     isAdmin: Boolean(u.is_admin),
     createdAt: u.created_at,
-    vaultSlugs: dbGetUserPermissions(u.id),
+    vaults: dbGetUserVaultPermissions(u.id),
   }))
   return NextResponse.json({ users: result })
 }
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       displayName: user.display_name ?? null,
       isAdmin: Boolean(user.is_admin),
       createdAt: user.created_at,
-      vaultSlugs: [],
+      vaults: [],
     }
     return NextResponse.json({ user: result }, { status: 201 })
   } catch {

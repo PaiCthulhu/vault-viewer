@@ -4,8 +4,11 @@ import os from 'os'
 import path from 'path'
 
 vi.mock('@/lib/admin-guard', () => ({ requireAdmin: async () => null }))
+// Nunca o users.db de verdade: o DELETE do vault apaga os acessos pelo banco
+vi.mock('@/lib/db', () => ({ dbDeleteVaultPermissions: vi.fn(() => 0) }))
 
-import { PATCH } from '@/app/api/admin/vaults/[slug]/route'
+import { dbDeleteVaultPermissions } from '@/lib/db'
+import { DELETE, PATCH } from '@/app/api/admin/vaults/[slug]/route'
 import { POST } from '@/app/api/admin/vaults/route'
 
 let tmp: string
@@ -91,5 +94,64 @@ describe('flag comments do vault', () => {
     expect(res.status).toBe(400)
     expect((await res.json()).error).toBe('comments deve ser booleano')
     expect(fs.readFileSync(configFile, 'utf-8')).toBe(before)
+  })
+})
+
+describe('DELETE do vault', () => {
+  const del = (slug: string) =>
+    DELETE(new Request('http://test.local/api', { method: 'DELETE' }) as never, {
+      params: Promise.resolve({ slug }),
+    })
+
+  beforeEach(() => {
+    vi.mocked(dbDeleteVaultPermissions).mockReset().mockReturnValue(0)
+  })
+
+  it('apaga os acessos do slug, só depois de tirar o vault da config', async () => {
+    let naConfig: boolean | undefined
+    vi.mocked(dbDeleteVaultPermissions).mockImplementation((slug: string) => {
+      naConfig = readVaults().some((v) => v.slug === slug)
+      return 2
+    })
+    const res = await del('my-vault')
+    expect(res.status).toBe(200)
+    expect(dbDeleteVaultPermissions).toHaveBeenCalledTimes(1)
+    expect(dbDeleteVaultPermissions).toHaveBeenCalledWith('my-vault')
+    expect(naConfig).toBe(false)
+    expect(readVaults()).toEqual([])
+  })
+
+  it('slug inválido ou vault desconhecido: não mexe nos acessos', async () => {
+    expect((await del('a b')).status).toBe(400)
+    expect((await del('nao-existe')).status).toBe(404)
+    expect(dbDeleteVaultPermissions).not.toHaveBeenCalled()
+  })
+
+  it('falha ao gravar a config: 500 e não mexe nos acessos', async () => {
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
+      throw new Error('disco cheio')
+    })
+    try {
+      expect((await del('my-vault')).status).toBe(500)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(dbDeleteVaultPermissions).not.toHaveBeenCalled()
+    expect(readVaults().map((v) => v.slug)).toEqual(['my-vault'])
+  })
+
+  it('falha ao apagar os acessos: 500, com o vault já fora da config e o build apagado', async () => {
+    vi.mocked(dbDeleteVaultPermissions).mockImplementation(() => {
+      throw new Error('banco travado')
+    })
+    const dataDir = path.join(tmp, 'data', 'my-vault')
+    fs.mkdirSync(dataDir, { recursive: true })
+    const res = await del('my-vault')
+    expect(fs.existsSync(dataDir)).toBe(false)
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({
+      error: 'Vault removido, mas os acessos a ele não foram apagados',
+    })
+    expect(readVaults()).toEqual([])
   })
 })

@@ -19,6 +19,9 @@ export function AdminPageClient({ initialUsers, vaults, currentUsername, isAdmin
   const { t } = useI18n()
   const [users, setUsers] = useState(initialUsers)
   const [selected, setSelected] = useState<UserPublic | null | 'new'>(null)
+  // Muda a cada "+ Novo usuário": o painel remonta limpo, mesmo se já estava aberto em 'new'
+  // (senão um usuário criado pela metade continuaria sendo editado)
+  const [newPanelKey, setNewPanelKey] = useState(0)
 
   const refreshUsers = useCallback(async () => {
     const res = await fetch('/api/admin/users')
@@ -41,7 +44,10 @@ export function AdminPageClient({ initialUsers, vaults, currentUsername, isAdmin
           <div className="flex flex-shrink-0 items-center gap-3 border-b px-5 py-3.5" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
             <h2 className="text-[1.05rem] font-bold text-[var(--text)] mr-auto">{t('admin.users.title')}</h2>
             <button
-              onClick={() => setSelected('new')}
+              onClick={() => {
+                setSelected('new')
+                setNewPanelKey((k) => k + 1)
+              }}
               className="rounded-md bg-indigo-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-600 transition"
             >
               {t('admin.users.new')}
@@ -60,6 +66,7 @@ export function AdminPageClient({ initialUsers, vaults, currentUsername, isAdmin
           {/* Detail panel (slide up via height) */}
           {selected !== null && (
             <UserDetailPanel
+              key={newPanelKey}
               user={panelUser}
               vaults={vaults}
               onClose={() => setSelected(null)}

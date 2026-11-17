@@ -141,6 +141,7 @@ export const en: Record<string, string> = {
   'admin.users.roleReader': 'Reader',
   'admin.users.allVaults': 'All (admin)',
   'admin.users.noVaults': 'None',
+  'admin.users.editorBadge': 'editor',
 
   // ── Admin: user detail panel ──
   'admin.userDetail.editTitle': 'Edit — {name}',
@@ -154,6 +155,12 @@ export const en: Record<string, string> = {
   'admin.userDetail.required': 'Username and password are required',
   'admin.userDetail.deleteConfirm': 'Delete user "{name}"?',
   'admin.userDetail.delete': '🗑 Delete user',
+  'admin.userDetail.levelNone': 'No access',
+  'admin.userDetail.levelReader': 'Reader',
+  'admin.userDetail.levelEditor': 'Editor',
+  'admin.userDetail.permissionsFailed': 'Vault access was not saved: {error}',
+  'admin.userDetail.createdPermissionsFailed': 'User created, but vault access was not saved: {error}',
+  'admin.userDetail.saveNetworkError': 'Network error while saving',
 
   // ── Admin: vaults ──
   'admin.vaults.title': 'Vaults',

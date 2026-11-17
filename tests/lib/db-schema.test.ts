@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import type { VaultLevel } from '@/types'
 
 type DbModule = typeof import('@/lib/db')
 
@@ -126,6 +127,160 @@ describe('getDb', () => {
       close.mockRestore()
       limpar(dir)
     }
+  })
+})
+
+function permColumns(d: Database.Database): string[] {
+  return (d.prepare('PRAGMA table_info(vault_permissions)').all() as { name: string }[]).map(
+    (c) => c.name,
+  )
+}
+
+describe('schema de vault_permissions', () => {
+  const USERS_ANTIGO = `
+    CREATE TABLE users (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      username      TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_admin      INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `
+
+  function bancoAntigo(): Database.Database {
+    const mem = new Database(':memory:')
+    mem.exec(`${USERS_ANTIGO}
+      CREATE TABLE vault_permissions (
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        vault_slug TEXT NOT NULL,
+        granted_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, vault_slug)
+      );
+    `)
+    mem.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('ana', 'h')
+    mem.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (1, ?)').run('my-vault')
+    mem.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (1, ?)').run('test-vault')
+    return mem
+  }
+
+  function checkRecusa(mem: Database.Database) {
+    expect(() =>
+      mem.prepare("UPDATE vault_permissions SET level = 'admin' WHERE vault_slug = 'my-vault'").run(),
+    ).toThrow(/CHECK constraint failed/)
+    expect(() =>
+      mem
+        .prepare("INSERT INTO vault_permissions (user_id, vault_slug, level) VALUES (1, 'x-vault', 'Editor')")
+        .run(),
+    ).toThrow(/CHECK constraint failed/)
+    mem.prepare("UPDATE vault_permissions SET level = 'editor' WHERE vault_slug = 'my-vault'").run()
+    const row = mem
+      .prepare("SELECT level FROM vault_permissions WHERE vault_slug = 'my-vault'")
+      .get() as { level: string }
+    expect(row.level).toBe('editor')
+  }
+
+  it('banco novo: vault_permissions tem level com default reader', () => {
+    const mem = new Database(':memory:')
+    db.applySchema(mem)
+    mem.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('ana', 'h')
+    mem.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (1, ?)').run('my-vault')
+    const row = mem.prepare('SELECT level FROM vault_permissions').get() as { level: string }
+    expect(row.level).toBe('reader')
+    mem.close()
+  })
+
+  it('banco antigo sem level ganha a coluna e os acessos viram reader', () => {
+    const mem = bancoAntigo()
+    expect(permColumns(mem)).not.toContain('level')
+    db.applySchema(mem)
+    db.applySchema(mem)
+    expect(permColumns(mem).filter((c) => c === 'level')).toHaveLength(1)
+    const rows = mem
+      .prepare('SELECT vault_slug, level FROM vault_permissions ORDER BY vault_slug')
+      .all()
+    expect(rows).toEqual([
+      { vault_slug: 'my-vault', level: 'reader' },
+      { vault_slug: 'test-vault', level: 'reader' },
+    ])
+    mem.close()
+  })
+
+  it('o CHECK recusa outro nível', () => {
+    const migrado = bancoAntigo()
+    db.applySchema(migrado)
+    checkRecusa(migrado)
+    migrado.close()
+
+    const novo = new Database(':memory:')
+    db.applySchema(novo)
+    novo.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run('ana', 'h')
+    novo.prepare('INSERT INTO vault_permissions (user_id, vault_slug) VALUES (1, ?)').run('my-vault')
+    checkRecusa(novo)
+    novo.close()
+  })
+})
+
+describe('nível no banco', () => {
+  it('grava e lê o nível de cada vault', () => {
+    const u = db.dbCreateUser('nivel1', 'h')
+    db.dbSetUserPermissions(u.id, [
+      { slug: 'test-vault', level: 'editor' },
+      { slug: 'my-vault', level: 'reader' },
+    ])
+    expect(db.dbGetUserVaultPermissions(u.id)).toEqual([
+      { slug: 'my-vault', level: 'reader' },
+      { slug: 'test-vault', level: 'editor' },
+    ])
+    expect(db.dbGetUserVaultLevel(u.id, 'test-vault')).toBe('editor')
+    expect(db.dbGetUserVaultLevel(u.id, 'other')).toBeNull()
+    expect(db.dbGetUserPermissions(u.id).sort()).toEqual(['my-vault', 'test-vault'])
+    expect(db.dbUserHasVaultAccess(u.id, 'my-vault')).toBe(true)
+  })
+
+  it('regravar troca o nível e remove o que saiu', () => {
+    const u = db.dbCreateUser('nivel2', 'h')
+    db.dbSetUserPermissions(u.id, [
+      { slug: 'my-vault', level: 'editor' },
+      { slug: 'test-vault', level: 'editor' },
+    ])
+    db.dbSetUserPermissions(u.id, [{ slug: 'my-vault', level: 'reader' }])
+    expect(db.dbGetUserVaultLevel(u.id, 'my-vault')).toBe('reader')
+    expect(db.dbGetUserVaultLevel(u.id, 'test-vault')).toBeNull()
+  })
+
+  it('nível inválido ou slug repetido: lança e não muda nada', () => {
+    const u = db.dbCreateUser('nivel3', 'h')
+    db.dbSetUserPermissions(u.id, [{ slug: 'my-vault', level: 'editor' }])
+    expect(() =>
+      db.dbSetUserPermissions(u.id, [{ slug: 'test-vault', level: 'admin' as VaultLevel }]),
+    ).toThrow()
+    expect(() =>
+      db.dbSetUserPermissions(u.id, [
+        { slug: 'my-vault', level: 'reader' },
+        { slug: 'my-vault', level: 'editor' },
+      ]),
+    ).toThrow()
+    expect(db.dbGetUserVaultLevel(u.id, 'my-vault')).toBe('editor')
+    expect(db.dbGetUserVaultLevel(u.id, 'test-vault')).toBeNull()
+  })
+
+  it('apagar os acessos de um vault tira só aquele slug, de todos os usuários', () => {
+    const a = db.dbCreateUser('apaga1', 'h')
+    const b = db.dbCreateUser('apaga2', 'h')
+    db.dbSetUserPermissions(a.id, [
+      { slug: 'gone-vault', level: 'editor' },
+      { slug: 'my-vault', level: 'reader' },
+      { slug: 'Gone-Vault', level: 'reader' },
+    ])
+    db.dbSetUserPermissions(b.id, [{ slug: 'gone-vault', level: 'reader' }])
+
+    expect(db.dbDeleteVaultPermissions('gone-vault')).toBe(2)
+    expect(db.dbGetUserVaultPermissions(a.id)).toEqual([
+      { slug: 'Gone-Vault', level: 'reader' },
+      { slug: 'my-vault', level: 'reader' },
+    ])
+    expect(db.dbGetUserVaultPermissions(b.id)).toEqual([])
+    expect(db.dbDeleteVaultPermissions('gone-vault')).toBe(0)
   })
 })
 
