@@ -204,6 +204,15 @@ describe('parseHtmlSegments: slot de propriedades', () => {
     expect(parseHtmlSegments(html, both).map(s => s.type)).toEqual(['html', 'comments', 'html'])
   })
 
+  it('sameSegments no formato novo completo: igual, corpo diferente, flag diferente', () => {
+    const full = `${BANNER}${OPEN}${TITLE}${PROPERTIES_SLOT}${COMMENTS_SLOT}<p>corpo</p></article>`
+    const a = parseHtmlSegments(full, both)
+    expect(a.map(s => s.type)).toEqual(['banner', 'html', 'properties', 'comments', 'html'])
+    expect(sameSegments(a, parseHtmlSegments(full, both))).toBe(true)
+    expect(sameSegments(a, parseHtmlSegments(full.replace('corpo', 'outro'), both))).toBe(false)
+    expect(sameSegments(a, parseHtmlSegments(full, { properties: false, comments: true }))).toBe(false)
+  })
+
   it('sameSegments trata properties como igual', () => {
     expect(sameSegments([{ type: 'properties' }], [{ type: 'properties' }])).toBe(true)
   })

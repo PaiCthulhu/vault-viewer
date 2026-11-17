@@ -56,8 +56,13 @@ export const en: Record<string, string> = {
   'backlinks.title': 'Mentioned in',
   'backlinks.empty': 'No mentions.',
 
-  // ── Properties block (label injected client-side over the built HTML) ──
+  // ── Properties block (old pages carry the label in the built HTML, relabeled client-side) ──
   'properties.title': 'Properties',
+  'properties.empty': 'Empty',
+  'properties.locked': 'Read-only',
+  'properties.locked.readonly': 'Read-only: locked in the vault configuration',
+  'properties.locked.object': 'Read-only: structured value, edit it in Obsidian',
+  'properties.locked.image': 'Read-only: image, edit it in Obsidian',
   'tabs.nav': 'Tabs',
 
   // ── Comment strip ──

@@ -48,7 +48,7 @@ There are great tools for publishing Obsidian vaults — [Quartz](https://quartz
 - **Folders open as auto-generated index pages** (a list of their contents) — handy on mobile.
 - **Local graph** (current page + direct neighbors) and a full **global graph** of every page, both interactive (click a node to navigate).
 - **Right panel** with collapsible sections: local graph, **table of contents**, and **backlinks** ("mentioned in"). Collapse state persists across navigation within a session.
-- **Properties block** — a collapsible, Obsidian-style frontmatter table at the top of each page, with property types (from Obsidian's `types.json` or inferred from the values), list values as colored chips, and empty properties shown; wikilink values become links, image properties (e.g. `screenshots`) become clickable thumbnails.
+- **Properties block** — a collapsible, Obsidian-style frontmatter table at the top of each page, with property types (from Obsidian's `types.json` or inferred from the values), list values as colored chips, empty properties shown as "Empty", locked (read-only) properties marked with a lock; wikilink values become links, image properties (e.g. `screenshots`) become clickable thumbnails.
 - **Interactive Dataview tables** (filter + sort) and **Notion-style filters** for galleries.
 - **Link hover previews** — internal links show a thumbnail + snippet; external links fetch Open Graph metadata (title/description/image/favicon).
 - **Image lightbox**, dark/light theme, mobile drawers, and SPA navigation.

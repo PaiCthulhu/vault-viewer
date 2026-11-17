@@ -57,6 +57,11 @@ export const ptBR: Record<string, string> = {
 
   // ── Properties block ──
   'properties.title': 'Propriedades',
+  'properties.empty': 'Vazio',
+  'properties.locked': 'Somente leitura',
+  'properties.locked.readonly': 'Somente leitura: travada na configuração do vault',
+  'properties.locked.object': 'Somente leitura: valor estruturado, edite no Obsidian',
+  'properties.locked.image': 'Somente leitura: imagem, edite no Obsidian',
   'tabs.nav': 'Abas',
 
   // ── Faixa de comentários ──

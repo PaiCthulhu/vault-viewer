@@ -12,7 +12,11 @@ import { I18nProvider } from '@/components/i18n/I18nProvider'
 import { PropertiesBlock } from '@/components/viewer/PropertiesBlock'
 import { ContentPanel, type ContentPanelComments } from '@/components/viewer/ContentPanel'
 import { parseHtmlSegments, PROPERTIES_SLOT, COMMENTS_SLOT } from '@/lib/parse-html-segments'
-import type { PageProperty } from '@/builder/types'
+import type { PageProperty, PropertyLock } from '@/builder/types'
+import { toPageProperty, type PropertyRenderContext } from '@/builder/plugins/properties'
+import { LinkResolver } from '@/builder/link-resolver'
+import { EMPTY_PROPERTY_CONFIG } from '@/builder/property-types'
+import { propertyColor } from '@/lib/property-color'
 
 const PAGE = 'Notes/My Note'
 
@@ -53,10 +57,10 @@ afterEach(() => {
 })
 
 describe('PropertiesBlock', () => {
-  const block = (properties: PageProperty[]) =>
+  const block = (properties: PageProperty[], locale: 'pt-BR' | 'en' = 'pt-BR', showLocks?: boolean) =>
     render(
-      <I18nProvider locale="pt-BR">
-        <PropertiesBlock properties={properties} />
+      <I18nProvider locale={locale}>
+        <PropertiesBlock properties={properties} showLocks={showLocks} />
       </I18nProvider>,
     )
 
@@ -73,9 +77,124 @@ describe('PropertiesBlock', () => {
     expect(rows).toHaveLength(2)
     expect(rows[0].querySelector('.vault-prop-key')!.textContent).toBe('genres')
     expect(rows[0].querySelector('.vault-prop-val .vault-prop-chip[data-color="blue"]')!.textContent).toBe('RPG')
-    // a propriedade vazia aparece, com o valor vazio
+    // a propriedade vazia aparece, com o "Vazio" apagado
     expect(rows[1].querySelector('.vault-prop-key')!.textContent).toBe('status')
-    expect(rows[1].querySelector('.vault-prop-val')!.innerHTML).toBe('')
+    expect(rows[1].querySelector('.vault-prop-val')!.textContent).toBe('Vazio')
+  })
+
+  it('vazia mostra "Vazio" apagado', () => {
+    const empties: PageProperty[] = [
+      { key: 'status', type: 'text', value: null, html: '' },
+      { key: 'genres', type: 'multitext', value: [], html: '' },
+    ]
+    for (const [locale, word] of [['pt-BR', 'Vazio'], ['en', 'Empty']] as const) {
+      const { container } = block(empties, locale)
+      const vals = container.querySelectorAll('.vault-prop-val')
+      expect(vals).toHaveLength(2)
+      vals.forEach(v => {
+        expect(v.classList.contains('vault-prop-empty')).toBe(true)
+        expect(v.textContent).toBe(word)
+      })
+      cleanup()
+    }
+  })
+
+  const LOCK_TEXT = {
+    'pt-BR': {
+      readonly: 'Somente leitura: travada na configuração do vault',
+      object: 'Somente leitura: valor estruturado, edite no Obsidian',
+      image: 'Somente leitura: imagem, edite no Obsidian',
+    },
+    en: {
+      readonly: 'Read-only: locked in the vault configuration',
+      object: 'Read-only: structured value, edit it in Obsidian',
+      image: 'Read-only: image, edit it in Obsidian',
+    },
+  } as const
+
+  it('cadeado com o motivo', () => {
+    for (const locale of ['pt-BR', 'en'] as const) {
+      for (const reason of ['readonly', 'object', 'image'] as const) {
+        const { container } = block([{ key: 'rating', type: 'text', value: 'x', html: 'x', locked: reason }], locale)
+        const key = container.querySelector('.vault-prop-key')!
+        const lock = key.querySelector<HTMLElement>('.vault-prop-lock')!
+        expect(lock.getAttribute('data-lock')).toBe(reason)
+        expect(lock.getAttribute('role')).toBe('img')
+        expect(lock.getAttribute('title')).toBe(LOCK_TEXT[locale][reason])
+        expect(lock.getAttribute('aria-label')).toBe(LOCK_TEXT[locale][reason])
+        expect(lock.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+        expect(key.textContent).toBe('rating')
+        cleanup()
+      }
+    }
+  })
+
+  it('motivo desconhecido usa a dica genérica', () => {
+    const { container } = block([{ key: 'rating', type: 'text', value: 'x', html: 'x', locked: 'other' as PropertyLock }])
+    expect(container.querySelector('.vault-prop-lock')!.getAttribute('title')).toBe('Somente leitura')
+  })
+
+  it('motivo com nome de Object.prototype também usa a dica genérica', () => {
+    for (const reason of ['constructor', '__proto__']) {
+      const { container } = block([{ key: 'rating', type: 'text', value: 'x', html: 'x', locked: reason as PropertyLock }])
+      const lock = container.querySelector('.vault-prop-lock')!
+      expect(lock.getAttribute('title')).toBe('Somente leitura')
+      expect(lock.getAttribute('aria-label')).toBe('Somente leitura')
+      cleanup()
+    }
+  })
+
+  it('false e 0 não são vazios, mas valor com html vazio é', () => {
+    const cb = block([{ key: 'done', type: 'checkbox', value: false, html: '<input type="checkbox" class="vault-prop-checkbox" disabled>' }])
+    expect(cb.container.querySelector('.vault-prop-empty')).toBeNull()
+    cleanup()
+    const num = block([{ key: 'rating', type: 'number', value: 0, html: '0' }])
+    expect(num.container.querySelector('.vault-prop-empty')).toBeNull()
+    cleanup()
+    const blank = block([{ key: 'rating', type: 'text', value: 'x', html: '' }])
+    expect(blank.container.querySelector('.vault-prop-empty')!.textContent).toBe('Vazio')
+  })
+
+  it('showLocks={false} não mostra cadeado nenhum, e sem showLocks mostra', () => {
+    const rows: PageProperty[] = [{ key: 'rating', type: 'text', value: 'x', html: 'x', locked: 'readonly' }]
+    expect(block(rows, 'pt-BR', false).container.querySelector('.vault-prop-lock')).toBeNull()
+    cleanup()
+    expect(block(rows).container.querySelector('.vault-prop-lock')).not.toBeNull()
+  })
+
+  it('vazia e travada: "Vazio" e o cadeado', () => {
+    const { container } = block([{ key: 'status', type: 'text', value: null, html: '', locked: 'readonly' }])
+    expect(container.querySelector('.vault-prop-val.vault-prop-empty')!.textContent).toBe('Vazio')
+    expect(container.querySelector('.vault-prop-key .vault-prop-lock[data-lock="readonly"]')).not.toBeNull()
+  })
+
+  it('sem trava, sem cadeado', () => {
+    const { container } = block(PROPS)
+    expect(container.querySelector('.vault-prop-lock')).toBeNull()
+  })
+
+  it('chips com a cor certa', () => {
+    const resolver = new LinkResolver([{ absolutePath: '/v/Notes/X.md', relativePath: 'Notes/X', title: 'X' }])
+    const ctx: PropertyRenderContext = {
+      renderWikilinks: s => resolver.replaceWikilinksEscaped(s, 'my-vault'),
+      resolveImage: p => '/vault-assets/my-vault/' + p,
+      config: EMPTY_PROPERTY_CONFIG,
+    }
+    const row = toPageProperty('genres', ['RPG', 'Ação'], ctx)
+    const { container } = block([row])
+    const chips = container.querySelectorAll('.vault-prop-chip')
+    expect(chips).toHaveLength(2)
+    chips.forEach(c => {
+      expect(c.getAttribute('data-color')).toBe(propertyColor('genres', c.textContent!))
+    })
+  })
+
+  it('HTML escapado preservado', () => {
+    const { container } = block([
+      { key: 'status', type: 'text', value: '<script>alert(1)</script> & x', html: '&lt;script&gt;alert(1)&lt;/script&gt; &amp; x' },
+    ])
+    expect(container.querySelector('.vault-prop-val')!.textContent).toBe('<script>alert(1)</script> & x')
+    expect(container.querySelector('script')).toBeNull()
   })
 
   it('a chave é texto, nunca HTML', () => {
@@ -186,6 +305,32 @@ describe('ContentPanel: segmento de Propriedades', () => {
     const second = container.querySelector<HTMLAnchorElement>('.vault-prop-val a')!
     expect(second.getAttribute('href')).toBe('https://example.org/')
     expect(second.getAttribute('target')).toBe('_blank')
+  })
+
+  it('refresh que preenche uma vazia e tira a trava mantém o <details> aberto', async () => {
+    const before: PageProperty[] = [{ key: 'status', type: 'text', value: null, html: '', locked: 'readonly' }]
+    const { container, rerender } = render(panel(pageHtml(), before))
+    const details = container.querySelector<HTMLDetailsElement>('details.vault-properties')!
+    details.open = true
+    expect(container.textContent).toContain('Vazio')
+    expect(container.querySelector('.vault-prop-lock')).not.toBeNull()
+
+    const after: PageProperty[] = [{ key: 'status', type: 'text', value: 'ok', html: 'ok' }]
+    await act(async () => { rerender(panel(pageHtml(), after)) })
+
+    expect(container.querySelector('details.vault-properties')).toBe(details)
+    expect(details.open).toBe(true)
+    expect(container.textContent).not.toContain('Vazio')
+    expect(container.querySelector('.vault-prop-lock')).toBeNull()
+  })
+
+  it('formato antigo traduz o rótulo data-i18n', () => {
+    const old =
+      '<article class="vault-content"><details class="vault-properties"><summary>' +
+      '<span data-i18n="properties.title">Properties</span></summary>' +
+      '<div class="vault-properties-body"></div></details><p>corpo</p></article>'
+    const { container } = render(panel(old, undefined))
+    expect(container.querySelector('[data-i18n="properties.title"]')!.textContent).toBe('Propriedades')
   })
 
   it('com a faixa de comentários, a ordem é Propriedades, faixa, corpo', () => {

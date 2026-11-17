@@ -1,5 +1,15 @@
 /* ─── Properties block (collapsible frontmatter) ──────────────────────────── */
 .vault-properties {
+  --vault-chip-text: var(--text);
+  --vault-chip-gray: rgb(227 226 224);
+  --vault-chip-brown: rgb(238 224 218);
+  --vault-chip-orange: rgb(250 222 201);
+  --vault-chip-yellow: rgb(253 236 200);
+  --vault-chip-green: rgb(219 237 219);
+  --vault-chip-blue: rgb(211 229 239);
+  --vault-chip-purple: rgb(232 222 238);
+  --vault-chip-pink: rgb(245 224 233);
+  --vault-chip-red: rgb(255 226 221);
   margin: 0 0 1.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -60,6 +70,17 @@
   word-break: break-word;
 }
 
+.vault-prop-empty { color: var(--text-muted); }
+
+.vault-prop-lock {
+  display: inline-block;
+  margin-left: 0.4em;
+  font-size: 0.8em;
+  color: var(--text-muted);
+  vertical-align: -0.1em;
+  line-height: 1;
+}
+
 .vault-prop-val a { color: rgb(165, 168, 255); text-decoration: none; }
 .vault-prop-val a:hover { text-decoration: underline; }
 
@@ -77,8 +98,21 @@
   display: inline-block;
 }
 
+.dark .vault-properties {
+  --vault-chip-text: var(--text);
+  --vault-chip-gray: rgb(90 90 90);
+  --vault-chip-brown: rgb(96 59 44);
+  --vault-chip-orange: rgb(133 76 29);
+  --vault-chip-yellow: rgb(130 94 38);
+  --vault-chip-green: rgb(43 89 63);
+  --vault-chip-blue: rgb(40 69 108);
+  --vault-chip-purple: rgb(73 47 100);
+  --vault-chip-pink: rgb(105 49 76);
+  --vault-chip-red: rgb(110 54 48);
+}
 /* Item de uma propriedade de lista. A cor vem do builder (lib/property-color.ts):
-   a mesma etiqueta tem sempre a mesma. Fundo translúcido para servir nos dois temas. */
+   a mesma etiqueta tem sempre a mesma. A paleta é por tema (fundos opacos tipo
+   Notion), em variáveis sob .vault-properties; o editor de propriedades as reusa. */
 .vault-prop-chip {
   display: inline-block;
   margin: 0.1rem 0.3rem 0.1rem 0;
@@ -86,17 +120,24 @@
   border-radius: 4px;
   font-size: 0.82rem;
   line-height: 1.6;
-  color: var(--text);
-  background: rgba(155, 155, 155, 0.22);
+  color: var(--vault-chip-text);
+  background: var(--vault-chip-gray);
 }
-.vault-prop-chip[data-color="brown"]  { background: rgba(159, 107, 83, 0.28); }
-.vault-prop-chip[data-color="orange"] { background: rgba(217, 115, 13, 0.25); }
-.vault-prop-chip[data-color="yellow"] { background: rgba(203, 145, 47, 0.28); }
-.vault-prop-chip[data-color="green"]  { background: rgba(68, 131, 97, 0.28); }
-.vault-prop-chip[data-color="blue"]   { background: rgba(51, 126, 169, 0.28); }
-.vault-prop-chip[data-color="purple"] { background: rgba(144, 101, 176, 0.28); }
-.vault-prop-chip[data-color="pink"]   { background: rgba(193, 76, 138, 0.28); }
-.vault-prop-chip[data-color="red"]    { background: rgba(212, 76, 71, 0.28); }
+/* Wikilink dentro do chip: herda a cor do texto do chip, não o lilás fixo do valor,
+   com um sublinhado discreto para continuar parecendo link. */
+.vault-prop-val .vault-prop-chip a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+.vault-prop-chip[data-color="brown"]  { background: var(--vault-chip-brown); }
+.vault-prop-chip[data-color="orange"] { background: var(--vault-chip-orange); }
+.vault-prop-chip[data-color="yellow"] { background: var(--vault-chip-yellow); }
+.vault-prop-chip[data-color="green"]  { background: var(--vault-chip-green); }
+.vault-prop-chip[data-color="blue"]   { background: var(--vault-chip-blue); }
+.vault-prop-chip[data-color="purple"] { background: var(--vault-chip-purple); }
+.vault-prop-chip[data-color="pink"]   { background: var(--vault-chip-pink); }
+.vault-prop-chip[data-color="red"]    { background: var(--vault-chip-red); }
 
 /* No HTML novo o bloco é um segmento próprio, numa caixa .vault-article só dele.
    Sem o padding vertical entre ele e as caixas vizinhas (o título antes, o corpo
