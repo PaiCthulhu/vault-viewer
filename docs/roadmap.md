@@ -27,6 +27,7 @@ The first steps away from a read-only viewer:
 ### Writing notes
 
 - **Editor mode.** Creating and editing notes in the browser. This is the step that turns the reader into a manager, and the largest one: it needs a write path for notes as careful as the one comments have (atomic writes, conflict detection against changes made in Obsidian, nothing written outside the vault).
+- **Request limits.** A limit on the requests that create or change notes or trigger a vault rebuild, designed together with the editor mode. It is not meant as a cap on how many comments a person can post. Today nothing limits those requests, and each comment written scans the vault and asks for a build.
 - **`note_type: section`.** A third kind of child note in the same note format, next to tabs and comments. It is not recognized yet: a note with that type is shown as an ordinary note.
 
 ### People
@@ -44,7 +45,6 @@ The first steps away from a read-only viewer:
 - **Search in comments.** Comments are left out of the search on purpose today.
 - **Comments in Obsidian.** The files are already in the vault, but Obsidian shows them as loose notes in a folder. Something on the Obsidian side should show them on the note they belong to.
 - **Orphan cleanup.** A comment whose note was renamed or deleted stays on disk and shows up nowhere. There should be a way to list such comments and to re-attach or remove them.
-- **Rate limiting.** Nothing limits how fast a user can post comments, and each write scans the vault and asks for a build.
 - **Idempotency key on comment creation.** A request that times out after the file was written can be sent again and create the same comment twice.
 - **Strip state while the global graph is open.** Opening the global graph resets the comment strip, so a comment being typed is lost.
 - **Ghost comment in a hidden tab.** If a user posts a comment and switches browser tabs before the page refreshes, and meanwhile the build publishes that comment and someone else deletes it, the strip still shows it when the user comes back, until a reload. Editing it fails with "no longer exists". Telling "not built yet" from "built and then deleted" needs information the page output doesn't carry today.

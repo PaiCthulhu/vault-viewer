@@ -150,6 +150,28 @@ describe('buildVault --first', () => {
   })
 })
 
+describe('buildVault — frontmatter só em YAML', () => {
+  const read = (out: string, rel: string) => JSON.parse(fs.readFileSync(path.join(out, 'v', rel), 'utf-8'))
+
+  it('nota com frontmatter em JavaScript: o bloco não roda e a nota sai como a de YAML quebrado', async () => {
+    const g = globalThis as { __pipelineNotaJsRan?: boolean }
+    delete g.__pipelineNotaJsRan
+    write('Notas/Js.md', '---js\n{ title: "Rodou", tags: ["x"], status: (globalThis.__pipelineNotaJsRan = true, "ativo") }\n---\ncorpo da nota\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    expect(g.__pipelineNotaJsRan).toBeUndefined()
+    const page = read(out, 'pages/Notas/Js.json')
+    expect(page.frontmatter).toEqual({})
+    expect(page.title).toBe('Js')
+    expect(page.tags).toEqual([])
+    expect('commentable' in page).toBe(false)
+    expect(page.html).not.toContain('vault-prop')
+    // O arquivo inteiro é o corpo: o texto do bloco aparece, sem rodar.
+    expect(page.html).toContain('__pipelineNotaJsRan')
+    expect(page.html).toContain('corpo da nota')
+  })
+})
+
 describe('buildVault — nota-filha e abas', () => {
   const COMENTARIO = '_comments/Jogos/A/2026-11-16 153012 ana-k3f9'
   const FILHAS = ['Visões/Lista', 'Visões/Zerados', 'Visões/Arquivo', 'Só Filhas/Aba X', COMENTARIO]

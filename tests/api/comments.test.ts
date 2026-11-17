@@ -543,6 +543,9 @@ describe('PATCH: editar', () => {
     ['note_type trocado', `---\nnote_type: tab\nparent: "[[${MOTHER}]]"\nauthor: ana\n---\ncorpo\n`],
     ['parent que não é texto', '---\nnote_type: comment\nparent: [[x]]\nauthor: ana\n---\ncorpo\n'],
     ['frontmatter em JSON', '---json\n{"note_type":"comment","parent":"x","author":"ana"}\n---\ncorpo\n'],
+    ['frontmatter em CoffeeScript', '---coffee\nnote_type: "comment"\nparent: "x"\nauthor: "ana"\n---\ncorpo\n'],
+    ['motor desconhecido', '---toml\nnote_type = "comment"\nparent = "x"\nauthor = "ana"\n---\ncorpo\n'],
+    ['motor herdado de Object.prototype', `---valueOf\nnote_type: comment\nparent: "[[${MOTHER}]]"\nauthor: ana\n---\ncorpo\n`],
   ])('arquivo que não é comentário válido (%s): 422, sem regravar', async (_, content) => {
     const p = `_comments/${MOTHER}/quebrado`
     write(`${p}.md`, content)
@@ -562,11 +565,19 @@ describe('PATCH: editar', () => {
     expect(fs.readFileSync(path.join(vaultDir, `${p}.MD`), 'utf-8')).toBe(content)
   })
 
-  it('frontmatter em JavaScript não roda: 422 no editar, 404 no apagar', async () => {
+  it('comentário com o motor YAML declarado (---YAML) continua comentário', async () => {
+    const p = `_comments/${MOTHER}/yaml`
+    write(`${p}.md`, `---YAML\nnote_type: comment\nparent: "[[${MOTHER}]]"\nauthor: ana\n---\ncorpo\n`)
+    const res = await call('PATCH', { path: p, body: 'editado', version: commentVersion({ body: 'corpo', createdAt: null, updatedAt: null }) })
+    expect(res.status).toBe(200)
+    expect(fm(p).body).toBe('editado')
+  })
+
+  it.each(['js', 'javascript', 'JS'])('frontmatter em JavaScript (---%s) não roda: 422 no editar, 404 no apagar', async engine => {
     const p = `_comments/${MOTHER}/js`
     const g = globalThis as { __commentJsRan?: boolean }
     delete g.__commentJsRan
-    const content = '---js\n{ note_type: "comment", parent: "x", author: (globalThis.__commentJsRan = true, "ana") }\n---\ncorpo\n'
+    const content = `---${engine}\n{ note_type: "comment", parent: "x", author: (globalThis.__commentJsRan = true, "ana") }\n---\ncorpo\n`
     write(`${p}.md`, content)
     const version = commentVersion({ body: 'corpo', createdAt: null, updatedAt: null })
     expect((await call('PATCH', { path: p, body: 'x', version })).status).toBe(422)

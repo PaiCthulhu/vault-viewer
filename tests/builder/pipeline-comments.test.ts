@@ -312,6 +312,22 @@ describe('buildVault — pasta _comments/', () => {
     expect(threads.map(t => t.comment.path)).toEqual([NOVO, ANTIGO])
   })
 
+  it('comentário com frontmatter em JavaScript: o bloco não roda e o arquivo é ignorado', async () => {
+    const g = globalThis as { __pipelineComentarioJsRan?: boolean }
+    delete g.__pipelineComentarioJsRan
+    // Rodado, o bloco faria deste arquivo um comentário válido da mãe.
+    const js =
+      '---js\n{ note_type: "comment", parent: "[[Notas/Minha Nota]]", author: "ana",' +
+      ' created_at: (globalThis.__pipelineComentarioJsRan = true, "2026-11-20T10:00:00Z") }\n---\n'
+    write(`${QUEBRADO}.md`, js + dvjs('MARCA_JS'))
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    expect(g.__pipelineComentarioJsRan).toBeUndefined()
+    semRastro(out, QUEBRADO, 'MARCA_JS')
+    const threads = read(out, 'pages/Notas/Minha Nota.json').comments as { comment: { path: string } }[]
+    expect(threads.map(t => t.comment.path)).toEqual([NOVO, ANTIGO])
+  })
+
   it('controle: o mesmo bloco numa nota comum fora de _comments/ roda', async () => {
     write('Notas/Controle.md', dvjs('MARCA_NAO_RODA'))
     const out = path.join(TMP, 'out')

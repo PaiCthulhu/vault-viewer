@@ -20,6 +20,7 @@ import type { VaultConfig } from '@/types'
 import type { PageComment, PageMeta } from '@/builder/types'
 import { isInCommentsFolder, noteFamilyFields, parentRef } from '@/builder/note-family'
 import { commentTime, toPageComment } from '@/builder/comments'
+import { parseYamlFrontmatter } from '@/builder/frontmatter'
 import { renderComment, type CommentRenderOptions } from '@/builder/comment-render'
 import { LinkResolver } from '@/builder/link-resolver'
 import { isScannedPath, scanCanvases, scanVault } from '@/builder/scanner'
@@ -276,16 +277,10 @@ function findNote(vault: VaultConfig, ig: VaultIgnore, ref: string): Note | null
   return readNote(file.abs, file.rel.slice(0, -3))
 }
 
-// O gray-matter escolhe o motor pelo nome depois do `---`, e o de JavaScript roda o
-// frontmatter com `eval`. Aqui só YAML: qualquer outro motor é frontmatter ilegível.
-const refuseEngine = (): never => {
-  throw new Error('motor de frontmatter não aceito')
-}
-const YAML_ONLY = { engines: { javascript: refuseEngine, coffee: refuseEngine, json: refuseEngine } }
-
-// Lê como o builder lê (CRLF → LF, frontmatter pelo gray-matter, corpo com trim), mas só
-// YAML. Frontmatter ilegível vira `{}` com o arquivo inteiro como corpo, como no
-// `extractFrontmatter`. `null` se o arquivo sumiu.
+// Lê como o builder lê (CRLF → LF, frontmatter só em YAML pelo `parseYamlFrontmatter`,
+// corpo com trim). Frontmatter ilegível (YAML quebrado, outro motor) ou que não é um mapa
+// vira `{}` com o arquivo inteiro como corpo, como no `extractFrontmatter`. `null` se o
+// arquivo sumiu.
 function readNote(abs: string, notePath: string): Note | null {
   let raw: string
   try {
@@ -295,7 +290,7 @@ function readNote(abs: string, notePath: string): Note | null {
     throw e
   }
   try {
-    const parsed = matter(raw, YAML_ONLY)
+    const parsed = parseYamlFrontmatter(raw)
     const data: unknown = parsed.data
     if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('frontmatter não é um mapa')
     return { path: notePath, abs, frontmatter: data as Record<string, unknown>, body: parsed.content.trim() }
