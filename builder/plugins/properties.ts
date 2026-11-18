@@ -55,8 +55,11 @@ export function isHiddenProperty(key: string, familyNote: boolean): boolean {
   return HIDDEN_PROPERTY_KEYS.test(key) || (familyNote && FAMILY_ONLY_KEYS.has(key))
 }
 
-/** Caminho da imagem do vault que o valor cita, ou null. Uma URL nunca é imagem do vault. */
-function imageTarget(value: string): string | null {
+/**
+ * Caminho da imagem do vault que o valor cita, ou null. Uma URL nunca é imagem do vault.
+ * Também decide o que conta como capa do banner (`banners.ts`).
+ */
+export function imageTarget(value: string): string | null {
   const s = value.trim()
   if (URL_RE.test(s)) return null
   const wl = IMAGE_WIKILINK_RE.exec(s)

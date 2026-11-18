@@ -7,7 +7,7 @@ import { loadVaultIgnore } from './vault-ignore'
 import { extractFrontmatter, extractTags } from './frontmatter'
 import { LinkResolver } from './link-resolver'
 import { ImageHandler } from './image-handler'
-import { renderBanner } from './plugins/banners'
+import { renderBanner, escapeTitleText } from './plugins/banners'
 import { renderColumns } from './plugins/columns'
 import { renderCaptions } from './plugins/captions'
 import { renderCallouts } from './plugins/callouts'
@@ -215,17 +215,20 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
 
     // With a banner, the title lives in the banner's <h1>; inherit the id there.
     // Without a banner, emit the special vault-page-title h1 (with the id).
+    // Só o id vem do <h1> do corpo (já escapado pelo rehype, entre aspas duplas); o texto do
+    // título é sempre o `stub.title` escapado. O substituto é função: `$&`/`$'` num id não
+    // são padrões do String.replace.
     let banner = bannerHtml
     if (banner && titleId) {
       banner = banner.replace(
         '<h1 class="vault-banner-title">',
-        `<h1 class="vault-banner-title" id="${titleId}">`,
+        () => `<h1 class="vault-banner-title" id="${titleId}">`,
       )
     }
 
     const titleHtml = banner
       ? ''
-      : `<h1 class="vault-page-title"${titleId ? ` id="${titleId}"` : ''}>${stub.title.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</h1>`
+      : `<h1 class="vault-page-title"${titleId ? ` id="${titleId}"` : ''}>${escapeTitleText(stub.title)}</h1>`
 
     // Linhas do bloco Propriedades, na ordem do frontmatter (vazias incluídas). O viewer
     // monta o bloco no marcador, logo depois do título (ou no começo do artigo, com banner).

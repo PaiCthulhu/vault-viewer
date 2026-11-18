@@ -226,7 +226,7 @@ Anything matched is excluded from pages, search, the graph, and link resolution.
 ## Per-vault display settings
 
 - **`titleProperty`** — use a frontmatter property (e.g. `title`/`titulo`) as the page's display title instead of the filename. Useful when a note's heading differs from its filename. Falls back to the filename when the property is missing.
-- **`coverProperty`** — which frontmatter property holds the banner image (`cover`, `banner`, …). The builder also reads `<prop>_x` / `<prop>_y` for the focal crop position.
+- **`coverProperty`** — which frontmatter property holds the banner image (`cover`, `banner`, …). Its value must cite a vault image (a wikilink, a path or a file name ending in an image extension); any other value (a number, a checkbox, a list, plain text, a URL) shows no banner. Without `coverProperty`, the builder uses `cover`, or `banner` when `cover` is absent or doesn't cite a vault image (and then `banner_x`, `banner_y` and `banner_height`). The builder also reads `<prop>_x` / `<prop>_y` for the focal crop position (one value each: `left`, `center`, `right`, `top`, `bottom`, a percentage, a length such as `10px`, or a number; anything else falls back to `center` / `50%`) and `<prop>_height` (or `banner_height`) for the height in pixels (a positive number; anything else falls back to 500).
 
 Both can be set in `vaults.config.json` or via the admin UI.
 

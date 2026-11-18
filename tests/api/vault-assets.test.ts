@@ -33,6 +33,7 @@ vi.mock('@/lib/vault-config', () => ({
 import { GET, HEAD } from '@/app/vault-assets/[slug]/[...path]/route'
 import { IMAGE_CONTENT_TYPES, resolveInsideRoot } from '@/lib/vault-assets'
 import { IMAGE_EXTS } from '@/builder/scanner'
+import { bannerImageUrl } from '@/builder/plugins/banners'
 
 let work: string
 const PNG = Buffer.from('89504e470d0a1a0a0000', 'hex')
@@ -124,6 +125,16 @@ describe('rota /vault-assets', () => {
     expect((await get(['Imagens', 'Ação (1).png'])).status).toBe(200)
     expect((await get(['Imagens', 'A%C3%A7%C3%A3o%20(1).png'])).status).toBe(200)
     expect((await get(['100%.png'])).status).toBe(200)
+  })
+
+  it("capa com ' ( ) &: a URL do banner (codificada) acha o arquivo", async () => {
+    const rel = "Imagens/a'b (c) & d.png"
+    put(rel)
+    writeList([rel])
+    const encoded = bannerImageUrl(rel).split('/')
+    expect(encoded).toEqual(['Imagens', 'a%27b%20%28c%29%20%26%20d.png'])
+    expect((await get(encoded)).status).toBe(200)
+    expect((await get(encoded.map(decodeURIComponent))).status).toBe(200)
   })
 
   it('cabeçalhos e 304', async () => {

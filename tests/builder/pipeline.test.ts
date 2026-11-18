@@ -373,3 +373,156 @@ describe('buildVault — folderCount', () => {
     expect(read(B, 'index.json').folderCount).toBe(read(A, 'index.json').folderCount)
   })
 })
+
+describe('buildVault — banner tratado', () => {
+  const STYLE_END = ' background-size: cover; background-repeat: no-repeat;"><div class="vault-banner-gradient"></div>'
+  const html = (out: string, page: string): string =>
+    JSON.parse(fs.readFileSync(path.join(out, 'v', 'pages', page + '.json'), 'utf-8')).html
+
+  let custom: VaultConfig
+  beforeEach(() => {
+    // titleProperty e coverProperty próprios: chaves que não são ocultas, então um editor as grava.
+    custom = { ...vault, titleProperty: 'name', coverProperty: 'image' }
+    write('Notas/Hostil.md', [
+      '---',
+      'name: "<img src=x onerror=alert(1)> & co"',
+      `image: "x'), url(evil.png"`,
+      'image_x: "expression(alert(1))"',
+      'image_y: "10%; color: red"',
+      'image_height: "300px"',
+      '---',
+      'texto',
+      '',
+    ].join('\n'))
+    write('Notas/Legit.md', '---\nname: Minha Nota\nimage: Imagens/a.png\nimage_x: 20%\nimage_y: 30%\nimage_height: 320\n---\n# Minha Nota\n\ntexto\n')
+    write('Notas/Merge.md', `---\nname: Merge\nimage: Imagens/a.png\n---\n<h1 id="a$'b">Merge</h1>\n\ntexto\n`)
+    write('Notas/Tag.md', '---\nname: "<b>X</b> Y"\nimage: Imagens/a.png\n---\n# <b>X</b> Y\n\ntexto\n')
+  })
+
+  it('título, posição, altura e URL hostis saem tratados', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    const h = html(out, 'Notas/Hostil')
+    expect(h.startsWith(
+      `<div class="vault-banner" style="height: 500px; background-image: url('/vault-assets/v/x%27%29,%20url%28evil.png'); background-position: center 50%;` +
+        STYLE_END +
+        '<h1 class="vault-banner-title">&lt;img src=x onerror=alert(1)> &amp; co</h1></div><article class="vault-content">',
+    ), h).toBe(true)
+  })
+
+  it('banner legítimo sai igual, com o id do <h1> do corpo e sem o <h1> duplicado', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    const h = html(out, 'Notas/Legit')
+    expect(h.startsWith(
+      `<div class="vault-banner" style="height: 320px; background-image: url('/vault-assets/v/Imagens/a.png'); background-position: 20% 30%;` +
+        STYLE_END +
+        '<h1 class="vault-banner-title" id="minha-nota">Minha Nota</h1></div><article class="vault-content">',
+    )).toBe(true)
+    expect(h).not.toContain('<h1 id="minha-nota">')
+  })
+
+  it('o id herdado do <h1> do corpo é copiado literalmente', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    const h = html(out, 'Notas/Merge')
+    // O rehype grava `'` como `&#x27;`: o id fica `a$&#x27;b`, e `$&` é padrão do String.replace.
+    expect(h).toContain('<h1 class="vault-banner-title" id="a$&#x27;b">Merge</h1></div><article class="vault-content">')
+    expect(h.match(/<h1/g)).toHaveLength(1)
+  })
+
+  it('título com tag que bate com o <h1> do corpo: herda o id e sai escapado', async () => {
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    const h = html(out, 'Notas/Tag')
+    expect(h).toMatch(/<h1 class="vault-banner-title" id="[^"]+">&lt;b>X&lt;\/b> Y<\/h1><\/div><article class="vault-content">/)
+    expect(h).not.toContain('<b>')
+  })
+
+  it('sem banner, o vault-page-title escapa o título como antes', async () => {
+    write('Notas/Sem Capa.md', '---\nname: "<img src=x onerror=alert(1)> & co"\n---\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    expect(html(out, 'Notas/Sem Capa').startsWith(
+      '<article class="vault-content"><h1 class="vault-page-title">&lt;img src=x onerror=alert(1)> &amp; co</h1>',
+    )).toBe(true)
+  })
+
+  it('capa com surrogate solto não derruba o build do vault', async () => {
+    write('Notas/Surrogate.md', '---\ncover: "x\\ud800.png"\n---\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    expect(html(out, 'Notas/Surrogate')).toContain("url('/vault-assets/v/x%EF%BF%BD.png')")
+    expect(fs.existsSync(path.join(out, 'v', 'index.json'))).toBe(true)
+  })
+
+  it('capa que não é referência de imagem (número, checkbox, lista, texto, NUL) não derruba o build e não gera banner', async () => {
+    write('Notas/Num.md', '---\nname: Num\nimage: 5\n---\ntexto\n')
+    write('Notas/Bool.md', '---\nname: Bool\nimage: true\n---\ntexto\n')
+    write('Notas/Lista.md', '---\nname: Lista\nimage:\n  - Imagens/a.png\n---\ntexto\n')
+    write('Notas/Texto.md', '---\nname: Texto\nimage: texto comum\n---\ntexto\n')
+    write('Notas/Nul.md', '---\nname: Nul\nimage: "x\\u0000.png"\n---\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    for (const p of ['Notas/Num', 'Notas/Bool', 'Notas/Lista', 'Notas/Texto', 'Notas/Nul']) {
+      expect(html(out, p).startsWith('<article class="vault-content">'), p).toBe(true)
+      expect(html(out, p), p).not.toContain('vault-banner')
+    }
+    const assets: string[] = JSON.parse(fs.readFileSync(path.join(out, 'v', 'assets.json'), 'utf-8'))
+    expect(assets.some(a => a.includes('\u0000'))).toBe(false)
+    expect(fs.existsSync(path.join(out, 'v', 'index.json'))).toBe(true)
+  })
+
+  it('sem coverProperty, cover que não cita imagem cai para o banner, com as chaves do banner', async () => {
+    write('Notas/CoverNum.md', '---\ncover: 5\ncover_y: 90%\nbanner: Imagens/a.png\nbanner_y: 10%\n---\ntexto\n')
+    write('Notas/CoverVazia.md', '---\ncover: ""\nbanner: Imagens/a.png\n---\ntexto\n')
+    write('Notas/CoverTexto.md', '---\ncover: texto\nbanner: Imagens/a.png\nbanner_height: 300\n---\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const url = "background-image: url('/vault-assets/v/Imagens/a.png');"
+    expect(html(out, 'Notas/CoverNum')).toContain(`style="height: 500px; ${url} background-position: center 10%;`)
+    expect(html(out, 'Notas/CoverVazia')).toContain(`style="height: 500px; ${url} background-position: center 50%;`)
+    expect(html(out, 'Notas/CoverTexto')).toContain(`style="height: 300px; ${url} background-position: center 50%;`)
+  })
+
+  it('capa em wikilink sai igual à do caminho', async () => {
+    write('Notas/Wiki.md', '---\nname: Wiki\nimage: "[[Imagens/a.png]]"\n---\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    expect(html(out, 'Notas/Wiki').startsWith(
+      `<div class="vault-banner" style="height: 500px; background-image: url('/vault-assets/v/Imagens/a.png'); background-position: center 50%;`,
+    )).toBe(true)
+    expect(JSON.parse(fs.readFileSync(path.join(out, 'v', 'assets.json'), 'utf-8'))).toContain('Imagens/a.png')
+  })
+
+  it('propriedade com NUL terminada em .png não derruba o build e fica fora do assets.json', async () => {
+    write('Notas/NulProp.md', '---\npic: "x\\u0000.png"\n---\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(vault, { dataRoot: out })
+    const page = JSON.parse(fs.readFileSync(path.join(out, 'v', 'pages', 'Notas/NulProp.json'), 'utf-8'))
+    const row = page.properties.find((r: { key: string }) => r.key === 'pic')
+    expect(row.locked).toBe('image')
+    expect(row.html).toBe('<img class="vault-prop-thumb" src="/vault-assets/v/x%00.png" alt="" />')
+    const assets: string[] = JSON.parse(fs.readFileSync(path.join(out, 'v', 'assets.json'), 'utf-8'))
+    expect(assets.some(a => a.includes('\u0000'))).toBe(false)
+  })
+
+  it('--first dá saída idêntica à do build sem ele, com banners hostis e legítimos', async () => {
+    const A = path.join(TMP, 'outA')
+    const B = path.join(TMP, 'outB')
+    await buildVault(custom, { dataRoot: A })
+    await buildVault(custom, { dataRoot: B, first: ['Notas/Hostil', 'Notas/Merge', 'Notas/Tag'] })
+    const a = listFiles(path.join(A, 'v'))
+    expect(listFiles(path.join(B, 'v'))).toEqual(a)
+    expect(a).toContain('pages/Notas/Hostil.json')
+    const read = (root: string, f: string) => fs.readFileSync(path.join(root, 'v', f), 'utf-8')
+    for (const f of a) {
+      if (f === 'index.json') {
+        const strip = (raw: string) => ({ ...JSON.parse(raw), builtAt: null, startedAt: null })
+        expect(strip(read(B, f))).toEqual(strip(read(A, f)))
+      } else {
+        expect(read(B, f), f).toBe(read(A, f))
+      }
+    }
+  })
+})

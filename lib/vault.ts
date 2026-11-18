@@ -113,3 +113,22 @@ export function findHomePage(slug: string, homePageTitle: string): PageMeta | nu
   if (pages.length > 0) return getPageData(slug, pages[0].path.split('/'))
   return null
 }
+
+// Índice de valores das propriedades de lista (property-values.json). Ausente, ilegível ou
+// de forma errada dá {}; só ficam as chaves cujo valor é lista, e dela só os itens texto.
+// Object.fromEntries porque uma chave pode se chamar __proto__ e tem de ser própria.
+export function getPropertyValues(slug: string): Record<string, string[]> {
+  const safe = sanitizeSlug(slug)
+  if (!safe) return {}
+  try {
+    const raw: unknown = JSON.parse(fs.readFileSync(path.join(dataRoot(), safe, 'property-values.json'), 'utf-8'))
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
+    return Object.fromEntries(
+      Object.entries(raw)
+        .filter(([, v]) => Array.isArray(v))
+        .map(([k, v]) => [k, (v as unknown[]).filter((i): i is string => typeof i === 'string')]),
+    )
+  } catch {
+    return {}
+  }
+}

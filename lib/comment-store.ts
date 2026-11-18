@@ -1,5 +1,6 @@
 // Escrita de comentários no vault: criar, editar e apagar arquivos dentro de
-// `<vault>/_comments/`, e só ali. É a única parte do viewer que escreve no vault.
+// `<vault>/_comments/`, e só ali. A outra parte do viewer que escreve no vault é a edição de
+// propriedades (`lib/property-store.ts`), no arquivo da própria nota.
 //
 // O que este módulo garante:
 //   - o frontmatter é sempre gerado aqui, com os textos entre aspas JSON (que é YAML
@@ -13,8 +14,7 @@
 import fs from 'fs'
 import fsp from 'fs/promises'
 import path from 'path'
-import { randomBytes, randomInt } from 'crypto'
-import { setTimeout as sleep } from 'timers/promises'
+import { randomInt } from 'crypto'
 import matter from 'gray-matter'
 import type { VaultConfig } from '@/types'
 import type { PageComment, PageMeta } from '@/builder/types'
@@ -22,12 +22,15 @@ import { isInCommentsFolder, noteFamilyFields, parentRef } from '@/builder/note-
 import { commentTime, toPageComment } from '@/builder/comments'
 import { parseYamlFrontmatter } from '@/builder/frontmatter'
 import { renderComment, type CommentRenderOptions } from '@/builder/comment-render'
-import { LinkResolver } from '@/builder/link-resolver'
-import { isScannedPath, scanCanvases, scanVault } from '@/builder/scanner'
+import { isScannedPath } from '@/builder/scanner'
 import { loadVaultIgnore, type VaultIgnore } from '@/builder/vault-ignore'
 import { commentVersion } from '@/lib/comment-version'
+import { yamlString } from '@/lib/frontmatter-edit'
 import { safePagePath, scannedVaultFile } from '@/lib/pending-page'
 import { pageFilePath } from '@/lib/vault'
+import {
+  codeOf, dropTemp, markWrote, overLocks, replaceFile, tempPath, vaultLinkResolver, withVaultLock, wroteFirst,
+} from '@/lib/vault-write'
 
 export const MAX_COMMENT_CHARS = 10_000
 const COMMENTS_DIR = '_comments'
@@ -69,21 +72,6 @@ export function isoWithOffset(d: Date): string {
     `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
     `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
   )
-}
-
-// Texto entre aspas JSON, que o YAML lê como texto entre aspas duplas. O JSON já escapa
-// aspas, barra invertida e controles C0; os demais caracteres que o YAML trata como quebra
-// de linha ou não imprimível saem como `\uXXXX`.
-const BACKSLASH = String.fromCharCode(92)
-
-function yamlString(s: string): string {
-  let out = ''
-  for (const ch of JSON.stringify(s)) {
-    const code = ch.charCodeAt(0)
-    const escape = (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 || code === 0xfeff
-    out += escape ? `${BACKSLASH}u${code.toString(16).padStart(4, '0')}` : ch
-  }
-  return out
 }
 
 // `parent` como o builder vai ler (`parentRef`): com colchetes quando o caminho sobrevive a
@@ -149,37 +137,7 @@ export function commentFileName(now: Date, username: string, suffix: string): st
   return `${stamp} ${user}-${suffix}`
 }
 
-// ─── Trava do Windows e escrita atômica ───────────────────────────────────────
-
-// Códigos com que o Windows recusa um arquivo que outro programa segura naquele instante
-// (antivírus, indexador, o serviço de sincronização, o próprio build lendo).
-const LOCKED = new Set(['EPERM', 'EBUSY', 'EACCES'])
-const RETRY_DELAYS_MS = [10, 20, 40, 80, 160]
-
-const codeOf = (e: unknown): string => (e as NodeJS.ErrnoException | undefined)?.code ?? ''
-
-// Repete `op` enquanto a recusa for de trava; qualquer outro erro sai na hora.
-async function overLocks<T>(op: () => Promise<T>): Promise<T> {
-  for (const delay of RETRY_DELAYS_MS) {
-    try {
-      return await op()
-    } catch (e) {
-      if (!LOCKED.has(codeOf(e))) throw e
-    }
-    await sleep(delay)
-  }
-  return op()
-}
-
-// Temporário na mesma pasta: começa com ponto e não termina em `.md`, então nem o scanner
-// nem o Obsidian o tomam por nota.
-const tempPath = (file: string): string =>
-  path.join(path.dirname(file), `.${path.basename(file)}.${randomBytes(6).toString('hex')}.tmp`)
-
-// Apaga o temporário, insistindo sob trava (um antivírus costuma segurar o arquivo recém
-// escrito). Se não sair, fica: começa com ponto e ninguém o lê.
-const dropTemp = (temp: string): Promise<void> =>
-  overLocks(() => fsp.unlink(temp)).catch(() => undefined)
+// ─── Escrita de arquivo novo ──────────────────────────────────────────────────
 
 // Cria `file` já inteiro e sem sobrescrever. `false` = o nome já existe (sorteie outro).
 // O conteúdo vai para um temporário e o nome final nasce com `link`, que é atômico e falha
@@ -211,18 +169,6 @@ async function writeNewFile(file: string, content: string): Promise<boolean> {
     }
   } finally {
     await dropTemp(temp)
-  }
-}
-
-// Troca o conteúdo de `file` de uma vez: ou fica o antigo inteiro, ou o novo inteiro.
-async function replaceFile(file: string, content: string): Promise<void> {
-  const temp = tempPath(file)
-  try {
-    await fsp.writeFile(temp, content, { encoding: 'utf8', flag: 'wx' })
-    await overLocks(() => fsp.rename(temp, file))
-  } catch (e) {
-    await dropTemp(temp)
-    throw e
   }
 }
 
@@ -336,14 +282,9 @@ function isCommentableInBuild(vault: VaultConfig, notePath: string): 'ok' | 'not
   }
 }
 
-// O mesmo `LinkResolver` do build (`builder/pipeline.ts`): as notas e os canvases que o
-// scanner visita, sem os canvases de `_comments/`. Com outro conjunto, o HTML devolvido
-// aqui sairia diferente do que o build grava logo depois.
+// Opções do render restrito, com o `LinkResolver` do build.
 function renderOptions(vault: VaultConfig, ig: VaultIgnore): CommentRenderOptions {
-  const resolver = new LinkResolver([
-    ...scanVault(vault.path, ig),
-    ...scanCanvases(vault.path, ig).filter(c => !isInCommentsFolder(c.relativePath)),
-  ])
+  const resolver = vaultLinkResolver(vault.path, ig)
   return { vaultSlug: vault.slug, resolveLink: t => resolver.resolve(t) }
 }
 
@@ -371,45 +312,11 @@ function isAuthor(n: Note, username: string): boolean {
   return (typeof a === 'string' || typeof a === 'number') && String(a) === username
 }
 
-// Erro que aconteceu depois de o disco já ter mudado: leva a mãe, para a rota pedir o build
-// mesmo respondendo erro (senão a página ficaria velha até a próxima escrita).
-const WROTE = Symbol('comment-wrote')
-
-function afterWrite(e: unknown, mother: string | null): unknown {
-  if (typeof e === 'object' && e !== null) (e as { [WROTE]?: { mother: string | null } })[WROTE] = { mother }
-  return e
-}
-
-// `undefined` se o erro não veio depois de uma escrita; senão a mãe (ou `null`).
-export function wroteMother(e: unknown): string | null | undefined {
-  return typeof e === 'object' && e !== null ? (e as { [WROTE]?: { mother: string | null } })[WROTE]?.mother : undefined
-}
+export const wroteMother = wroteFirst
 
 function parseTime(v: unknown): Date | null {
   const iso = commentTime(v)
   return iso === null ? null : new Date(iso)
-}
-
-// ─── Fila por vault ───────────────────────────────────────────────────────────
-
-// Em `globalThis` pelo mesmo motivo do estado do build (`lib/rebuild.ts`): uma variável de
-// módulo pode existir em mais de uma cópia no mesmo processo.
-const LOCK_KEY = Symbol.for('vault-viewer.comment-locks')
-type GlobalWithLocks = typeof globalThis & { [LOCK_KEY]?: Map<string, Promise<void>> }
-
-function withVaultLock<T>(slug: string, fn: () => Promise<T>): Promise<T> {
-  const g = globalThis as GlobalWithLocks
-  const locks = (g[LOCK_KEY] ??= new Map<string, Promise<void>>())
-  const run = (locks.get(slug) ?? Promise.resolve()).then(fn, fn)
-  const tail = run.then(
-    () => undefined,
-    () => undefined,
-  )
-  locks.set(slug, tail)
-  void tail.then(() => {
-    if (locks.get(slug) === tail) locks.delete(slug)
-  })
-  return run
 }
 
 // ─── Operações ────────────────────────────────────────────────────────────────
@@ -489,7 +396,7 @@ export function createComment(
       try {
         return { comment: toComment(note, opts), replyTo, mother }
       } catch (e) {
-        throw afterWrite(e, mother)
+        throw markWrote(e, mother)
       }
     }
     throw new CommentError(500, 'Não foi possível criar o arquivo do comentário')
@@ -559,7 +466,7 @@ export function editComment(
       if (!after) throw new CommentError(404, 'Comentário não encontrado')
       return { comment: toComment(after, opts), mother }
     } catch (e) {
-      throw afterWrite(e, mother)
+      throw markWrote(e, mother)
     }
   })
 }
@@ -646,7 +553,7 @@ export function deleteComment(
     try {
       for (const abs of targets) if (await removeFile(abs)) deleted++
     } catch (e) {
-      throw deleted > 0 ? afterWrite(e, chain.mother) : e
+      throw deleted > 0 ? markWrote(e, chain.mother) : e
     }
     for (const abs of targets) pruneEmptyDirs(path.dirname(abs), commentsRoot)
     return { deleted, mother: chain.mother }
