@@ -86,6 +86,7 @@ export const ptBR: Record<string, string> = {
   'properties.edit.listPlaceholder': 'Buscar ou criar…',
   'properties.edit.create': 'Criar “{value}”',
   'properties.edit.loading': 'Carregando…',
+  'properties.edit.more': 'Mais {n}: digite para filtrar',
   'properties.type.text': 'Texto',
   'properties.type.multitext': 'Lista',
   'properties.type.number': 'Número',

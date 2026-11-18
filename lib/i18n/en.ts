@@ -87,6 +87,7 @@ export const en: Record<string, string> = {
   'properties.edit.listPlaceholder': 'Search or create…',
   'properties.edit.create': 'Create “{value}”',
   'properties.edit.loading': 'Loading…',
+  'properties.edit.more': '{n} more: type to narrow down',
   'properties.type.text': 'Text',
   'properties.type.multitext': 'List',
   'properties.type.number': 'Number',

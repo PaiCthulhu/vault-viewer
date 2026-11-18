@@ -480,6 +480,86 @@ describe('PropertiesBlock com edição: escalares', () => {
     expect(inputOf(container)).not.toBeNull()
   })
 
+  // Arrastar sobre o texto do valor (para copiar) termina num click: abrir o editor apagaria
+  // a seleção.
+  describe('seleção de texto no valor', () => {
+    // Seleciona o texto de `node` do caractere `from` ao `to` (iguais: seleção colapsada).
+    function select(node: Node, from: number, to: number) {
+      const text = node.nodeType === Node.TEXT_NODE ? node : document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode()!
+      const range = document.createRange()
+      range.setStart(text, from)
+      range.setEnd(text, to)
+      const sel = window.getSelection()!
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
+    afterEach(() => { window.getSelection()?.removeAllRanges() })
+
+    it('clique que termina uma seleção dentro do valor não abre o editor', () => {
+      const { container } = render(view([STATUS]))
+      const editable = editableOf(container, 'status')
+      select(editable, 0, 3)
+      expect(window.getSelection()!.isCollapsed).toBe(false)
+      fireEvent.click(editable)
+      expect(inputOf(container)).toBeNull()
+      expect(window.getSelection()!.toString()).toBe('tod')
+    })
+
+    it('clique sobre uma seleção que já existia no mousedown abre o editor', () => {
+      // O Chromium só desfaz a seleção depois do click: o click ainda a vê.
+      const { container } = render(view([STATUS]))
+      const editable = editableOf(container, 'status')
+      select(editable, 0, 3)
+      fireEvent.mouseDown(editable)
+      fireEvent.click(editable)
+      expect(inputOf(container)).not.toBeNull()
+    })
+
+    it('seleção feita entre o mousedown e o click (arrasto) segura o clique', () => {
+      const { container } = render(view([STATUS]))
+      const editable = editableOf(container, 'status')
+      fireEvent.mouseDown(editable)
+      select(editable, 0, 3)
+      fireEvent.click(editable)
+      expect(inputOf(container)).toBeNull()
+    })
+
+    it('seleção que só começa ou só termina no valor também segura o clique', () => {
+      const { container } = render(view([STATUS]))
+      const editable = editableOf(container, 'status')
+      const key = rowOf(container, 'status').querySelector('.vault-prop-key')!.firstChild!
+      const inside = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT).nextNode()!
+      const sel = window.getSelection()!
+      sel.removeAllRanges()
+      sel.setBaseAndExtent(key, 0, inside, 2)
+      fireEvent.click(editable)
+      expect(inputOf(container)).toBeNull()
+    })
+
+    it('seleção colapsada no valor, ou fora dele, não impede o clique de abrir', () => {
+      const { container } = render(view([STATUS, RATING]))
+      select(editableOf(container, 'status'), 1, 1)
+      fireEvent.click(editableOf(container, 'status'))
+      expect(inputOf(container)).not.toBeNull()
+      press(container, 'Escape')
+
+      select(editableOf(container, 'rating'), 0, 1)
+      fireEvent.click(editableOf(container, 'status'))
+      expect(inputOf(container)).not.toBeNull()
+    })
+
+    it('Enter e Espaço abrem mesmo com texto selecionado no valor', () => {
+      const { container } = render(view([STATUS]))
+      select(editableOf(container, 'status'), 0, 3)
+      fireEvent.keyDown(editableOf(container, 'status'), { key: 'Enter' })
+      expect(inputOf(container)).not.toBeNull()
+      press(container, 'Escape')
+      select(editableOf(container, 'status'), 0, 3)
+      fireEvent.keyDown(editableOf(container, 'status'), { key: ' ' })
+      expect(inputOf(container)).not.toBeNull()
+    })
+  })
+
   it('mismatch: confirma antes de gravar e manda confirm: true', () => {
     const { container } = render(view([MISMATCH]))
     open(container, 'rating')
@@ -840,6 +920,40 @@ describe('ScalarEditor', () => {
     act(() => { input.blur() })
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  // O Chrome muda o número com a roda do mouse quando o input está focado, e o blur grava o
+  // valor girado sem querer. O listener do React para `wheel` é passivo (o preventDefault
+  // seria ignorado), então o teste dispara o evento nativo, como o navegador.
+  it('roda do mouse no número focado não muda o valor; sem foco, ou num texto, segue normal', () => {
+    const wheel = (input: HTMLInputElement) => {
+      const ev = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })
+      input.dispatchEvent(ev)
+      return ev.defaultPrevented
+    }
+    const num = editor('number', '3')
+    expect(document.activeElement).toBe(num.input)
+    expect(wheel(num.input)).toBe(true)
+    act(() => { num.input.blur() })
+    expect(wheel(num.input)).toBe(false)
+    cleanup()
+
+    const text = editor('text')
+    expect(document.activeElement).toBe(text.input)
+    expect(wheel(text.input)).toBe(false)
+  })
+
+  it('o listener de roda sai quando o editor desmonta', () => {
+    const remove = vi.spyOn(HTMLInputElement.prototype, 'removeEventListener')
+    const num = editor('number', '3')
+    const input = num.input
+    num.unmount()
+    expect(remove.mock.calls.some(([type]) => type === 'wheel')).toBe(true)
+    // desmontado e focado de novo à mão: a roda não é mais segurada
+    document.body.appendChild(input)
+    input.focus()
+    expect(input.dispatchEvent(new WheelEvent('wheel', { cancelable: true }))).toBe(true)
+    input.remove()
   })
 
   it('a comparação é com o valor que o input mostrou, já sanitizado pelo navegador', () => {

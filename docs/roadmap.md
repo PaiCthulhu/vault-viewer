@@ -21,6 +21,8 @@ The first steps away from a read-only viewer:
 - **Tabs.** A child note with `note_type: tab` is a page of its own, reached through a tab bar that its mother and all its sibling tabs share. Each tab has its own URL.
 - **Comments.** A note with a Properties block gets a comment strip between its properties and its body, on vaults that turn the `comments` option on. People who can see the vault can comment and reply (one level of replies), edit their own comments and delete them; an admin can delete any comment. Each comment is a markdown file under `_comments/` in the vault, rendered through a restricted pipeline (no raw HTML, no Dataview execution, no images). This is the first time the app writes into a vault.
 - **Display names.** A user can have a display name, shown next to the username on comments. For now only an admin can set it.
+- **Reader and editor levels.** Each per-vault grant is either `reader` (sees the vault) or `editor` (may also change it). Admins count as editors in every vault.
+- **Property values.** The Properties block knows each property's type (from Obsidian's `types.json` or inferred from the value), and an editor changes the value of an existing property right on the page: text, number, checkbox, date, date and time, and lists with suggestions from the values already used in the vault. The app rewrites only that key's lines in the note's own file, refuses to overwrite a change made elsewhere since the editor opened, never changes a property's type, and rebuilds the vault in the background. Keys marked read-only, nested values and images stay locked. The page banner no longer takes any frontmatter value raw, since an editor now writes those keys.
 
 ## What comes next
 
@@ -29,6 +31,14 @@ The first steps away from a read-only viewer:
 - **Editor mode.** Creating and editing notes in the browser. This is the step that turns the reader into a manager, and the largest one: it needs a write path for notes as careful as the one comments have (atomic writes, conflict detection against changes made in Obsidian, nothing written outside the vault).
 - **Request limits.** A limit on the requests that create or change notes or trigger a vault rebuild, designed together with the editor mode. It is not meant as a cap on how many comments a person can post. Today nothing limits those requests, and each comment written scans the vault and asks for a build.
 - **`note_type: section`.** A third kind of child note in the same note format, next to tabs and comments. It is not recognized yet: a note with that type is shown as an ordinary note.
+
+### Properties
+
+- **Managing properties.** Creating, renaming and deleting a property, and changing its type. Today an editor only changes the value of a key that already exists, and a type comes from `types.json` or from the value.
+- **Chosen colors.** A list item's chip color comes from a hash of the key and the value. Letting people pick it needs somewhere to store the choice, inside the vault.
+- **Single select.** A property that takes one value out of a known set, shown as one chip, like Notion's select.
+- **Relation picker.** Choosing notes of the vault as the value of a property, written as wikilinks, instead of typing the link.
+- **Dataview output.** Dataview tables and lists, and DataviewJS, still trust the frontmatter, so a value an editor saves reaches them unescaped. Until that output is handled, the `editor` level is for people trusted as much as whoever writes the vault's files.
 
 ### People
 

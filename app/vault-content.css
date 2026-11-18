@@ -157,6 +157,11 @@
 }
 .vault-properties .vault-prop-editable:hover { background: var(--background-modifier-hover); }
 .vault-properties .vault-prop-editable:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+/* Toque: sem hover, nada diria que o valor abre um editor. Só no .vault-prop-editable, que
+   só existe para quem edita: o leitor não vê nada. */
+@media (hover: none) {
+  .vault-properties .vault-prop-editable { border-bottom: 1px dashed var(--border); }
+}
 .vault-properties .vault-prop-input {
   width: 100%;
   box-sizing: border-box;
@@ -202,6 +207,8 @@
 }
 .vault-properties .vault-prop-multiselect:focus-within { border-color: var(--accent); }
 .vault-properties .vault-prop-multiselect .vault-prop-chip { margin: 0; }
+/* O aviso do item grande demais, numa linha própria dentro da caixa. */
+.vault-properties .vault-prop-multiselect .vault-prop-error { flex-basis: 100%; }
 .vault-properties .vault-prop-list-input {
   border: none;
   flex: 1 1 8ch;
@@ -257,9 +264,11 @@
   padding: 0.3rem 0.6rem;
   cursor: pointer;
 }
-.vault-properties .vault-prop-option:not(.is-loading):hover { background: var(--accent-bg); }
+/* O "Carregando…" e o "Mais n" são linhas do menu, não opções: apagadas e sem hover. */
+.vault-properties .vault-prop-option:not([aria-disabled="true"]):hover { background: var(--accent-bg); }
 .vault-properties .vault-prop-option.is-active { background: var(--accent-bg); }
-.vault-properties .vault-prop-option.is-loading { cursor: default; color: var(--text-muted); }
+.vault-properties .vault-prop-option[aria-disabled="true"] { cursor: default; color: var(--text-muted); }
+.vault-properties .vault-prop-option.is-more { font-size: 0.8rem; }
 /* O bloco corta o que passa da borda (overflow: hidden, para os cantos): com o menu
    aberto ele não corta, senão o menu de uma das últimas linhas sairia cortado. */
 .vault-properties:has(.vault-prop-menu.is-open) { overflow: visible; }

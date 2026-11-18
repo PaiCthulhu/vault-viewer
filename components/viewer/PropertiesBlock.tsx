@@ -85,6 +85,13 @@ function scalarType(type: PropertyType): ScalarEditorType | null {
   return type === 'text' || type === 'number' || type === 'date' || type === 'datetime' ? type : null
 }
 
+// Há texto selecionado (não colapsado) que começa ou termina dentro de `el`.
+function selectsInside(el: Element): boolean {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed) return false
+  return [sel.anchorNode, sel.focusNode].some(n => n !== null && el.contains(n))
+}
+
 // Para onde o foco volta quando o editor ou a confirmação fecha pelo teclado: o Cancelar de
 // uma confirmação aberta, senão o controle da linha.
 const FOCUS_CONFIRM = '.vault-prop-confirm .vault-prop-btn:not(.is-primary)'
@@ -125,6 +132,9 @@ export function PropertiesBlock({ properties, showLocks = true, edit }: {
   // blur (o usuário clicou em outro lugar), o foco já está indo para lá e fica onde está.
   const bodyRef = useRef<HTMLDivElement>(null)
   const focusRow = useRef<HTMLElement | null>(null)
+  // Se já havia texto selecionado no valor quando o botão desceu: então o click é sobre uma
+  // seleção que já existia (o Chromium só a desfaz depois do click) e abre o editor.
+  const selectedAtDown = useRef(false)
   useEffect(() => {
     const row = focusRow.current
     if (!row) return
@@ -327,9 +337,16 @@ export function PropertiesBlock({ properties, showLocks = true, edit }: {
             key: p.key, value: isEmpty(p) ? t('properties.empty') : visibleText(p.html),
           })}
           aria-disabled={saving || undefined}
+          onMouseDown={e => { selectedAtDown.current = selectsInside(e.currentTarget) }}
           onClick={e => {
+            const hadSelection = selectedAtDown.current
+            selectedAtDown.current = false
             // Clique num link do valor é do link: o ContentPanel navega.
             if (e.target instanceof Element && e.target.closest('a')) return
+            // Arrastar sobre o texto do valor (para copiar) termina num click: abrir o editor
+            // apagaria a seleção. Só a seleção feita neste gesto segura o clique; um clique
+            // sobre uma seleção que já existia abre. Enter e Espaço abrem sempre.
+            if (!hadSelection && selectsInside(e.currentTarget)) return
             openEditor(p)
           }}
           onKeyDown={e => {

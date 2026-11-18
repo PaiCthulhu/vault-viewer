@@ -298,20 +298,184 @@ describe('PropertiesBlock com edição: listas', () => {
     expect(calls[0].body.value).toEqual(['RPG'])
   })
 
-  // Sem maxLength o campo não corta a colagem: o item grande demais chega ao pai, que recusa
-  // com o aviso em vez de gravar um valor diferente do colado.
-  it('item de 10.001 caracteres: aviso "grande demais", sem chamar a API', async () => {
+  // Sem maxLength o campo não corta a colagem: o item grande demais não vira chip. O texto
+  // fica no campo, para a pessoa encurtar, com o aviso no editor até ele mudar.
+  it('item de 10.001 caracteres: não vira chip, o aviso aparece no editor e o texto fica no campo', async () => {
     const { container } = render(view([GENRES]))
     await open(container, 'genres')
     expect(inputOf(container)!.maxLength).toBe(-1)
-    create(container, 'a'.repeat(10001))
-    expect(editorChips(container)).toHaveLength(3)
+    const long = 'a'.repeat(10001)
+    const alertOf = () => editorOf(container)!.querySelector('.vault-prop-error[role="alert"]')
+
+    create(container, long)
+    expect(editorChips(container)).toEqual(['RPG', 'Indie'])
+    expect(inputOf(container)!.value).toBe(long)
+    expect(alertOf()!.textContent).toBe('O valor é grande demais.')
+    // nem pelas setas até o "Criar", nem pelo clique nele
+    press(container, 'ArrowDown')
+    press(container, 'Enter')
+    fireEvent.click(optionsOf(container)[0])
+    expect(editorChips(container)).toEqual(['RPG', 'Indie'])
+    expect(inputOf(container)!.value).toBe(long)
+    expect(alertOf()).not.toBeNull()
+
+    // mudou o texto: o aviso some, e 10.000 caracteres (aparados) entram
+    typeIn(container, ' ' + 'b'.repeat(10000) + ' ')
+    expect(alertOf()).toBeNull()
+    press(container, 'Enter')
+    expect(editorChips(container)).toEqual(['RPG', 'Indie', 'b'.repeat(10000)])
+    expect(inputOf(container)!.value).toBe('')
+    expect(alertOf()).toBeNull()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('sugestão grande demais escolhida e depois uma válida: o aviso some quando o item entra', async () => {
+    valuesReply = { status: 200, body: { values: ['a'.repeat(10001), 'Ok'] } }
+    const { container } = render(view([GENRES]))
+    await open(container, 'genres')
+    const alertOf = () => editorOf(container)!.querySelector('.vault-prop-error[role="alert"]')
+    fireEvent.click(optionsOf(container)[0])
+    expect(alertOf()).not.toBeNull()
+    fireEvent.click(optionsOf(container)[1])
+    expect(editorChips(container)).toEqual(['RPG', 'Indie', 'Ok'])
+    expect(alertOf()).toBeNull()
+  })
+
+  // A checagem do pai continua como rede: um item grande demais que já vem do disco.
+  it('item grande demais vindo do disco: o Enter mostra o aviso na linha, sem chamar a API', async () => {
+    const { container } = render(view([prop('genres', ['RPG', 'a'.repeat(10001)])]))
+    await open(container, 'genres')
     press(container, 'Enter')
     expect(calls).toHaveLength(0)
     expect(editorOf(container)).toBeNull()
     expect(rowOf(container, 'genres').querySelector('.vault-prop-error[role="alert"]')!.textContent)
       .toBe('O valor é grande demais.')
-    expect(shownChips(container, 'genres')).toEqual(['RPG', 'Indie'])
+  })
+
+  it('aria-controls só com o menu aberto, apontando para o listbox que existe', async () => {
+    const { container } = render(view([GENRES]))
+    await open(container, 'genres')
+    const input = inputOf(container)!
+    // sem sugestões e sem texto: menu fechado
+    expect(menuOf(container)).toBeNull()
+    expect(input.getAttribute('aria-expanded')).toBe('false')
+    expect(input.hasAttribute('aria-controls')).toBe(false)
+
+    typeIn(container, 'Novo')
+    const menu = menuOf(container)!
+    expect(input.getAttribute('aria-expanded')).toBe('true')
+    expect(input.getAttribute('aria-controls')).toBe(menu.id)
+    expect(document.getElementById(menu.id)).toBe(menu)
+
+    typeIn(container, '')
+    expect(menuOf(container)).toBeNull()
+    expect(input.getAttribute('aria-expanded')).toBe('false')
+    expect(input.hasAttribute('aria-controls')).toBe(false)
+  })
+
+  describe('limite de 50 sugestões', () => {
+    // 60 valores neutros, na ordem do índice.
+    const MANY = Array.from({ length: 60 }, (_, i) => 'Tag ' + String(i).padStart(3, '0'))
+    const MORE_10 = 'Mais 10: digite para filtrar'
+    const lines = (el: HTMLElement) => Array.from(el.querySelectorAll('.vault-prop-menu li')).map(li => li.textContent)
+    const moreOf = (el: HTMLElement) =>
+      el.querySelector<HTMLElement>('.vault-prop-menu li[aria-disabled="true"]:not(.is-loading)')
+    const activeOf = (el: HTMLElement) => {
+      const id = inputOf(el)!.getAttribute('aria-activedescendant')
+      return id === null ? null : document.getElementById(id)
+    }
+
+    it('o valor igual ao digitado (sem caixa e acento) vem primeiro, mesmo depois da 50ª', async () => {
+      const SIMILAR = Array.from({ length: 55 }, (_, i) => 'Jogo rpg ' + String(i).padStart(2, '0'))
+      valuesReply = { status: 200, body: { values: [...SIMILAR, 'rpg', 'Ação'] } }
+      const { container } = render(view([GENRES]))
+      await open(container, 'genres')
+      typeIn(container, 'rpg')
+      // sem "Criar": o valor já existe, e é ele a primeira opção
+      expect(optionTexts(container)).toEqual(['rpg', ...SIMILAR.slice(0, 49)])
+      fireEvent.click(optionsOf(container)[0])
+      expect(editorChips(container)).toEqual(['RPG', 'Indie', 'rpg'])
+      typeIn(container, 'acao')
+      expect(optionTexts(container)[0]).toBe('Ação')
+    })
+
+    it('60 sugestões: 50 opções, a linha "Mais 10" e, com texto, o "Criar" depois dela', async () => {
+      valuesReply = { status: 200, body: { values: MANY } }
+      const { container } = render(view([GENRES]))
+      await open(container, 'genres')
+      expect(optionTexts(container)).toEqual(MANY.slice(0, 50))
+      expect(lines(container)).toEqual([...MANY.slice(0, 50), MORE_10])
+      const more = moreOf(container)!
+      expect(more.getAttribute('role')).toBe('option')
+      expect(more.getAttribute('aria-selected')).toBe('false')
+      expect(more.id).toBe('')
+
+      typeIn(container, 'tag')
+      expect(optionTexts(container)).toEqual([...MANY.slice(0, 50), 'Criar “tag”'])
+      expect(lines(container)).toEqual([...MANY.slice(0, 50), MORE_10, 'Criar “tag”'])
+    })
+
+    it('as setas pulam a linha "Mais", e o Enter escolhe a opção que está ativa', async () => {
+      valuesReply = { status: 200, body: { values: MANY } }
+      const { container } = render(view([GENRES]))
+      await open(container, 'genres')
+      typeIn(container, 'tag')
+      const seen: string[] = []
+      for (let i = 0; i < 52; i++) {
+        press(container, 'ArrowDown')
+        const active = activeOf(container)!
+        expect(active.getAttribute('aria-disabled')).toBeNull()
+        expect(moreOf(container)!.classList.contains('is-active')).toBe(false)
+        expect(moreOf(container)!.getAttribute('aria-selected')).toBe('false')
+        seen.push(active.textContent!)
+      }
+      // as 50 sugestões, o "Criar" e de volta à primeira
+      expect(seen).toEqual([...MANY.slice(0, 50), 'Criar “tag”', MANY[0]])
+      press(container, 'ArrowUp')
+      expect(activeOf(container)!.textContent).toBe('Criar “tag”')
+      press(container, 'ArrowUp')
+      expect(activeOf(container)!.textContent).toBe(MANY[49])
+      press(container, 'Enter')
+      expect(editorChips(container)).toEqual(['RPG', 'Indie', MANY[49]])
+      // com um a menos de fora, a linha conta 9
+      expect(moreOf(container)!.textContent).toBe('Mais 9: digite para filtrar')
+
+      // a linha não é escolhida pelo clique
+      fireEvent.click(moreOf(container)!)
+      expect(editorChips(container)).toEqual(['RPG', 'Indie', MANY[49]])
+      // e o mousedown nela não tira o foco do campo (a caixa cancela o padrão)
+      expect(fireEvent.mouseDown(moreOf(container)!)).toBe(false)
+    })
+
+    it('sem a linha quando o filtro deixa 50 ou menos', async () => {
+      valuesReply = { status: 200, body: { values: MANY } }
+      const { container } = render(view([GENRES]))
+      await open(container, 'genres')
+      typeIn(container, 'tag 01')
+      expect(optionTexts(container)).toEqual([...MANY.slice(10, 20), 'Criar “tag 01”'])
+      expect(moreOf(container)).toBeNull()
+      typeIn(container, '')
+      expect(moreOf(container)!.textContent).toBe(MORE_10)
+    })
+
+    it('exatamente 50 de fora dos itens escolhidos: sem a linha', async () => {
+      valuesReply = { status: 200, body: { values: MANY } }
+      const { container } = render(view([prop('genres', MANY.slice(0, 10))]))
+      await open(container, 'genres')
+      expect(optionTexts(container)).toEqual(MANY.slice(10))
+      expect(moreOf(container)).toBeNull()
+    })
+
+    it('em inglês: "{n} more: type to narrow down"', async () => {
+      valuesReply = { status: 200, body: { values: MANY } }
+      const { container } = render(
+        <I18nProvider locale="en">
+          <ListEditor propKey="genres" slug="my-vault" initial={[]} label="genres" onCommit={vi.fn()} onCancel={vi.fn()} />
+        </I18nProvider>,
+      )
+      await settle()
+      expect(moreOf(container)!.textContent).toBe('10 more: type to narrow down')
+    })
   })
 
   it('clique numa opção adiciona, sem tirar o foco do campo', async () => {

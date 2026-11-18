@@ -5,7 +5,7 @@ import { useI18n } from '@/components/i18n/I18nProvider'
 import { normalizeForSearch } from '@/lib/gallery-search'
 import { fetchPropertyValues } from '@/lib/property-client'
 import { propertyColor } from '@/lib/property-color'
-import { sameValue, type ScalarEditorType } from '@/lib/property-edit'
+import { MAX_PROPERTY_TEXT, sameValue, type ScalarEditorType } from '@/lib/property-edit'
 
 // Controles de edição do bloco Propriedades. Eles só coletam o que o usuário escolheu: o
 // PropertiesBlock valida, confirma e grava.
@@ -42,6 +42,20 @@ export function ScalarEditor({ type, initial, label, onCommit, onCancel }: {
   // blur logo em seguida: sem isto, esse blur gravaria de novo, ou gravaria depois do Esc.
   const closed = useRef(false)
   const shown = useRef<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // O Chrome gira o número com a roda do mouse quando o input está focado, e o blur gravaria
+  // o valor girado sem querer. Listener nativo e não passivo: o `onWheel` do React é passivo,
+  // e nele o preventDefault é ignorado. Sem foco, a roda segue rolando a página.
+  useEffect(() => {
+    const input = inputRef.current
+    if (type !== 'number' || !input) return
+    const onWheel = (e: WheelEvent) => {
+      if (document.activeElement === input) e.preventDefault()
+    }
+    input.addEventListener('wheel', onWheel, { passive: false })
+    return () => input.removeEventListener('wheel', onWheel)
+  }, [type])
 
   function finish(input: HTMLInputElement, how: 'enter' | 'blur' | 'escape') {
     if (closed.current) return
@@ -56,6 +70,7 @@ export function ScalarEditor({ type, initial, label, onCommit, onCancel }: {
   return (
     <input
       ref={el => {
+        inputRef.current = el
         if (el && shown.current === null) shown.current = el.value
       }}
       className="vault-prop-input"
@@ -97,6 +112,10 @@ interface ListOption {
   create: boolean
 }
 
+// Sugestões mostradas de uma vez (sem contar o "Criar"). Uma chave com milhares de valores
+// faria um menu enorme; o resto aparece digitando para filtrar.
+const MAX_SUGGESTIONS = 50
+
 // Seleção múltipla de uma propriedade de lista (multitext, tags, aliases): os itens como
 // chips, um campo para buscar ou criar e o menu de sugestões, que são os valores que o vault
 // já usa nessa chave (uma busca por abertura). Os itens e o texto moram aqui até fechar: um
@@ -123,6 +142,8 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
   const [items, setItems] = useState(initial)
   const [text, setText] = useState('')
   const [active, setActive] = useState(-1)
+  // O texto do campo passou do limite ao tentar adicionar: o aviso fica até o texto mudar.
+  const [tooLong, setTooLong] = useState(false)
   // `undefined`: carregando; `null`: a busca falhou (sem sugestões, e criar continua).
   const [suggestions, setSuggestions] = useState<string[] | null | undefined>(undefined)
 
@@ -147,12 +168,24 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
 
   const query = text.trim()
   const needle = normalizeForSearch(query)
-  const options: ListOption[] = normalized
-    .filter(s => !items.includes(s.value) && s.search.includes(needle))
+  const found = normalized.filter(s => !items.includes(s.value) && s.search.includes(needle))
+  // O valor igual ao digitado (ignorando caixa e acento) vem primeiro: com o limite, ele não
+  // pode ficar de fora do menu, onde o "Criar" também não aparece para ele.
+  const matches = needle === ''
+    ? found
+    : [...found.filter(s => s.search === needle), ...found.filter(s => s.search !== needle)]
+  // As que ficaram de fora do limite: a linha "Mais n" no fim das sugestões, que não é opção
+  // (fica fora de `options`, então as setas e o Enter nunca a pegam).
+  const hidden = Math.max(0, matches.length - MAX_SUGGESTIONS)
+  const suggested: ListOption[] = matches
+    .slice(0, MAX_SUGGESTIONS)
     .map(s => ({ value: s.value, create: false }))
-  if (query !== '' && !items.includes(query) && !(suggestions ?? []).includes(query)) {
-    options.push({ value: query, create: true })
-  }
+  const createOption: ListOption | null =
+    query !== '' && !items.includes(query) && !(suggestions ?? []).includes(query)
+      ? { value: query, create: true }
+      : null
+  // Na ordem do menu, e o índice das setas: as sugestões, depois o "Criar".
+  const options = createOption ? [...suggested, createOption] : suggested
   const loading = suggestions === undefined
   const open = loading || options.length > 0
   const current = active < options.length ? active : -1
@@ -172,9 +205,16 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
   }
 
   // Item repetido não entra (comparação exata; os itens e as sugestões já vêm aparados).
+  // Item grande demais também não: o texto fica no campo, para encurtar, com o aviso. O pai
+  // ainda recusa ao gravar (um item assim pode vir do disco).
   function add(value: string) {
+    if (value.trim().length > MAX_PROPERTY_TEXT) {
+      setTooLong(true)
+      return
+    }
     setText('')
     setActive(-1)
+    setTooLong(false)
     if (value !== '' && !items.includes(value)) setItems([...items, value])
   }
 
@@ -194,6 +234,23 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
   function remove(index: number) {
     setItems(items.filter((_, i) => i !== index))
     setActive(-1)
+  }
+
+  // `i` é o índice em `options`, o mesmo das setas e do Enter.
+  function renderOption(o: ListOption, i: number) {
+    return (
+      <li
+        key={(o.create ? '+' : '=') + o.value}
+        id={optionId(i)}
+        role="option"
+        aria-selected={i === current}
+        className={'vault-prop-option' + (i === current ? ' is-active' : '')}
+        onMouseDown={keepFocus}
+        onClick={() => add(o.value)}
+      >
+        {o.create ? t('properties.edit.create', { value: o.value }) : o.value}
+      </li>
+    )
   }
 
   return (
@@ -244,17 +301,19 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
         role="combobox"
         aria-label={label}
         aria-expanded={open}
-        aria-controls={menuId}
+        // Fechado, o menu não está no DOM: o aria-controls apontaria para um id ausente.
+        aria-controls={open ? menuId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={current >= 0 ? optionId(current) : undefined}
         placeholder={t('properties.edit.listPlaceholder')}
         autoFocus
-        // Sem maxLength: ele cortaria a colagem em silêncio. O pai recusa o item grande demais
-        // com o aviso, na hora de gravar.
+        // Sem maxLength: ele cortaria a colagem em silêncio. O `add` recusa o item grande demais
+        // com o aviso.
         value={text}
         onChange={e => {
           setText(e.target.value)
           setActive(-1)
+          setTooLong(false)
         }}
         onKeyDown={e => {
           // Durante a composição (IME), as teclas são da composição.
@@ -276,6 +335,8 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
           }
         }}
       />
+      {/* Dentro da caixa, numa linha própria: o menu abre logo abaixo dela e não o cobre. */}
+      {tooLong ? <span className="vault-prop-error" role="alert">{t('properties.error.tooLong')}</span> : null}
       {open ? (
         <ul ref={menuRef} id={menuId} className="vault-prop-menu is-open" role="listbox" aria-label={label}>
           {loading ? (
@@ -283,19 +344,14 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
               {t('properties.edit.loading')}
             </li>
           ) : null}
-          {options.map((o, i) => (
-            <li
-              key={(o.create ? '+' : '=') + o.value}
-              id={optionId(i)}
-              role="option"
-              aria-selected={i === current}
-              className={'vault-prop-option' + (i === current ? ' is-active' : '')}
-              onMouseDown={keepFocus}
-              onClick={() => add(o.value)}
-            >
-              {o.create ? t('properties.edit.create', { value: o.value }) : o.value}
+          {suggested.map((o, i) => renderOption(o, i))}
+          {/* Não é opção: sem id, fora do índice das setas, sem clique. */}
+          {hidden > 0 ? (
+            <li className="vault-prop-option is-more" role="option" aria-disabled="true" aria-selected="false">
+              {t('properties.edit.more', { n: hidden })}
             </li>
-          ))}
+          ) : null}
+          {createOption ? renderOption(createOption, suggested.length) : null}
         </ul>
       ) : null}
     </div>
