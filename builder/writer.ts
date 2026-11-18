@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import type { PageMeta, VaultIndex, BuildGraph, PageSummary } from './types'
+import type { PageMeta, VaultIndex, BuildGraph, PageSummary, RelationEntry } from './types'
 import { buildTree } from '@/lib/vault-tree'
 
 // Chars ilegais em nomes de arquivo no Windows
@@ -133,6 +133,8 @@ export function writeOutput(
     alreadyWritten?: Iterable<string>
     summaries?: PageSummary[]
     propertyValues?: Record<string, string[]>
+    // `propertyRelations`: candidatos e itens resolvidos das listas de relação (`property-relations.json`).
+    propertyRelations?: Record<string, RelationEntry>
   } = {},
 ): void {
   const dataDir = path.join(dataRoot, slug)
@@ -153,6 +155,9 @@ export function writeOutput(
   if (opts.assets) writeAssets(dataDir, opts.assets)
   if (opts.propertyValues) {
     writeFileAtomic(path.join(dataDir, 'property-values.json'), JSON.stringify(opts.propertyValues))
+  }
+  if (opts.propertyRelations) {
+    writeFileAtomic(path.join(dataDir, 'property-relations.json'), JSON.stringify(opts.propertyRelations))
   }
 
   // Sem páginas, algo deu errado na varredura: não apaga o que já existe.

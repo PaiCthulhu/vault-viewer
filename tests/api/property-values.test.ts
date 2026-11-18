@@ -118,4 +118,37 @@ describe('GET /api/vault/[slug]/property-values', () => {
     fs.writeFileSync(valuesFile(), '{quebrado')
     expect((await get('?key=genres')).json).toEqual({ values: [] })
   })
+
+  describe('relação', () => {
+    const relationsFile = () => path.join(root, 'data', 'v', 'property-relations.json')
+    beforeEach(async () => {
+      write('.vaultwright/properties.json', JSON.stringify({ version: 1, properties: { related: { relation: 'Games' } } }))
+      write('Games/Alpha.md', 'alfa\n')
+      write('Notas/Tres.md', '---\nrelated: ["[[Alpha]]"]\n---\nTres.\n')
+      await buildVault(vault, { dataRoot: path.join(root, 'data') })
+    })
+
+    it('chave de relação traz os candidatos e o que foi resolvido', async () => {
+      const r = await get('?key=related')
+      expect(r.status).toBe(200)
+      expect(r.json).toEqual({
+        values: ['[[Alpha]]'],
+        relation: {
+          candidates: [{ link: '[[Alpha]]', label: 'Alpha', path: 'Games/Alpha' }],
+          resolved: { '[[Alpha]]': 'Games/Alpha' },
+        },
+      })
+    })
+
+    it('chave comum traz só values', async () => {
+      expect(Object.keys((await get('?key=genres')).json)).toEqual(['values'])
+    })
+
+    it('índice ausente ou corrompido traz só values', async () => {
+      fs.rmSync(relationsFile())
+      expect(Object.keys((await get('?key=related')).json)).toEqual(['values'])
+      fs.writeFileSync(relationsFile(), '{quebrado')
+      expect(Object.keys((await get('?key=related')).json)).toEqual(['values'])
+    })
+  })
 })

@@ -14,6 +14,7 @@ import {
   isReadonlyProperty,
   LIST_PROPERTY_TYPES,
   lookupChosenColors,
+  lookupRelationFolder,
   lookupSelectOptions,
   normalizePropertyValue,
   resolvePropertyType,
@@ -26,7 +27,7 @@ import { chipColor, type ChosenColors } from '@/lib/property-color'
 // Wikilink de imagem: `[[pasta/img.png]]` ou `[[img.png|alias]]`.
 const IMAGE_WIKILINK_RE = /^\[\[(.+\.(?:png|jpe?g|gif|webp|svg|avif))(?:\|[^\]]*)?\]\]$/i
 // Caminho de imagem solto (sem colchetes), terminado numa extensão de imagem.
-const IMAGE_PATH_RE = /^.+\.(?:png|jpe?g|gif|webp|svg|avif)$/i
+export const IMAGE_PATH_RE = /^.+\.(?:png|jpe?g|gif|webp|svg|avif)$/i
 
 // Valor que é, inteiro, uma URL http(s). O Obsidian não tem tipo "URL": uma
 // propriedade de texto cujo valor é uma URL só aparece como link clicável.
@@ -187,6 +188,8 @@ export function toPageProperty(key: string, raw: unknown, ctx: PropertyRenderCon
     type === 'text' &&
     lookupSelectOptions(ctx.config, key) !== undefined &&
     (value === null || (typeof value === 'string' && !LINE_BREAK_RE.test(value)))
+  // Lista que cita notas de uma pasta (`relation` no config): só em multitext sem mismatch.
+  const relation = !mismatch && type === 'multitext' && lookupRelationFolder(ctx.config, key) !== undefined
   const chosenMap = select || LIST_PROPERTY_TYPES.has(type) ? lookupChosenColors(ctx.config, key) : undefined
   const chosen = chosenMap && Object.fromEntries(chosenMap)
   const row: PageProperty = {
@@ -198,6 +201,7 @@ export function toPageProperty(key: string, raw: unknown, ctx: PropertyRenderCon
   if (mismatch) row.mismatch = true
   if (select) row.select = true
   if (chosen) row.colors = chosen
+  if (relation) row.relation = true
   return row
 }
 
@@ -217,7 +221,7 @@ export function buildPageProperties(
 
 // Ordem pt-BR; o desempate por unidade de código deixa a ordem total e estável
 // (o localeCompare dá 0 para formas canônicas equivalentes, como NFC e NFD).
-function compareText(a: string, b: string): number {
+export function compareText(a: string, b: string): number {
   return a.localeCompare(b, 'pt-BR') || (a < b ? -1 : a > b ? 1 : 0)
 }
 

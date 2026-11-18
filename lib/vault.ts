@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import type { PageMeta, BuildGraph, PageSummary } from '@/builder/types'
+import type { PageMeta, BuildGraph, PageSummary, RelationCandidate, RelationEntry } from '@/builder/types'
 import type { TreeNode } from '@/lib/vault-tree'
 
 // Calculado na chamada (e não no carregamento do módulo) para que testes possam trocar o cwd.
@@ -112,6 +112,30 @@ export function findHomePage(slug: string, homePageTitle: string): PageMeta | nu
   if (found) return getPageData(slug, found.path.split('/'))
   if (pages.length > 0) return getPageData(slug, pages[0].path.split('/'))
   return null
+}
+
+// Candidatos e itens resolvidos de uma chave de relação; null sem índice para a chave.
+export function getPropertyRelation(slug: string, key: string): RelationEntry | null {
+  const safe = sanitizeSlug(slug)
+  if (!safe) return null
+  try {
+    const raw: unknown = JSON.parse(fs.readFileSync(path.join(dataRoot(), safe, 'property-relations.json'), 'utf-8'))
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || !Object.hasOwn(raw, key)) return null
+    const entry = (raw as Record<string, unknown>)[key]
+    if (typeof entry !== 'object' || entry === null) return null
+    const { candidates, resolved } = entry as { candidates?: unknown; resolved?: unknown }
+    if (!Array.isArray(candidates) || typeof resolved !== 'object' || resolved === null || Array.isArray(resolved)) return null
+    return {
+      candidates: candidates.filter(
+        (c): c is RelationCandidate =>
+          typeof c === 'object' && c !== null &&
+          typeof c.link === 'string' && typeof c.label === 'string' && typeof c.path === 'string',
+      ).map(c => ({ link: c.link, label: c.label, path: c.path })),
+      resolved: Object.fromEntries(Object.entries(resolved).filter(([, v]) => typeof v === 'string')) as Record<string, string>,
+    }
+  } catch {
+    return null
+  }
 }
 
 // Índice de valores das propriedades de lista (property-values.json). Ausente, ilegível ou

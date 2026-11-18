@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { wikilinkLabel, itemLabel } from '@/lib/wikilink-label'
+import { wikilinkLabel, wikilinkTarget, itemLabel } from '@/lib/wikilink-label'
 import { LinkResolver } from '@/builder/link-resolver'
 import { toPageProperty, type PropertyRenderContext } from '@/builder/plugins/properties'
 import { EMPTY_PROPERTY_CONFIG } from '@/builder/property-types'
@@ -16,6 +16,22 @@ const FIXOS = [
   '[[Nota|]]', '[[Nota\\|Apelido]]', '[[Nota\\#Seção]]',
   'RPG', '', 'ver [[Nota]]', '[[A]] [[B]]', '[[A]]x', '[[]]', '[[|x]]', '[[#]]', '[[ # | ]]',
 ]
+
+describe('wikilinkTarget', () => {
+  it('devolve o título do link, sem alias nem seção', () => {
+    expect(wikilinkTarget('[[X|a]]')).toBe('X')
+    expect(wikilinkTarget('[[X#s]]')).toBe('X')
+    expect(wikilinkTarget('  [[X]]  ')).toBe('X')
+    expect(wikilinkTarget('[[X\\|a]]')).toBe('X')
+    expect(wikilinkTarget('[[pasta/Nota|Apelido]]')).toBe('pasta/Nota')
+  })
+
+  it('devolve null sem título ou quando o item não é, inteiro, um wikilink', () => {
+    for (const s of ['[[#s]]', '[[|x]]', '[[]]', 'ver [[X]]', 'RPG', '', '[[A]] [[B]]']) {
+      expect(wikilinkTarget(s), JSON.stringify(s)).toBeNull()
+    }
+  })
+})
 
 describe('wikilinkLabel', () => {
   it('devolve o nome mostrado para um wikilink inteiro', () => {
@@ -62,6 +78,7 @@ describe('wikilinkLabel', () => {
       const html = resolver.replaceWikilinksEscaped(s.trim(), 'my-vault')
       const whole = /^<(a|span)\b[^>]*>([^<]*)<\/\1>$/.exec(html)
       const label = wikilinkLabel(s)
+      if (wikilinkTarget(s) !== null) expect(label, JSON.stringify(s)).not.toBeNull()
       expect(label !== null, JSON.stringify(s)).toBe(whole !== null)
       if (whole) expect(label, JSON.stringify(s)).toBe(decodeEntities(whole[2]))
     }

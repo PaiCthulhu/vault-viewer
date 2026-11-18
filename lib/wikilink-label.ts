@@ -7,6 +7,13 @@ const WIKILINK = /^\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]$/
 // Barra invertida final (pipe escapado em tabelas), com espaços depois dela.
 const TRAILING_BACKSLASH = /\\\s*$/
 
+/** O título do link (a nota para onde ele aponta), ou null sem título ou quando o item não é, inteiro, um wikilink. */
+export function wikilinkTarget(item: string): string | null {
+  const m = WIKILINK.exec(item.trim())
+  if (!m) return null
+  return (m[1] ?? '').replace(TRAILING_BACKSLASH, '').trim() || null
+}
+
 /** O texto do link, ou null quando o item não é, inteiro, um wikilink válido. */
 export function wikilinkLabel(item: string): string | null {
   const m = WIKILINK.exec(item.trim())

@@ -323,3 +323,44 @@ describe('buildVault — seleção única e cores escolhidas', () => {
     )
   })
 })
+
+describe('buildVault — relação: índice de candidatos', () => {
+  it('lista só as notas listadas da pasta e resolve os itens usados', async () => {
+    write('.vaultwright/properties.json', JSON.stringify({
+      version: 1, properties: { related: { relation: 'Games' }, rel2: { relation: '_comments' } },
+    }))
+    write('.viewerignore', 'Games/Hidden/\n')
+    write('Games/Alpha.md', 'alfa\n')
+    write('Games/Sub/Beta.md', 'beta\n')
+    write('Games/Hidden/Secret.md', 'segredo\n')
+    write('Games/Board.canvas', '{"nodes":[],"edges":[]}')
+    write('Games/Tab.md', '---\nnote_type: tab\nparent: "[[Games/Alpha]]"\n---\naba\n')
+    write('_comments/Games/Alpha/c1.md', '---\nnote_type: comment\nparent: "[[Games/Alpha]]"\nauthor: ana\n---\noi\n')
+    write('Notes/Outside.md', 'fora\n')
+    write('Notes/My Note.md', '---\nrelated: ["[[Alpha]]", "[[Outside]]"]\n---\ncorpo\n')
+    const warns: string[] = []
+    vi.spyOn(console, 'warn').mockImplementation((m: string) => { warns.push(String(m)) })
+    const out = await build()
+    expect(read(out, 'property-relations.json')).toStrictEqual({
+      related: {
+        candidates: [
+          { link: '[[Alpha]]', label: 'Alpha', path: 'Games/Alpha' },
+          { link: '[[Beta]]', label: 'Beta', path: 'Games/Sub/Beta' },
+        ],
+        resolved: { '[[Alpha]]': 'Games/Alpha' },
+      },
+    })
+    const rows = read(out, 'pages/Notes/My Note.json').properties as PageProperty[]
+    expect(rows.find(r => r.key === 'related')?.relation).toBe(true)
+    // `rel2` aponta para uma pasta sem nota listada: só o aviso.
+    expect(warns.filter(w => w.includes('"rel2"'))).toHaveLength(1)
+  })
+
+  it('vault sem .vaultwright grava {} e linhas sem a chave relation', async () => {
+    fs.rmSync(path.join(TMP, 'vault', '.vaultwright'), { recursive: true })
+    const out = await build()
+    expect(fs.readFileSync(path.join(out, 'v', 'property-relations.json'), 'utf-8')).toBe('{}')
+    const rows = read(out, 'pages/Notes/Game.json').properties as PageProperty[]
+    expect(rows.every(r => !('relation' in r))).toBe(true)
+  })
+})

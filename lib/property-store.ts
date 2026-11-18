@@ -127,7 +127,7 @@ async function readConfigFile(vaultPath: string, rel: string): Promise<string | 
  * nunca lança, um erro de leitura não falha aberto: é `PropertyError` 503.
  */
 export async function readPropertyConfig(vaultPath: string): Promise<PropertyConfig> {
-  const config: PropertyConfig = { types: new Map(), readonly: new Set(), select: new Map(), colors: new Map() }
+  const config: PropertyConfig = { types: new Map(), readonly: new Set(), select: new Map(), colors: new Map(), relation: new Map() }
 
   const typesText = await readConfigFile(vaultPath, OBSIDIAN_TYPES_FILE)
   if (typesText !== null) {

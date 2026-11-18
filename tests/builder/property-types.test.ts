@@ -10,7 +10,9 @@ import {
   isReadonlyProperty,
   loadPropertyConfig,
   lookupChosenColors,
+  isValidRelationFolder,
   lookupPropertyType,
+  lookupRelationFolder,
   lookupSelectOptions,
   normalizePropertyValue,
   parseObsidianTypes,
@@ -19,6 +21,7 @@ import {
   toJsonSafe,
   type PropertyConfig,
 } from '../../builder/property-types'
+import { safePagePath } from '@/lib/pending-page'
 
 const d = (y: number, m: number, day: number, h = 0, mi = 0, s = 0) =>
   new Date(Date.UTC(y, m - 1, day, h, mi, s))
@@ -56,6 +59,7 @@ describe('parseObsidianTypes', () => {
       readonly: new Set(),
       select: new Map(),
       colors: new Map(),
+      relation: new Map(),
     }
     expect(lookupPropertyType(cfg, 'constructor')).toBe('number')
     expect(lookupPropertyType(EMPTY_PROPERTY_CONFIG, 'toString')).toBeUndefined()
@@ -264,6 +268,7 @@ describe('busca de chave', () => {
       readonly: new Set(),
       select: new Map(),
       colors: new Map(),
+      relation: new Map(),
     }
     expect(lookupPropertyType(cfg, 'rating')).toBe('text')
     expect(lookupPropertyType(cfg, 'RATING')).toBe('number')
@@ -420,5 +425,60 @@ describe('objetos', () => {
     const r = toJsonSafe(JSON.parse('{"__proto__":{"x":1}}')) as object
     expect(Object.hasOwn(r, '__proto__')).toBe(true)
     expect(({} as Record<string, unknown>).x).toBeUndefined()
+  })
+})
+
+describe('relation e opções de select inválidas', () => {
+  const parse = (settings: unknown) => {
+    const warns: string[] = []
+    const cfg = parseVaultwrightProperties(
+      JSON.stringify({ version: 1, properties: { related: settings } }),
+      (m) => warns.push(m),
+    )
+    return { cfg: cfg!, warns }
+  }
+
+  it('apara e tira as / do fim', () => {
+    const { cfg, warns } = parse({ relation: ' Games/Sub/ ' })
+    expect(cfg.relation.get('related')).toBe('Games/Sub')
+    expect(warns).toEqual([])
+  })
+
+  it.each([5, null, ['Games'], '', '   ', '/', '/Games', 'C:/Games', '../x', 'a/../b', 'a\\b', 'a|b', '.hidden', 'a//b', 'a/\u0001'])(
+    'relation %j fica fora, com um aviso',
+    (bad) => {
+      const { cfg, warns } = parse({ relation: bad, readonly: true, colors: { a: 'red' } })
+      expect(cfg.relation.has('related')).toBe(false)
+      expect(warns).toHaveLength(1)
+      expect(warns[0].startsWith('.vaultwright/properties.json: "related": ')).toBe(true)
+      expect(warns[0].endsWith('; ignorado')).toBe(true)
+      expect(cfg.readonly.has('related')).toBe(true)
+      expect(cfg.colors.get('related')?.get('a')).toBe('red')
+    },
+  )
+
+  it('lookupRelationFolder acha sem caixa e aceita __proto__', () => {
+    const { cfg } = parse({ relation: 'Games' })
+    const config: PropertyConfig = { ...EMPTY_PROPERTY_CONFIG, relation: cfg.relation }
+    expect(lookupRelationFolder(config, 'RELATED')).toBe('Games')
+    expect(lookupRelationFolder(config, 'outra')).toBeUndefined()
+    const proto: PropertyConfig = { ...EMPTY_PROPERTY_CONFIG, relation: new Map([['__proto__', 'X']]) }
+    expect(lookupRelationFolder(proto, '__proto__')).toBe('X')
+  })
+
+  it('isValidRelationFolder == safePagePath', () => {
+    const sample = ['5', '', '/Games', 'C:/Games', '../x', 'a/../b', 'a\\b', 'a|b', '.hidden', 'a//b',
+      'a/\u0001', 'Games', 'Games/Sub', '_comments', 'a b/ç']
+    for (const s of sample) expect(isValidRelationFolder(s)).toBe(safePagePath(s))
+  })
+
+  it('descarta opção de select com quebra ou longa demais', () => {
+    const { cfg, warns } = parse({
+      select: ['todo', 'a\nb', 'c\u2028d', 'e\u0085f', 'x'.repeat(10_001), 'y'.repeat(10_000), 'done', 'ok\n'],
+    })
+    expect(cfg.select.get('related')).toEqual(['todo', 'y'.repeat(10_000), 'done', 'ok'])
+    expect(warns).toHaveLength(4)
+    expect(warns.filter((w) => w.includes('opção de select com quebra de linha'))).toHaveLength(3)
+    expect(warns.filter((w) => w.includes('opção de select longa demais'))).toHaveLength(1)
   })
 })

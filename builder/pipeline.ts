@@ -15,6 +15,7 @@ import { applyObsidianCompat } from './plugins/obsidian-compat'
 import { renderCanvas, canvasTextSources } from './plugins/canvas'
 import { buildPageProperties, collectPropertyValues, PROPERTIES_MARKER, type PropertyRenderContext } from './plugins/properties'
 import { loadPropertyConfig } from './property-types'
+import { collectPropertyRelations } from './property-relations'
 import { executeDQL, executeDataviewJS } from './plugins/dataview'
 import { renderMarkdown } from './markdown'
 import { buildGraph } from './graph-builder'
@@ -343,11 +344,14 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // Páginas de notas-filhas, pelo objeto: um canvas com o mesmo caminho de uma filha
   // (`X.md` e `X.canvas`) continua listado.
   const hiddenPages = new Set<PageMeta>()
+  // Notas `.md` listadas (sem abas, comentários nem o que o .viewerignore esconde): os candidatos das relações.
+  const listedNotes: { path: string; title: string }[] = []
   for (let i = 0; i < files.length; i++) {
     if (families.noPage.has(files[i].relativePath)) continue
     process.stdout.write(`\r[${vault.slug}] Processando ${i + 1}/${files.length}: ${files[i].title.slice(0, 40).padEnd(40)}`)
     const page = rendered.get(i) ?? await renderPage(i)
     if (families.hidden.has(page.path)) hiddenPages.add(page)
+    else listedNotes.push({ path: page.path, title: files[i].title })
     pages.push(page)
   }
 
@@ -413,12 +417,13 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // Índice dos valores das propriedades de lista, das páginas gravadas: abas entram;
   // comentários e o resto de `_comments/` não, porque não viram página.
   const propertyValues = collectPropertyValues(pages, propertyCtx.config)
+  const propertyRelations = collectPropertyRelations(pages, listedNotes, propertyCtx.config, linkResolver)
   const builtAt = new Date().toISOString()
   writeOutput(
     vault.slug, pages, graph,
     { pageCount: pages.length, folderCount, builtAt, startedAt },
     opts.dataRoot,
-    { assets: imageHandler.assets(), alreadyWritten, summaries: listedSummaries, propertyValues },
+    { assets: imageHandler.assets(), alreadyWritten, summaries: listedSummaries, propertyValues, propertyRelations },
   )
 
   console.log(`[${vault.slug}] Build concluído: ${pages.length} páginas, ${folderCount} pastas, ${graph.edges.length} edges`)

@@ -37,6 +37,21 @@ export interface PageProperty {
   select?: true
   /** Cores escolhidas por valor (`colors` no `.vaultwright`), em linha select ou de lista. */
   colors?: Record<string, ChipColor>
+  /** Lista que cita notas de uma pasta (`relation` no `.vaultwright`): o editor oferece as notas. */
+  relation?: true
+}
+
+/** Nota que uma lista de relação pode citar: o link que o editor grava e o nome que mostra. */
+export interface RelationCandidate {
+  link: string  // `[[título]]`, ou `[[caminho]]` quando o título não leva à nota
+  label: string // o que a leitura mostra para o link
+  path: string  // caminho da nota no vault, sem .md
+}
+
+/** Índice de uma chave de relação: as notas da pasta e o que cada item usado resolve. */
+export interface RelationEntry {
+  candidates: RelationCandidate[]
+  resolved: Record<string, string> // item usado → caminho do candidato
 }
 
 export interface PageComment {

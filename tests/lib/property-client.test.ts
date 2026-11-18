@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { PageProperty } from '../../builder/types'
 import {
-  fetchPropertyValues, isPageProperty, patchProperty, propertyErrorKey, PROPERTY_ERROR_KEYS,
+  fetchPropertyOptions, fetchPropertyValues, isPageProperty, patchProperty, propertyErrorKey, PROPERTY_ERROR_KEYS,
 } from '../../lib/property-client'
 import { IMAGE_VALUE_ERROR, TYPE_CHANGE_ERROR } from '../../lib/property-messages'
 import { en } from '../../lib/i18n/en'
@@ -138,6 +138,30 @@ describe('fetchPropertyValues', () => {
     expect(await fetchPropertyValues('v', 'k')).toBeNull()
     mockFetch(0, null, { type: 'opaqueredirect' })
     expect(await fetchPropertyValues('v', 'k')).toBeNull()
+  })
+})
+
+describe('fetchPropertyOptions', () => {
+  it('sem relation devolve relation null', async () => {
+    mockFetch(200, { values: ['a'] })
+    expect(await fetchPropertyOptions('v', 'k')).toEqual({ values: ['a'], relation: null })
+  })
+  it('com relation filtra candidato malformado e resolved não texto', async () => {
+    mockFetch(200, {
+      values: [],
+      relation: {
+        candidates: [{ link: '[[A]]', label: 'A', path: 'G/A' }, { link: '[[B]]', label: 'B' }, null],
+        resolved: { '[[a|x]]': 'G/A', '[[b]]': 5 },
+      },
+    })
+    expect(await fetchPropertyOptions('v', 'k')).toEqual({
+      values: [],
+      relation: { candidates: [{ link: '[[A]]', label: 'A', path: 'G/A' }], resolved: { '[[a|x]]': 'G/A' } },
+    })
+  })
+  it('500 dá null', async () => {
+    mockFetch(500, { error: 'x' })
+    expect(await fetchPropertyOptions('v', 'k')).toBeNull()
   })
 })
 

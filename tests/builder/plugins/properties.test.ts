@@ -679,3 +679,46 @@ describe('collectPropertyValues — select', () => {
     expect(collectPropertyValues(pages)).toStrictEqual({ genres: ['a', 'b'] })
   })
 })
+
+describe('toPageProperty — relation', () => {
+  const rel = (extra: Partial<PropertyConfig> = {}): PropertyConfig => ({
+    ...EMPTY_PROPERTY_CONFIG,
+    relation: new Map([['related', 'Games'], ['tags', 'Games']]),
+    ...extra,
+  })
+
+  it('lista com relation ganha relation: true', () => {
+    const plain = one('related', ['[[A]]', 'solto'])
+    expect(one('related', ['[[A]]', 'solto'], rel())).toStrictEqual({
+      key: 'related', type: 'multitext', value: ['[[A]]', 'solto'], html: plain.html, relation: true,
+    })
+  })
+
+  it.each([['texto', '[[A]]'], ['nulo', null], ['número', 5]])('%s: sem relation', (_n, raw) => {
+    expect(one('related', raw, rel())).toStrictEqual(one('related', raw))
+  })
+
+  it('mismatch: sem relation', () => {
+    const cfg = rel({ types: new Map([['related', 'multitext' as PropertyType]]) })
+    expect(one('related', '[[A]]', cfg).relation).toBeUndefined()
+  })
+
+  it('tags: sem relation', () => {
+    expect(one('tags', ['a'], rel()).relation).toBeUndefined()
+  })
+
+  it('relation + colors: chaves terminam em colors, relation', () => {
+    const cfg = rel({ colors: new Map([['related', new Map([['a', 'red' as const]])]]) })
+    expect(Object.keys(one('related', ['a'], cfg)).slice(-2)).toStrictEqual(['colors', 'relation'])
+  })
+
+  it('relation + readonly', () => {
+    const r = one('related', ['a'], rel({ readonly: new Set(['related']) }))
+    expect(r.locked).toBe('readonly')
+    expect(r.relation).toBe(true)
+  })
+
+  it('lista sem relation no config: sem a chave', () => {
+    expect(Object.keys(one('related', ['a']))).not.toContain('relation')
+  })
+})

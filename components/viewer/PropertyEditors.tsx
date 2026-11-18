@@ -2,8 +2,12 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type Ref } from 'react'
 import { useI18n } from '@/components/i18n/I18nProvider'
-import { fetchPropertyValues } from '@/lib/property-client'
+import type { RelationEntry } from '@/builder/types'
+import { fetchPropertyOptions, fetchPropertyValues } from '@/lib/property-client'
 import { chipColor, type ChosenColors } from '@/lib/property-color'
+import {
+  candidateOf, relationCreate, relationEnterPick, relationExclude, removeHints,
+} from '@/lib/property-relation'
 import { itemLabel } from '@/lib/wikilink-label'
 import {
   MAX_PROPERTY_TEXT, enterPick, menuEntries, menuModel, sameValue,
@@ -113,7 +117,7 @@ const keepFocus = (e: MouseEvent) => e.preventDefault()
 // Menu de opções (lista e seleção única): "Carregando", as sugestões, a linha "Mais n" e o
 // "Criar". Só desenha: o estado (texto, opção ativa, itens) é de quem o usa. `active` é o
 // índice em [sugestões..., "Criar"], o mesmo das setas e do Enter; `onPick` recebe o valor.
-export function OptionMenu({ id, label, menuRef, loading, model, active, optionId, onPick, propKey, colors }: {
+export function OptionMenu({ id, label, menuRef, loading, model, active, optionId, onPick, propKey, colors, createNote }: {
   id: string
   label: string
   menuRef?: Ref<HTMLUListElement>
@@ -124,18 +128,23 @@ export function OptionMenu({ id, label, menuRef, loading, model, active, optionI
   onPick(value: string): void
   propKey: string
   colors?: ChosenColors
+  // Relação: o "Criar" é uma nota nova (`[[nome]]`), e o chip mostra o nome, não o `[[...]]`.
+  createNote?: boolean
 }) {
   const { t } = useI18n()
   // `i` é o índice em [sugestões..., "Criar"].
   function renderOption(value: string, create: boolean, i: number) {
     const chip = (
       <span className="vault-prop-chip" data-color={chipColor(propKey, value, colors)}>
-        {create ? value : itemLabel(value)}
+        {create && !createNote ? value : itemLabel(value)}
       </span>
     )
     // O "Criar" mostra o texto digitado cru (o chip é o que ele vai ser; o nome só aparece
     // depois de criado). O modelo da frase vem sem variáveis e é partido em `{value}`.
-    const [before, after = ''] = create ? t('properties.edit.create').split('{value}') : []
+    // Em relação, o modelo é o de "Criar nota {name}".
+    const [before, after = ''] = create
+      ? t(createNote ? 'properties.edit.createNote' : 'properties.edit.create').split(createNote ? '{name}' : '{value}')
+      : []
     return (
       <li
         key={(create ? '+' : '=') + value}
@@ -178,10 +187,12 @@ export function OptionMenu({ id, label, menuRef, loading, model, active, optionI
 // Fecha uma vez só, como o ScalarEditor. Sair (o foco vai para fora do editor) sem mudar os
 // itens cancela; o Enter com o campo vazio entrega os itens ao pai, que compara com os de
 // antes (fecha sem chamada, ou confirma a troca de um valor fora do tipo).
-export function ListEditor({ propKey, slug, initial, label, colors, onCommit, onCancel }: {
+export function ListEditor({ propKey, slug, initial, label, colors, relation, onCommit, onCancel }: {
   propKey: string
   slug: string
   colors?: ChosenColors
+  // Linha de relação: as sugestões são as notas da pasta e criar é `[[nome]]`.
+  relation?: boolean
   initial: string[]
   label: string
   onCommit(items: string[]): void
@@ -201,25 +212,38 @@ export function ListEditor({ propKey, slug, initial, label, colors, onCommit, on
   const [tooLong, setTooLong] = useState(false)
   // `undefined`: carregando; `null`: a busca falhou (sem sugestões, e criar continua).
   const [suggestions, setSuggestions] = useState<string[] | null | undefined>(undefined)
+  // O índice de relação (candidatos e o que cada item resolve); `null` sem relação ou sem índice.
+  const [rel, setRel] = useState<RelationEntry | null>(null)
 
   useEffect(() => {
     let alive = true
-    void fetchPropertyValues(slug, propKey).then(values => {
+    const done = (values: string[] | null, relationEntry: RelationEntry | null) => {
       if (!alive) return
       setSuggestions(values)
+      setRel(relationEntry)
       // As opções mudaram de lugar: a ativa apontaria para outra.
       setActive(-1)
-    })
+    }
+    if (relation) {
+      void fetchPropertyOptions(slug, propKey).then(o =>
+        done(o ? (o.relation?.candidates.map(c => c.link) ?? []) : null, o?.relation ?? null))
+    } else {
+      void fetchPropertyValues(slug, propKey).then(values => done(values, null))
+    }
     return () => {
       alive = false
     }
-  }, [slug, propKey])
+  }, [slug, propKey, relation])
 
   // Normalizadas uma vez por carga, não a cada tecla.
   const entries = useMemo(() => menuEntries(suggestions ?? []), [suggestions])
 
   const query = text.trim()
-  const model = menuModel(entries, text, { exclude: items, taken: items })
+  const baseModel = menuModel(entries, text, relation
+    ? { exclude: relationExclude(rel, items), taken: items }
+    : { exclude: items, taken: items })
+  // Na relação o "Criar" é a nota nova (`[[nome]]`), nunca o texto cru.
+  const model = relation ? { ...baseModel, create: relationCreate(text, rel, items) } : baseModel
   // Na ordem do menu, e o índice das setas: as sugestões, depois o "Criar".
   const options = model.create !== null ? [...model.suggested, model.create] : model.suggested
   const loading = suggestions === undefined
@@ -260,6 +284,9 @@ export function ListEditor({ propKey, slug, initial, label, colors, onCommit, on
     setActive(-1)
   }
 
+  // Dois chips de mesmo nome (`[[A]]` e `[[B|A]]`) não se distinguem pelo nome: o × leva uma dica.
+  const hints = removeHints(items, item => (relation && rel ? candidateOf(item, rel) : null) ?? item)
+
   return (
     <div
       className="vault-prop-multiselect"
@@ -290,7 +317,9 @@ export function ListEditor({ propKey, slug, initial, label, colors, onCommit, on
           <button
             type="button"
             className="vault-prop-chip-remove"
-            aria-label={t('properties.edit.remove', { value: itemLabel(item) })}
+            aria-label={hints[i] !== null
+              ? t('properties.edit.removeAt', { value: itemLabel(item), path: hints[i] })
+              : t('properties.edit.remove', { value: itemLabel(item) })}
             onMouseDown={keepFocus}
             onClick={() => {
               // Pelo teclado o foco estava no ×, que sai da tela: volta ao campo antes.
@@ -335,9 +364,16 @@ export function ListEditor({ propKey, slug, initial, label, colors, onCommit, on
             e.preventDefault()
             if (current >= 0) add(options[current])
             else if (query !== '') {
-              // Já entre os itens: não entra nada, só limpa o campo.
-              const pick = enterPick(entries, text, items)
-              add(pick.chosen ? '' : pick.value)
+              if (relation) {
+                // Nota já escolhida: só limpa o campo, como na lista comum. Nome que não serve
+                // (ou de uma nota da pasta, que o menu já mostra): nada entra e o texto fica.
+                const pick = relationEnterPick(entries, text, items, rel)
+                if (pick !== null) add('value' in pick ? pick.value : '')
+              } else {
+                // Já entre os itens: não entra nada, só limpa o campo.
+                const pick = enterPick(entries, text, items)
+                add(pick.chosen ? '' : pick.value)
+              }
             }
             else finish('enter')
           } else if (e.key === 'Backspace' && text === '' && items.length > 0) {
@@ -352,6 +388,7 @@ export function ListEditor({ propKey, slug, initial, label, colors, onCommit, on
         <OptionMenu
           id={menuId} label={label} menuRef={menuRef} loading={loading} model={model}
           active={current} optionId={optionId} onPick={add} propKey={propKey} colors={colors}
+          createNote={relation}
         />
       ) : null}
     </div>

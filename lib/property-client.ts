@@ -1,7 +1,7 @@
 // Chamadas do navegador à API de propriedades (`/api/vault/<slug>/properties` e
 // `/property-values`). Cada uma devolve o resultado ou a chave i18n de um erro curto.
 // Só tipos de `builder/`: os módulos de valor de lá puxam `node:fs`.
-import type { PageProperty, PropertyValue } from '@/builder/types'
+import type { PageProperty, PropertyValue, RelationEntry } from '@/builder/types'
 import { IMAGE_VALUE_ERROR, TYPE_CHANGE_ERROR } from '@/lib/property-messages'
 
 const REQUEST_TIMEOUT_MS = 30_000
@@ -112,12 +112,46 @@ export async function patchProperty(slug: string, patch: PropertyPatch): Promise
   return fail
 }
 
-// Valores já usados numa propriedade de lista, para sugerir. `null` em qualquer falha.
-export async function fetchPropertyValues(slug: string, key: string): Promise<string[] | null> {
+// O índice de relação da resposta, só com o que tem forma certa; null quando ausente.
+function parseRelation(v: unknown): RelationEntry | null {
+  if (typeof v !== 'object' || v === null) return null
+  const r = v as Record<string, unknown>
+  const candidates = Array.isArray(r.candidates)
+    ? r.candidates.flatMap(c => {
+        if (typeof c !== 'object' || c === null) return []
+        const { link, label, path } = c as Record<string, unknown>
+        return typeof link === 'string' && typeof label === 'string' && typeof path === 'string'
+          ? [{ link, label, path }]
+          : []
+      })
+    : []
+  const resolved: Record<string, string> = {}
+  if (typeof r.resolved === 'object' && r.resolved !== null && !Array.isArray(r.resolved)) {
+    for (const [k, p] of Object.entries(r.resolved)) {
+      // defineProperty: `__proto__` é só uma chave.
+      if (typeof p === 'string') Object.defineProperty(resolved, k, { value: p, enumerable: true, writable: true, configurable: true })
+    }
+  }
+  return { candidates, resolved }
+}
+
+// Valores já usados numa propriedade de lista, para sugerir, e o índice de relação quando a
+// chave é uma. `null` em qualquer falha.
+export async function fetchPropertyOptions(
+  slug: string, key: string,
+): Promise<{ values: string[]; relation: RelationEntry | null } | null> {
   const { status, data } = await request(
     '/api/vault/' + encodeURIComponent(slug) + '/property-values?key=' + encodeURIComponent(key),
     {}, VALUES_TIMEOUT_MS,
   )
   if (status !== 200 || !data || !Array.isArray(data.values)) return null
-  return data.values.filter((v): v is string => typeof v === 'string')
+  return {
+    values: data.values.filter((v): v is string => typeof v === 'string'),
+    relation: parseRelation(data.relation),
+  }
+}
+
+// Valores já usados numa propriedade de lista, para sugerir. `null` em qualquer falha.
+export async function fetchPropertyValues(slug: string, key: string): Promise<string[] | null> {
+  return (await fetchPropertyOptions(slug, key))?.values ?? null
 }

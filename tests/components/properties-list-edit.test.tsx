@@ -1063,4 +1063,15 @@ describe('cor escolhida no editor de lista', () => {
     const chips = Array.from(rowOf(container, 'genres').querySelectorAll<HTMLElement>('.vault-prop-val .vault-prop-chip'))
     expect(chips.map(c => [c.textContent, c.dataset.color])).toEqual([['RPG', 'purple'], ['Zed', 'green']])
   })
+
+  it('numa lista comum, itens de mesmo nome ganham × diferentes; os de nome único mantêm "Remover <nome>"', async () => {
+    const { container } = render(view([prop('refs', ['[[A]]', '[[B|A]]', 'RPG'])]))
+    await open(container, 'refs')
+    const labels = Array.from(editorOf(container)!.querySelectorAll('button.vault-prop-chip-remove'))
+      .map(b => b.getAttribute('aria-label'))
+    expect(labels[0]).not.toBe(labels[1])
+    expect(labels[0]!.startsWith('Remover A')).toBe(true)
+    expect(labels[1]!.startsWith('Remover A')).toBe(true)
+    expect(labels[2]).toBe('Remover RPG')
+  })
 })

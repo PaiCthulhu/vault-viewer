@@ -350,7 +350,7 @@ export function PropertiesBlock({ properties, showLocks = true, edit }: {
       const base = mine.base
       value = (
         <ListEditor
-          propKey={p.key} slug={edit.slug} initial={initialItems(base)} colors={p.colors}
+          propKey={p.key} slug={edit.slug} initial={initialItems(base)} colors={p.colors} relation={p.relation}
           label={t('properties.edit.label', { key: p.key })}
           onCommit={items => commitList(base, items)} onCancel={cancel}
         />

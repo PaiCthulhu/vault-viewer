@@ -30,15 +30,18 @@ export interface PropertyConfig {
   select: Map<string, string[]>
   /** Cor escolhida por valor, por chave (`colors` do `.vaultwright`). */
   colors: Map<string, Map<string, ChipColor>>
+  /** Pasta das notas que uma lista pode citar, por chave (`relation` do `.vaultwright`), já normalizada. */
+  relation: Map<string, string>
 }
 
-export type VaultwrightConfig = Pick<PropertyConfig, 'readonly' | 'select' | 'colors'>
+export type VaultwrightConfig = Pick<PropertyConfig, 'readonly' | 'select' | 'colors' | 'relation'>
 
 export const EMPTY_PROPERTY_CONFIG: PropertyConfig = {
   types: new Map(),
   readonly: new Set(),
   select: new Map(),
   colors: new Map(),
+  relation: new Map(),
 }
 
 const OBSIDIAN_TYPES_FILE = '.obsidian/types.json'
@@ -73,6 +76,35 @@ function vwWarn(warn: (msg: string) => void, key: string, reason: string): void 
   warn(`${VAULTWRIGHT_FILE}: ${JSON.stringify(key)}: ${reason}; ignorado`)
 }
 
+// Limite de texto da API de propriedades (UTF-16): uma opção maior não poderia ser gravada.
+const MAX_SELECT_OPTION = 10_000
+const SELECT_LINE_BREAK_RE = /[\r\n\u0085\u2028\u2029]/
+
+/** Mesma regra do `safePagePath` (lib/pending-page.ts); um teste mantém as duas iguais. */
+export function isValidRelationFolder(p: string): boolean {
+  if (!p || p.includes('\\')) return false
+  if (/[<>:"|?*\x00-\x1f]/.test(p)) return false
+  return p.split('/').every((seg) => seg !== '' && !seg.startsWith('.'))
+}
+
+/** `relation` de uma chave: a pasta normalizada, ou undefined (com aviso) quando inválida. */
+function parseRelation(key: string, raw: unknown, warn: (msg: string) => void): string | undefined {
+  if (typeof raw !== 'string') {
+    vwWarn(warn, key, 'relation deve ser um texto')
+    return undefined
+  }
+  const folder = raw.trim().replace(/\/+$/, '')
+  if (folder === '') {
+    vwWarn(warn, key, 'relation vazia')
+    return undefined
+  }
+  if (!isValidRelationFolder(folder)) {
+    vwWarn(warn, key, `pasta de relation inválida ${JSON.stringify(raw)}`)
+    return undefined
+  }
+  return folder
+}
+
 /** `select` de uma chave: undefined = a entrada inteira sai (com aviso). */
 function parseSelect(key: string, raw: unknown, warn: (msg: string) => void): string[] | undefined {
   if (!Array.isArray(raw) || !raw.every((x) => typeof x === 'string')) {
@@ -83,6 +115,8 @@ function parseSelect(key: string, raw: unknown, warn: (msg: string) => void): st
   for (const item of raw as string[]) {
     const t = item.trim()
     if (t === '') vwWarn(warn, key, 'opção de select vazia')
+    else if (SELECT_LINE_BREAK_RE.test(t)) vwWarn(warn, key, `opção de select com quebra de linha ${JSON.stringify(t)}`)
+    else if (t.length > MAX_SELECT_OPTION) vwWarn(warn, key, `opção de select longa demais (${t.length} unidades)`)
     else if (out.includes(t)) vwWarn(warn, key, `opção de select repetida ${JSON.stringify(t)}`)
     else out.push(t)
   }
@@ -121,7 +155,7 @@ export function parseVaultwrightProperties(
 ): VaultwrightConfig | null {
   const json = parseJson(text)
   if (!isPlainRecord(json) || json.version !== 1 || !isPlainRecord(json.properties)) return null
-  const out: VaultwrightConfig = { readonly: new Set(), select: new Map(), colors: new Map() }
+  const out: VaultwrightConfig = { readonly: new Set(), select: new Map(), colors: new Map(), relation: new Map() }
   for (const [key, settings] of Object.entries(json.properties)) {
     if (!isPlainRecord(settings)) continue
     if (settings.readonly === true) out.readonly.add(key)
@@ -132,6 +166,10 @@ export function parseVaultwrightProperties(
     if (Object.hasOwn(settings, 'colors')) {
       const colors = parseColors(key, settings.colors, warn)
       if (colors) out.colors.set(key, colors)
+    }
+    if (Object.hasOwn(settings, 'relation')) {
+      const relation = parseRelation(key, settings.relation, warn)
+      if (relation) out.relation.set(key, relation)
     }
   }
   return out
@@ -157,7 +195,9 @@ export function loadPropertyConfig(
   vaultPath: string,
   warn: (msg: string) => void = console.warn,
 ): PropertyConfig {
-  const config: PropertyConfig = { types: new Map(), readonly: new Set(), select: new Map(), colors: new Map() }
+  const config: PropertyConfig = {
+    types: new Map(), readonly: new Set(), select: new Map(), colors: new Map(), relation: new Map(),
+  }
 
   const typesText = readOptional(vaultPath, OBSIDIAN_TYPES_FILE, warn)
   if (typesText !== null) {
@@ -194,6 +234,10 @@ export function lookupSelectOptions(config: PropertyConfig, key: string): string
 
 export function lookupChosenColors(config: PropertyConfig, key: string): Map<string, ChipColor> | undefined {
   return lookupKey(config.colors, key)
+}
+
+export function lookupRelationFolder(config: PropertyConfig, key: string): string | undefined {
+  return lookupKey(config.relation, key)
 }
 
 export function isReadonlyProperty(config: PropertyConfig, key: string): boolean {
