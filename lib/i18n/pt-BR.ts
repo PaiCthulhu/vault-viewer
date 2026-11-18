@@ -84,7 +84,7 @@ export const ptBR: Record<string, string> = {
   'properties.edit.mismatch': 'O valor atual não é do tipo desta propriedade ({type}) e vai ser substituído.',
   'properties.edit.remove': 'Remover {value}',
   'properties.edit.listPlaceholder': 'Buscar ou criar…',
-  'properties.edit.create': 'Criar “{value}”',
+  'properties.edit.create': 'Criar {value}',
   'properties.edit.loading': 'Carregando…',
   'properties.edit.more': 'Mais {n}: digite para filtrar',
   'properties.type.text': 'Texto',

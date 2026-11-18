@@ -85,7 +85,7 @@ export const en: Record<string, string> = {
   'properties.edit.mismatch': "The current value doesn't match this property's type ({type}) and will be replaced.",
   'properties.edit.remove': 'Remove {value}',
   'properties.edit.listPlaceholder': 'Search or create…',
-  'properties.edit.create': 'Create “{value}”',
+  'properties.edit.create': 'Create {value}',
   'properties.edit.loading': 'Loading…',
   'properties.edit.more': '{n} more: type to narrow down',
   'properties.type.text': 'Text',

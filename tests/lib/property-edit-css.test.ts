@@ -44,3 +44,16 @@ describe('valor editável no toque', () => {
     expect(css).toMatch(/\.vault-properties \.vault-prop-input \{[^}]*border: 1px solid var\(--border\)/)
   })
 })
+
+describe('opção do menu de lista', () => {
+  it('o chip dentro da opção não tem margem', () => {
+    expect(css).toMatch(/\.vault-properties \.vault-prop-option \.vault-prop-chip \{[^}]*margin: 0/)
+  })
+
+  it('a opção ativa se destaca na linha, por cima do chip', () => {
+    const m = css.match(/\.vault-properties \.vault-prop-option\.is-active \{([^}]*)\}/)
+    expect(m).not.toBeNull()
+    expect(m![1]).toContain('var(--accent-bg)')
+    expect(m![1]).toContain('inset')
+  })
+})

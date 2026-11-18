@@ -266,7 +266,13 @@
 }
 /* O "Carregando…" e o "Mais n" são linhas do menu, não opções: apagadas e sem hover. */
 .vault-properties .vault-prop-option:not([aria-disabled="true"]):hover { background: var(--accent-bg); }
-.vault-properties .vault-prop-option.is-active { background: var(--accent-bg); }
+.vault-properties .vault-prop-option .vault-prop-chip { margin: 0; }
+/* O chip tem fundo próprio: o destaque da opção ativa é da linha (fundo e uma barra à esquerda),
+   que continua visível por cima do chip. */
+.vault-properties .vault-prop-option.is-active {
+  background: var(--accent-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
 .vault-properties .vault-prop-option[aria-disabled="true"] { cursor: default; color: var(--text-muted); }
 .vault-properties .vault-prop-option.is-more { font-size: 0.8rem; }
 /* O bloco corta o que passa da borda (overflow: hidden, para os cantos): com o menu

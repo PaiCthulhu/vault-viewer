@@ -193,6 +193,15 @@ describe('provisionalRow', () => {
     )
   })
 
+  it('item wikilink aparece pelo nome, com a cor do valor cru, e o valor segue cru', () => {
+    const r = provisionalRow(row('multitext', []), ['[[Notes/Other|Apelido]]', 'a'])
+    expect(r.html).toBe(
+      `<span class="vault-prop-chip" data-color="${propertyColor('k', '[[Notes/Other|Apelido]]')}">Apelido</span>` +
+        `<span class="vault-prop-chip" data-color="${propertyColor('k', 'a')}">a</span>`,
+    )
+    expect(r.value).toEqual(['[[Notes/Other|Apelido]]', 'a'])
+  })
+
   it('date e datetime saem em dd/MM/aaaa', () => {
     expect(provisionalRow(row('date', null), '2024-01-05').html).toBe('05/01/2024')
     expect(provisionalRow(row('datetime', null), '2024-01-05T10:30').html).toBe('05/01/2024 10:30')

@@ -5,6 +5,7 @@ import { useI18n } from '@/components/i18n/I18nProvider'
 import { normalizeForSearch } from '@/lib/gallery-search'
 import { fetchPropertyValues } from '@/lib/property-client'
 import { propertyColor } from '@/lib/property-color'
+import { itemLabel } from '@/lib/wikilink-label'
 import { MAX_PROPERTY_TEXT, sameValue, type ScalarEditorType } from '@/lib/property-edit'
 
 // Controles de edição do bloco Propriedades. Eles só coletam o que o usuário escolheu: o
@@ -160,20 +161,25 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
     }
   }, [slug, propKey])
 
-  // Normalizadas uma vez por carga, não a cada tecla.
+  // Normalizadas uma vez por carga, não a cada tecla. `label` é o texto que a leitura mostra
+  // (o nome de um link), e o filtro acha por ele e pelo cru.
   const normalized = useMemo(
-    () => (suggestions ?? []).map(value => ({ value, search: normalizeForSearch(value) })),
+    () => (suggestions ?? []).map(value => {
+      const label = itemLabel(value)
+      return { value, label, search: normalizeForSearch(value), labelSearch: normalizeForSearch(label) }
+    }),
     [suggestions],
   )
 
   const query = text.trim()
   const needle = normalizeForSearch(query)
-  const found = normalized.filter(s => !items.includes(s.value) && s.search.includes(needle))
-  // O valor igual ao digitado (ignorando caixa e acento) vem primeiro: com o limite, ele não
-  // pode ficar de fora do menu, onde o "Criar" também não aparece para ele.
+  const found = normalized.filter(s => !items.includes(s.value) && (s.search.includes(needle) || s.labelSearch.includes(needle)))
+  // O valor igual ao digitado (ignorando caixa e acento, pelo cru ou pelo nome) vem primeiro:
+  // com o limite, ele não pode ficar de fora do menu, onde o "Criar" também não aparece para ele.
+  const same = (s: { search: string; labelSearch: string }) => s.search === needle || s.labelSearch === needle
   const matches = needle === ''
     ? found
-    : [...found.filter(s => s.search === needle), ...found.filter(s => s.search !== needle)]
+    : [...found.filter(same), ...found.filter(s => !same(s))]
   // As que ficaram de fora do limite: a linha "Mais n" no fim das sugestões, que não é opção
   // (fica fora de `options`, então as setas e o Enter nunca a pegam).
   const hidden = Math.max(0, matches.length - MAX_SUGGESTIONS)
@@ -223,11 +229,17 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
   // que passaria a ser sugerido a todo editor do vault: se já está entre os itens, não entra
   // nada (`''` limpa o campo); se é uma sugestão, entra a sugestão. O "Criar" fica nas setas,
   // para quem quer mesmo o valor sem acento. Não pega a primeira opção do menu: "RPG" não vira
-  // "RPG Tático".
+  // "RPG Tático". O nome de um link conta como o valor (o chip mostra o nome, então "nota a"
+  // é o link "[[Nota A]]"): a ordem é cru exato, nome exato, cru normalizado, nome normalizado,
+  // e o mais específico vence o mais frouxo.
   function enterValue(): string {
-    if (items.some(i => normalizeForSearch(i) === needle)) return ''
-    const exact = normalized.find(s => s.value === query)
-    return (exact ?? normalized.find(s => s.search === needle))?.value ?? query
+    if (items.some(i => normalizeForSearch(i) === needle || normalizeForSearch(itemLabel(i)) === needle)) return ''
+    return (
+      normalized.find(s => s.value === query) ??
+      normalized.find(s => s.label === query) ??
+      normalized.find(s => s.search === needle) ??
+      normalized.find(s => s.labelSearch === needle)
+    )?.value ?? query
   }
 
   // Pelo índice: um valor do disco pode ter item repetido.
@@ -238,6 +250,14 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
 
   // `i` é o índice em `options`, o mesmo das setas e do Enter.
   function renderOption(o: ListOption, i: number) {
+    const chip = (
+      <span className="vault-prop-chip" data-color={propertyColor(propKey, o.value)}>
+        {o.create ? o.value : itemLabel(o.value)}
+      </span>
+    )
+    // O "Criar" mostra o texto digitado cru (o chip é o que ele vai ser; o nome só aparece
+    // depois de criado). O modelo da frase vem sem variáveis e é partido em `{value}`.
+    const [before, after = ''] = o.create ? t('properties.edit.create').split('{value}') : []
     return (
       <li
         key={(o.create ? '+' : '=') + o.value}
@@ -248,7 +268,7 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
         onMouseDown={keepFocus}
         onClick={() => add(o.value)}
       >
-        {o.create ? t('properties.edit.create', { value: o.value }) : o.value}
+        {o.create ? <>{before}{chip}{after}</> : chip}
       </li>
     )
   }
@@ -279,11 +299,11 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
     >
       {items.map((item, i) => (
         <span key={i + '\u0000' + item} className="vault-prop-chip" data-color={propertyColor(propKey, item)}>
-          {item}
+          {itemLabel(item)}
           <button
             type="button"
             className="vault-prop-chip-remove"
-            aria-label={t('properties.edit.remove', { value: item })}
+            aria-label={t('properties.edit.remove', { value: itemLabel(item) })}
             onMouseDown={keepFocus}
             onClick={() => {
               // Pelo teclado o foco estava no ×, que sai da tela: volta ao campo antes.

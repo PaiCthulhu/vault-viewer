@@ -4,6 +4,7 @@
 import type { PageProperty, PropertyType, PropertyValue } from '@/builder/types'
 import { propertyColor } from '@/lib/property-color'
 import { decodeEntities } from '@/lib/preview'
+import { itemLabel } from '@/lib/wikilink-label'
 
 export const MAX_PROPERTY_TEXT = 10_000
 
@@ -182,7 +183,7 @@ function provisionalHtml(row: PageProperty, value: PropertyValue): string {
   if (Array.isArray(value)) {
     return value
       .map(i => String(i))
-      .map(i => `<span class="vault-prop-chip" data-color="${propertyColor(row.key, i)}">${escapeHtml(i)}</span>`)
+      .map(i => `<span class="vault-prop-chip" data-color="${propertyColor(row.key, i)}">${escapeHtml(itemLabel(i))}</span>`)
       .join('')
   }
   if (row.type === 'checkbox' && typeof value === 'boolean') {

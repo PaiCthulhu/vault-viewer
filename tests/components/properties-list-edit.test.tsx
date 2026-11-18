@@ -93,7 +93,7 @@ const editorOf = (el: HTMLElement) => el.querySelector<HTMLElement>('.vault-prop
 const inputOf = (el: HTMLElement) => el.querySelector<HTMLInputElement>('input.vault-prop-list-input')
 // O texto de cada chip do editor, sem o ×.
 const editorChips = (el: HTMLElement) =>
-  Array.from(editorOf(el)!.querySelectorAll('.vault-prop-chip')).map(c => c.firstChild!.textContent)
+  Array.from(editorOf(el)!.querySelectorAll(':scope > .vault-prop-chip')).map(c => c.firstChild!.textContent)
 // Os chips do valor parado (sem editor aberto).
 const shownChips = (el: HTMLElement, key: string) =>
   Array.from(rowOf(el, key).querySelectorAll('.vault-prop-val .vault-prop-chip')).map(c => c.textContent)
@@ -186,7 +186,7 @@ describe('PropertiesBlock com edição: listas', () => {
     expect(optionTexts(container)).toEqual(['Ação', 'Aventura'])
 
     typeIn(container, 'acao')
-    expect(optionTexts(container)).toEqual(['Ação', 'Criar “acao”'])
+    expect(optionTexts(container)).toEqual(['Ação', 'Criar acao'])
 
     // igual a uma sugestão ou a um item escolhido (depois de aparar): sem "Criar"
     typeIn(container, ' Aventura ')
@@ -260,14 +260,14 @@ describe('PropertiesBlock com edição: listas', () => {
     expect(inputOf(container)!.value).toBe('')
   })
 
-  it('setas até "Criar “acao”" e Enter criam "acao"', async () => {
+  it('setas até "Criar acao" e Enter criam "acao"', async () => {
     valuesReply = { status: 200, body: { values: ['Ação'] } }
     const { container } = render(view([GENRES]))
     await open(container, 'genres')
     typeIn(container, 'acao')
     press(container, 'ArrowDown')
     press(container, 'ArrowDown')
-    expect(optionsOf(container)[1].textContent).toBe('Criar “acao”')
+    expect(optionsOf(container)[1].textContent).toBe('Criar acao')
     press(container, 'Enter')
     expect(editorChips(container)).toEqual(['RPG', 'Indie', 'acao'])
   })
@@ -373,11 +373,148 @@ describe('PropertiesBlock com edição: listas', () => {
     expect(input.hasAttribute('aria-controls')).toBe(false)
   })
 
+  it('cada sugestão é um chip na cor de propertyColor, e o "Criar" mostra o texto digitado como chip na cor dele', async () => {
+    valuesReply = { status: 200, body: { values: ['Ação', 'Aventura'] } }
+    const { container } = render(view([GENRES]))
+    await open(container, 'genres')
+    for (const [i, v] of ['Ação', 'Aventura'].entries()) {
+      const chip = optionsOf(container)[i].querySelector<HTMLElement>('.vault-prop-chip')!
+      expect(chip.dataset.color).toBe(propertyColor('genres', v))
+      expect(chip.textContent).toBe(v)
+    }
+    typeIn(container, 'Novo')
+    const last = optionsOf(container).at(-1)!
+    expect(last.textContent).toBe('Criar Novo')
+    const chip = last.querySelector<HTMLElement>('.vault-prop-chip')!
+    expect(chip.textContent).toBe('Novo')
+    expect(chip.dataset.color).toBe(propertyColor('genres', 'Novo'))
+  })
+
+  it('"Criar" de um wikilink digitado mostra o texto cru', async () => {
+    valuesReply = { status: 200, body: { values: [] } }
+    const { container } = render(view([GENRES]))
+    await open(container, 'genres')
+    typeIn(container, '[[Nova]]')
+    expect(optionTexts(container)).toEqual(['Criar [[Nova]]'])
+    press(container, 'Enter')
+    expect(editorChips(container)).toEqual(['RPG', 'Indie', 'Nova'])
+  })
+
+  it('item wikilink aparece pelo nome nos chips, nas sugestões e no ×, e é gravado cru', async () => {
+    const RELATED = prop('related', ['[[Other]]', '[[Notes/Other|Apelido]]', '[[Other#Seção]]', '[[Missing]]', 'RPG', 'ver [[Other]]'])
+    valuesReply = { status: 200, body: { values: ['[[Notes/Third]]', '[[Fourth|Quarta]]'] } }
+    const { container } = render(view([RELATED]))
+    expect(shownChips(container, 'related')).toEqual(['Other', 'Apelido', 'Other', 'Missing', 'RPG', 'ver Other'])
+    await open(container, 'related')
+    expect(editorChips(container)).toEqual(['Other', 'Apelido', 'Other', 'Missing', 'RPG', 'ver [[Other]]'])
+    expect(removeButton(container, 'Apelido')).toBeTruthy()
+    expect(removeButton(container, 'Missing')).toBeTruthy()
+    expect(optionTexts(container)).toEqual(['Notes/Third', 'Quarta'])
+    // a cor vem do valor cru, não do nome mostrado
+    const colorOf = (el: Element) => el.querySelector<HTMLElement>('.vault-prop-chip')!.dataset.color
+    expect(colorOf(optionsOf(container)[1])).toBe(propertyColor('related', '[[Fourth|Quarta]]'))
+    const apelido = Array.from(editorOf(container)!.querySelectorAll<HTMLElement>('.vault-prop-chip'))
+      .find(c => c.textContent?.startsWith('Apelido'))!
+    expect(apelido.dataset.color).toBe(propertyColor('related', '[[Notes/Other|Apelido]]'))
+    fireEvent.click(optionsOf(container)[1])
+    fireEvent.click(removeButton(container, 'Missing'))
+    press(container, 'Enter')
+    expect(calls[0].body.value).toEqual(['[[Other]]', '[[Notes/Other|Apelido]]', '[[Other#Seção]]', 'RPG', 'ver [[Other]]', '[[Fourth|Quarta]]'])
+    await settle()
+    expect(shownChips(container, 'related')).toContain('Quarta')
+    expect(shownChips(container, 'related')).not.toContain('[[Fourth|Quarta]]')
+  })
+
+  it('o filtro acha pelo nome mostrado e pelo texto cru', async () => {
+    valuesReply = { status: 200, body: { values: ['[[Notes/Alpha|Primeiro]]', '[[Beta]]', 'Gama'] } }
+    const { container } = render(view([GENRES]))
+    await open(container, 'genres')
+    typeIn(container, 'prim')
+    expect(optionTexts(container)).toEqual(['Primeiro', 'Criar prim'])
+    typeIn(container, 'alpha')
+    expect(optionTexts(container)).toEqual(['Primeiro', 'Criar alpha'])
+    typeIn(container, '[[')
+    expect(optionTexts(container)).toEqual(['Primeiro', 'Beta', 'Criar [['])
+  })
+
+  it('Enter com o nome de um link em outra caixa escolhe o link, e não cria texto solto', async () => {
+    valuesReply = { status: 200, body: { values: ['[[Nota A]]', 'Nota Antiga'] } }
+    const { container } = render(view([GENRES]))
+    await open(container, 'genres')
+    create(container, 'nota a')
+    expect(editorChips(container).at(-1)).toBe('Nota A')
+    press(container, 'Enter')
+    expect(calls[0].body.value).toContain('[[Nota A]]')
+    expect(calls[0].body.value).not.toContain('nota a')
+  })
+
+  it('Enter com o nome de um link já escolhido não duplica, e limpa o campo', async () => {
+    valuesReply = { status: 200, body: { values: [] } }
+    const { container } = render(view([prop('related', ['[[Nota A]]'])]))
+    await open(container, 'related')
+    const before = editorChips(container)
+    create(container, 'NOTA A')
+    expect(editorChips(container)).toEqual(before)
+    expect(inputOf(container)!.value).toBe('')
+  })
+
+  it('Enter: cru exato, nome exato, cru normalizado e nome normalizado, nessa ordem; nome repetido pega o primeiro', async () => {
+    // Confere o valor CRU escolhido (o que seria gravado), não o texto do chip.
+    const run = async (values: string[], typed: string) => {
+      valuesReply = { status: 200, body: { values } }
+      const { container, unmount } = render(view([GENRES]))
+      await open(container, 'genres')
+      const before = calls.length
+      create(container, typed)
+      press(container, 'Enter') // campo vazio: salva
+      expect(calls).toHaveLength(before + 1)
+      const added = (calls.at(-1)!.body.value as string[]).slice(2)
+      unmount()
+      return added
+    }
+    // cru exato vence nome exato
+    expect(await run(['[[Nota A]]', 'Nota A'], 'Nota A')).toEqual(['Nota A'])
+    // nome exato vence cru normalizado
+    expect(await run(['nota a', '[[Nota A]]'], 'Nota A')).toEqual(['[[Nota A]]'])
+    // cru normalizado vence nome normalizado
+    expect(await run(['[[Nota A]]', 'nota a'], 'NOTA A')).toEqual(['nota a'])
+    // nome exato repetido: o primeiro
+    expect(await run(['[[Nota]]', '[[Nota|Nota]]'], 'Nota')).toEqual(['[[Nota]]'])
+    // nome repetido: o primeiro
+    expect(await run(['[[Nota]]', '[[Nota#Seção]]'], 'nota')).toEqual(['[[Nota]]'])
+  })
+
   describe('limite de 50 sugestões', () => {
     // 60 valores neutros, na ordem do índice.
     const MANY = Array.from({ length: 60 }, (_, i) => 'Tag ' + String(i).padStart(3, '0'))
     const MORE_10 = 'Mais 10: digite para filtrar'
     const lines = (el: HTMLElement) => Array.from(el.querySelectorAll('.vault-prop-menu li')).map(li => li.textContent)
+
+    it('a linha "Mais n" não tem chip', async () => {
+      valuesReply = { status: 200, body: { values: MANY } }
+      const { container } = render(view([GENRES]))
+      await open(container, 'genres')
+      const more = container.querySelector<HTMLElement>('.vault-prop-menu .is-more')!
+      expect(more).toBeTruthy()
+      expect(more.querySelector('.vault-prop-chip')).toBeNull()
+    })
+
+    it('durante a carga, o "Carregando…" não tem chip', async () => {
+      valuesReply = 'pending'
+      const { container } = render(view([GENRES]))
+      await open(container, 'genres')
+      const row = container.querySelector<HTMLElement>('.vault-prop-menu .is-loading')!
+      expect(row.querySelector('.vault-prop-chip')).toBeNull()
+    })
+
+    it('o link igual pelo nome vem primeiro, mesmo depois da 50ª', async () => {
+      const SIMILAR = Array.from({ length: 60 }, (_, i) => 'nota a ' + String(i).padStart(2, '0'))
+      valuesReply = { status: 200, body: { values: [...SIMILAR, '[[Nota A]]'] } }
+      const { container } = render(view([GENRES]))
+      await open(container, 'genres')
+      typeIn(container, 'nota a')
+      expect(optionTexts(container)[0]).toBe('Nota A')
+    })
     const moreOf = (el: HTMLElement) =>
       el.querySelector<HTMLElement>('.vault-prop-menu li[aria-disabled="true"]:not(.is-loading)')
     const activeOf = (el: HTMLElement) => {
@@ -411,8 +548,8 @@ describe('PropertiesBlock com edição: listas', () => {
       expect(more.id).toBe('')
 
       typeIn(container, 'tag')
-      expect(optionTexts(container)).toEqual([...MANY.slice(0, 50), 'Criar “tag”'])
-      expect(lines(container)).toEqual([...MANY.slice(0, 50), MORE_10, 'Criar “tag”'])
+      expect(optionTexts(container)).toEqual([...MANY.slice(0, 50), 'Criar tag'])
+      expect(lines(container)).toEqual([...MANY.slice(0, 50), MORE_10, 'Criar tag'])
     })
 
     it('as setas pulam a linha "Mais", e o Enter escolhe a opção que está ativa', async () => {
@@ -430,9 +567,9 @@ describe('PropertiesBlock com edição: listas', () => {
         seen.push(active.textContent!)
       }
       // as 50 sugestões, o "Criar" e de volta à primeira
-      expect(seen).toEqual([...MANY.slice(0, 50), 'Criar “tag”', MANY[0]])
+      expect(seen).toEqual([...MANY.slice(0, 50), 'Criar tag', MANY[0]])
       press(container, 'ArrowUp')
-      expect(activeOf(container)!.textContent).toBe('Criar “tag”')
+      expect(activeOf(container)!.textContent).toBe('Criar tag')
       press(container, 'ArrowUp')
       expect(activeOf(container)!.textContent).toBe(MANY[49])
       press(container, 'Enter')
@@ -452,7 +589,7 @@ describe('PropertiesBlock com edição: listas', () => {
       const { container } = render(view([GENRES]))
       await open(container, 'genres')
       typeIn(container, 'tag 01')
-      expect(optionTexts(container)).toEqual([...MANY.slice(10, 20), 'Criar “tag 01”'])
+      expect(optionTexts(container)).toEqual([...MANY.slice(10, 20), 'Criar tag 01'])
       expect(moreOf(container)).toBeNull()
       typeIn(container, '')
       expect(moreOf(container)!.textContent).toBe(MORE_10)
@@ -713,10 +850,10 @@ describe('PropertiesBlock com edição: listas', () => {
     expect(inputOf(container)!.getAttribute('aria-expanded')).toBe('true')
 
     typeIn(container, 'Ave')
-    expect(optionTexts(container)).toEqual(['Criar “Ave”'])
+    expect(optionTexts(container)).toEqual(['Criar Ave'])
     await respondGet({ status: 200, body: { values: ['Aventura'] } })
     expect(menuOf(container)!.textContent).not.toContain('Carregando…')
-    expect(optionTexts(container)).toEqual(['Aventura', 'Criar “Ave”'])
+    expect(optionTexts(container)).toEqual(['Aventura', 'Criar Ave'])
     press(container, 'ArrowDown')
     press(container, 'Enter')
     expect(editorChips(container)).toEqual(['RPG', 'Indie', 'Aventura'])
@@ -728,7 +865,7 @@ describe('PropertiesBlock com edição: listas', () => {
     await open(container, 'genres')
     expect(menuOf(container)).toBeNull()
     typeIn(container, 'Novo')
-    expect(optionTexts(container)).toEqual(['Criar “Novo”'])
+    expect(optionTexts(container)).toEqual(['Criar Novo'])
     press(container, 'Enter')
     expect(editorChips(container)).toEqual(['RPG', 'Indie', 'Novo'])
     press(container, 'Enter')
@@ -776,7 +913,7 @@ describe('PropertiesBlock com edição: listas', () => {
     expect(gets).toHaveLength(0)
 
     await open(container, 'related')
-    expect(editorChips(container)).toEqual(['[[Notes/Other]]', 'x'])
+    expect(editorChips(container)).toEqual(['Notes/Other', 'x'])
   })
 
   it('Enter com foco no valor parado abre o editor', async () => {
