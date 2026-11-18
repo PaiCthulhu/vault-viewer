@@ -10,6 +10,7 @@
   --vault-chip-purple: rgb(232 222 238);
   --vault-chip-pink: rgb(245 224 233);
   --vault-chip-red: rgb(255 226 221);
+  --vault-chip-default: rgb(238 238 236);
   margin: 0 0 1.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -109,6 +110,7 @@
   --vault-chip-purple: rgb(73 47 100);
   --vault-chip-pink: rgb(105 49 76);
   --vault-chip-red: rgb(110 54 48);
+  --vault-chip-default: rgb(58 58 58);
 }
 /* Item de uma propriedade de lista. A cor vem do builder (lib/property-color.ts):
    a mesma etiqueta tem sempre a mesma. A paleta é por tema (fundos opacos tipo
@@ -138,6 +140,9 @@
 .vault-prop-chip[data-color="purple"] { background: var(--vault-chip-purple); }
 .vault-prop-chip[data-color="pink"]   { background: var(--vault-chip-pink); }
 .vault-prop-chip[data-color="red"]    { background: var(--vault-chip-red); }
+/* `default` é a cor mais apagada (a "Default" do Notion), mais perto do fundo que o gray nos dois temas:
+   só existe como cor escolhida no .vaultwright, nunca sai do hash. */
+.vault-prop-chip[data-color="default"] { background: var(--vault-chip-default); }
 
 /* Edição no próprio bloco (quem edita o vault). A coluna de valor de uma linha
    editável empilha o valor, o "Salvando…", a confirmação e o erro. */

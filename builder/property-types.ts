@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { CHIP_COLORS, isChipColor, type ChipColor } from '../lib/property-color'
 import type { PropertyJson, PropertyType, PropertyValue } from './types'
 
 // Tipos de propriedade do frontmatter: configuração do vault, inferência e
@@ -25,11 +26,19 @@ export const LIST_PROPERTY_TYPES: ReadonlySet<PropertyType> = new Set<PropertyTy
 export interface PropertyConfig {
   types: Map<string, PropertyType>
   readonly: Set<string>
+  /** Opções de seleção única por chave (`select` do `.vaultwright`), na ordem do arquivo. */
+  select: Map<string, string[]>
+  /** Cor escolhida por valor, por chave (`colors` do `.vaultwright`). */
+  colors: Map<string, Map<string, ChipColor>>
 }
+
+export type VaultwrightConfig = Pick<PropertyConfig, 'readonly' | 'select' | 'colors'>
 
 export const EMPTY_PROPERTY_CONFIG: PropertyConfig = {
   types: new Map(),
   readonly: new Set(),
+  select: new Map(),
+  colors: new Map(),
 }
 
 const OBSIDIAN_TYPES_FILE = '.obsidian/types.json'
@@ -60,13 +69,70 @@ export function parseObsidianTypes(text: string): Map<string, PropertyType> | nu
   return out
 }
 
-/** Lê o `.vaultwright/properties.json`: as chaves com `readonly: true`. null = ilegível. */
-export function parseVaultwrightProperties(text: string): Set<string> | null {
+function vwWarn(warn: (msg: string) => void, key: string, reason: string): void {
+  warn(`${VAULTWRIGHT_FILE}: ${JSON.stringify(key)}: ${reason}; ignorado`)
+}
+
+/** `select` de uma chave: undefined = a entrada inteira sai (com aviso). */
+function parseSelect(key: string, raw: unknown, warn: (msg: string) => void): string[] | undefined {
+  if (!Array.isArray(raw) || !raw.every((x) => typeof x === 'string')) {
+    vwWarn(warn, key, 'select deve ser uma lista de textos')
+    return undefined
+  }
+  const out: string[] = []
+  for (const item of raw as string[]) {
+    const t = item.trim()
+    if (t === '') vwWarn(warn, key, 'opção de select vazia')
+    else if (out.includes(t)) vwWarn(warn, key, `opção de select repetida ${JSON.stringify(t)}`)
+    else out.push(t)
+  }
+  return out
+}
+
+/** `colors` de uma chave: undefined = a entrada inteira sai (com aviso); mapa vazio também não entra. */
+function parseColors(
+  key: string,
+  raw: unknown,
+  warn: (msg: string) => void,
+): Map<string, ChipColor> | undefined {
+  if (!isPlainRecord(raw)) {
+    vwWarn(warn, key, 'colors deve ser um objeto')
+    return undefined
+  }
+  const out = new Map<string, ChipColor>()
+  for (const [rawValue, color] of Object.entries(raw)) {
+    const value = rawValue.trim()
+    if (value === '') vwWarn(warn, key, 'valor de colors vazio')
+    else if (!isChipColor(color)) {
+      vwWarn(warn, key, `cor ${JSON.stringify(color)} fora de ${CHIP_COLORS.join(', ')} para ${JSON.stringify(value)}`)
+    } else if (out.has(value)) vwWarn(warn, key, `valor de colors repetido ${JSON.stringify(value)}`)
+    else out.set(value, color)
+  }
+  return out.size > 0 ? out : undefined
+}
+
+/**
+ * Lê o `.vaultwright/properties.json`: `readonly`, `select` e `colors` por chave. null =
+ * ilegível. Uma entrada inválida sai com aviso e não derruba as vizinhas; nunca lança.
+ */
+export function parseVaultwrightProperties(
+  text: string,
+  warn: (msg: string) => void = () => {},
+): VaultwrightConfig | null {
   const json = parseJson(text)
   if (!isPlainRecord(json) || json.version !== 1 || !isPlainRecord(json.properties)) return null
-  const out = new Set<string>()
+  const out: VaultwrightConfig = { readonly: new Set(), select: new Map(), colors: new Map() }
   for (const [key, settings] of Object.entries(json.properties)) {
-    if (isPlainRecord(settings) && settings.readonly === true) out.add(key)
+    if (!isPlainRecord(settings)) continue
+    if (settings.readonly === true) out.readonly.add(key)
+    if (Object.hasOwn(settings, 'select')) {
+      const select = parseSelect(key, settings.select, warn)
+      if (select) out.select.set(key, select)
+    }
+    if (Object.hasOwn(settings, 'colors')) {
+      const colors = parseColors(key, settings.colors, warn)
+      if (colors) out.colors.set(key, colors)
+    }
   }
   return out
 }
@@ -91,7 +157,7 @@ export function loadPropertyConfig(
   vaultPath: string,
   warn: (msg: string) => void = console.warn,
 ): PropertyConfig {
-  const config: PropertyConfig = { types: new Map(), readonly: new Set() }
+  const config: PropertyConfig = { types: new Map(), readonly: new Set(), select: new Map(), colors: new Map() }
 
   const typesText = readOptional(vaultPath, OBSIDIAN_TYPES_FILE, warn)
   if (typesText !== null) {
@@ -102,8 +168,8 @@ export function loadPropertyConfig(
 
   const vwText = readOptional(vaultPath, VAULTWRIGHT_FILE, warn)
   if (vwText !== null) {
-    const ro = parseVaultwrightProperties(vwText)
-    if (ro) config.readonly = ro
+    const vw = parseVaultwrightProperties(vwText, warn)
+    if (vw) Object.assign(config, vw)
     else warn(`${VAULTWRIGHT_FILE}: JSON inválido, versão ou formato inesperado; ignorado`)
   }
 
@@ -120,6 +186,14 @@ function lookupKey<T>(map: Map<string, T>, key: string): T | undefined {
 
 export function lookupPropertyType(config: PropertyConfig, key: string): PropertyType | undefined {
   return lookupKey(config.types, key)
+}
+
+export function lookupSelectOptions(config: PropertyConfig, key: string): string[] | undefined {
+  return lookupKey(config.select, key)
+}
+
+export function lookupChosenColors(config: PropertyConfig, key: string): Map<string, ChipColor> | undefined {
+  return lookupKey(config.colors, key)
 }
 
 export function isReadonlyProperty(config: PropertyConfig, key: string): boolean {

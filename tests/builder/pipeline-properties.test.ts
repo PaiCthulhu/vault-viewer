@@ -7,6 +7,7 @@ import type { PageProperty } from '../../builder/types'
 import { buildVault } from '../../builder/pipeline'
 import { COMMENTS_MARKER } from '../../builder/comments'
 import { PROPERTIES_MARKER } from '../../builder/plugins/properties'
+import { propertyColor } from '../../lib/property-color'
 
 let TMP: string
 let vault: VaultConfig
@@ -276,5 +277,49 @@ describe('buildVault — propriedades: --first', () => {
       if (f === 'index.json') expect(strip(cb)).toEqual(strip(ca))
       else expect(cb, f).toBe(ca)
     }
+  })
+})
+
+describe('buildVault — seleção única e cores escolhidas', () => {
+  const chip = (color: string, text: string) => `<span class="vault-prop-chip" data-color="${color}">${text}</span>`
+
+  it('a linha de select, o chip na cor escolhida e o índice na ordem da lista', async () => {
+    write('.vaultwright/properties.json', JSON.stringify({
+      version: 1,
+      properties: {
+        status: { select: ['todo', 'doing', 'done'], colors: { done: 'green' } },
+        genres: { colors: { RPG: 'purple' } },
+      },
+    }))
+    const out = await build()
+    const game = read(out, 'pages/Notes/Game.json').properties as PageProperty[]
+    expect(game.find(r => r.key === 'status')).toStrictEqual({
+      key: 'status', type: 'text', value: 'done', html: chip('green', 'done'),
+      select: true, colors: { done: 'green' },
+    })
+    expect(game.find(r => r.key === 'genres')).toStrictEqual({
+      key: 'genres', type: 'multitext', value: ['RPG'], html: chip('purple', 'RPG'), colors: { RPG: 'purple' },
+    })
+    const rating = game.find(r => r.key === 'rating')!
+    expect('select' in rating || 'colors' in rating).toBe(false)
+
+    write('Notes/Other.md', '---\nstatus: other\n---\noutro\n')
+    const out2 = await build()
+    expect(read(out2, 'property-values.json').status).toStrictEqual(['todo', 'doing', 'done', 'other'])
+  })
+
+  it('sem .vaultwright a saída é a de sempre', async () => {
+    fs.rmSync(path.join(TMP, 'vault', '.vaultwright'), { recursive: true })
+    const out = await build()
+    const game = read(out, 'pages/Notes/Game.json').properties
+    expect(game).toStrictEqual([
+      { key: 'status', type: 'text', value: 'done', html: 'done' },
+      { key: 'rating', type: 'number', value: 4, html: '4' },
+      { key: 'genres', type: 'multitext', value: ['RPG'], html: chip(propertyColor('genres', 'RPG'), 'RPG') },
+      { key: 'played_on', type: 'date', value: '2024-01-12', html: '12/01/2024' },
+    ])
+    expect(fs.readFileSync(path.join(out, 'v', 'property-values.json'), 'utf-8')).toBe(
+      '{"genres":["Ação","RPG","Tabbed"],"tags":["co-op","solo"]}',
+    )
   })
 })

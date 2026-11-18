@@ -1027,3 +1027,40 @@ describe('ListEditor', () => {
     expect(editorChips(document.body)).toEqual(['RPG'])
   })
 })
+
+describe('cor escolhida no editor de lista', () => {
+  const COLORED: PageProperty = {
+    key: 'genres', type: 'multitext', value: ['RPG'], html: '', colors: { RPG: 'purple', Zed: 'green', Novo: 'red' },
+  }
+
+  it('chip do editor, opção do menu e chip do "Criar" usam a cor escolhida', async () => {
+    valuesReply = { status: 200, body: { values: ['RPG', 'Zed'] } }
+    const { container } = render(view([COLORED]))
+    await open(container, 'genres')
+    await settle()
+    expect(editorOf(container)!.querySelector<HTMLElement>(':scope > .vault-prop-chip')!.dataset.color).toBe('purple')
+    const zed = optionsOf(container)[0].querySelector<HTMLElement>('.vault-prop-chip')!
+    expect(zed.textContent).toBe('Zed')
+    expect(zed.dataset.color).toBe('green')
+    typeIn(container, ' Novo ')
+    const last = optionsOf(container).at(-1)!.querySelector<HTMLElement>('.vault-prop-chip')!
+    expect(last.textContent).toBe('Novo')
+    expect(last.dataset.color).toBe('red')
+    // sem cor escolhida, a cor segue sendo a de propertyColor
+    typeIn(container, 'Outro')
+    expect(optionsOf(container).at(-1)!.querySelector<HTMLElement>('.vault-prop-chip')!.dataset.color).toBe(propertyColor('genres', 'Outro'))
+  })
+
+  it('a linha provisória, depois de gravar, mantém a cor escolhida', async () => {
+    valuesReply = { status: 200, body: { values: ['Zed'] } }
+    const { container } = render(view([COLORED]))
+    await open(container, 'genres')
+    await settle()
+    create(container, 'Zed')
+    press(container, 'Enter')
+    await settle()
+    expect(calls).toHaveLength(1)
+    const chips = Array.from(rowOf(container, 'genres').querySelectorAll<HTMLElement>('.vault-prop-val .vault-prop-chip'))
+    expect(chips.map(c => [c.textContent, c.dataset.color])).toEqual([['RPG', 'purple'], ['Zed', 'green']])
+  })
+})

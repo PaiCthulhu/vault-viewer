@@ -127,7 +127,7 @@ async function readConfigFile(vaultPath: string, rel: string): Promise<string | 
  * nunca lança, um erro de leitura não falha aberto: é `PropertyError` 503.
  */
 export async function readPropertyConfig(vaultPath: string): Promise<PropertyConfig> {
-  const config: PropertyConfig = { types: new Map(), readonly: new Set() }
+  const config: PropertyConfig = { types: new Map(), readonly: new Set(), select: new Map(), colors: new Map() }
 
   const typesText = await readConfigFile(vaultPath, OBSIDIAN_TYPES_FILE)
   if (typesText !== null) {
@@ -138,8 +138,8 @@ export async function readPropertyConfig(vaultPath: string): Promise<PropertyCon
 
   const vwText = await readConfigFile(vaultPath, VAULTWRIGHT_FILE)
   if (vwText !== null) {
-    const ro = parseVaultwrightProperties(vwText)
-    if (ro) config.readonly = ro
+    const vw = parseVaultwrightProperties(vwText, (msg) => console.warn(msg))
+    if (vw) Object.assign(config, vw)
     else console.warn(`${VAULTWRIGHT_FILE}: JSON inválido, versão ou formato inesperado; ignorado`)
   }
 

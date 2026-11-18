@@ -3,7 +3,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '@/components/i18n/I18nProvider'
 import type { PageProperty, PropertyType, PropertyValue } from '@/builder/types'
-import { ConfirmReplace, ListEditor, ScalarEditor } from '@/components/viewer/PropertyEditors'
+import { ConfirmReplace, ListEditor, ScalarEditor, SelectEditor } from '@/components/viewer/PropertyEditors'
 import { patchProperty } from '@/lib/property-client'
 import {
   MAX_PROPERTY_TEXT, initialChecked, initialItems, initialText, isEditable, isListType, listDraftValue,
@@ -83,6 +83,11 @@ interface Notice {
 
 function scalarType(type: PropertyType): ScalarEditorType | null {
   return type === 'text' || type === 'number' || type === 'date' || type === 'datetime' ? type : null
+}
+
+// O valor de uma linha `select` aparado, ou null quando vazio, em branco ou não for texto.
+function selectInitial(p: PageProperty): string | null {
+  return typeof p.value === 'string' && p.value.trim() !== '' ? p.value.trim() : null
 }
 
 // Há texto selecionado (não colapsado) que começa ou termina dentro de `el`.
@@ -198,6 +203,23 @@ export function PropertiesBlock({ properties, showLocks = true, edit }: {
     commitValue(base, listDraftValue(items))
   }
 
+  // Seleção única: o mesmo valor de antes (aparado) só fecha, sem chamada; o × manda `null`.
+  function commitSelect(base: PageProperty, value: string | null) {
+    rememberFocus()
+    if (value === null) return commitValue(base, null)
+    if (value === selectInitial(base)) {
+      setActive(null)
+      return
+    }
+    const draft = textDraftValue('text', value)
+    if (!draft.ok) {
+      setActive(null)
+      setNotice({ key: base.key, errorKey: draft.errorKey })
+      return
+    }
+    commitValue(base, draft.value)
+  }
+
   // O valor já pronto para gravar. Um valor fora do tipo pede confirmação antes; o mesmo
   // valor de antes só fecha, sem chamada.
   function commitValue(base: PageProperty, value: PropertyValue) {
@@ -307,6 +329,15 @@ export function PropertiesBlock({ properties, showLocks = true, edit }: {
           {p.mismatch && !isEmpty(p) ? <span className="vault-prop-current">{shown}</span> : null}
         </span>
       )
+    } else if (mine?.mode === 'edit' && p.select) {
+      const base = mine.base
+      value = (
+        <SelectEditor
+          propKey={p.key} slug={edit.slug} initial={selectInitial(base)} colors={p.colors}
+          label={t('properties.edit.label', { key: p.key })}
+          onCommit={v => commitSelect(base, v)} onCancel={cancel}
+        />
+      )
     } else if (mine?.mode === 'edit' && scalar) {
       const base = mine.base
       value = (
@@ -319,7 +350,7 @@ export function PropertiesBlock({ properties, showLocks = true, edit }: {
       const base = mine.base
       value = (
         <ListEditor
-          propKey={p.key} slug={edit.slug} initial={initialItems(base)}
+          propKey={p.key} slug={edit.slug} initial={initialItems(base)} colors={p.colors}
           label={t('properties.edit.label', { key: p.key })}
           onCommit={items => commitList(base, items)} onCancel={cancel}
         />

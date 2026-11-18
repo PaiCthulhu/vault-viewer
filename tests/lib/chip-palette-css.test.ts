@@ -39,4 +39,13 @@ describe('paleta dos chips por tema', () => {
   it('o link dentro do chip herda a cor', () => {
     expect(block('.vault-prop-val .vault-prop-chip a')).toContain('color: inherit')
   })
+
+  it('a cor default existe nos dois temas, usa a variável e difere do gray', () => {
+    expect(block('.vault-prop-chip[data-color="default"]')).toContain('var(--vault-chip-default)')
+    const val = (b: string, name: string) => new RegExp(`--vault-chip-${name}:\\s*([^;]+);`).exec(b)?.[1]
+    for (const b of [light, dark]) {
+      expect(val(b, 'default')).toBeTruthy()
+      expect(val(b, 'default')).not.toBe(val(b, 'gray'))
+    }
+  })
 })

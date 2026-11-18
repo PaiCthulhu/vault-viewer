@@ -9,7 +9,9 @@ import {
   isNestedObject,
   isReadonlyProperty,
   loadPropertyConfig,
+  lookupChosenColors,
   lookupPropertyType,
+  lookupSelectOptions,
   normalizePropertyValue,
   parseObsidianTypes,
   parseVaultwrightProperties,
@@ -52,6 +54,8 @@ describe('parseObsidianTypes', () => {
     const cfg: PropertyConfig = {
       types: parseObsidianTypes('{"types":{"constructor":"number"}}')!,
       readonly: new Set(),
+      select: new Map(),
+      colors: new Map(),
     }
     expect(lookupPropertyType(cfg, 'constructor')).toBe('number')
     expect(lookupPropertyType(EMPTY_PROPERTY_CONFIG, 'toString')).toBeUndefined()
@@ -63,7 +67,7 @@ describe('parseVaultwrightProperties', () => {
     const s = parseVaultwrightProperties(
       '{"version":1,"properties":{"status":{"readonly":true},"rating":{"readonly":false}}}',
     )!
-    expect([...s]).toEqual(['status'])
+    expect([...s.readonly]).toEqual(['status'])
   })
   it('outra versão ou formato errado dá null', () => {
     expect(parseVaultwrightProperties('{"version":2,"properties":{}}')).toBeNull()
@@ -75,21 +79,130 @@ describe('parseVaultwrightProperties', () => {
     const s = parseVaultwrightProperties(
       '{"version":1,"properties":{"__proto__":{"readonly":true},"constructor":{"readonly":true}}}',
     )!
-    expect([...s].sort()).toEqual(['__proto__', 'constructor'])
+    expect([...s.readonly].sort()).toEqual(['__proto__', 'constructor'])
     const plain = parseVaultwrightProperties('{"version":1,"properties":{"status":{"readonly":true}}}')!
-    const cfg: PropertyConfig = { types: new Map(), readonly: plain }
+    const cfg: PropertyConfig = { ...EMPTY_PROPERTY_CONFIG, readonly: plain.readonly }
     for (const k of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
       expect(isReadonlyProperty(cfg, k)).toBe(false)
     }
   })
   it('aceita BOM', () => {
     const s = parseVaultwrightProperties('\uFEFF{"version":1,"properties":{"a":{"readonly":true}}}')!
-    expect(s.has('a')).toBe(true)
+    expect(s.readonly.has('a')).toBe(true)
   })
   it('isReadonlyProperty ignora a caixa', () => {
-    const cfg: PropertyConfig = { types: new Map(), readonly: new Set(['status']) }
+    const cfg: PropertyConfig = { ...EMPTY_PROPERTY_CONFIG, readonly: new Set(['status']) }
     expect(isReadonlyProperty(cfg, 'Status')).toBe(true)
     expect(isReadonlyProperty(cfg, 'other')).toBe(false)
+  })
+})
+
+describe('parseVaultwrightProperties: select e colors', () => {
+  const file = (props: unknown) => JSON.stringify({ version: 1, properties: props })
+  const parse = (props: unknown) => {
+    const warn = vi.fn()
+    return { cfg: parseVaultwrightProperties(file(props), warn)!, warn }
+  }
+
+  it('lê o exemplo do card', () => {
+    const { cfg, warn } = parse({
+      status: {
+        select: ['todo', 'doing', 'done', 'dropped'],
+        colors: { done: 'green', dropped: 'red' },
+      },
+      genres: { colors: { RPG: 'purple' } },
+    })
+    expect(cfg.select.get('status')).toEqual(['todo', 'doing', 'done', 'dropped'])
+    expect([...cfg.colors.get('status')!]).toEqual([['done', 'green'], ['dropped', 'red']])
+    expect([...cfg.colors.get('genres')!]).toEqual([['RPG', 'purple']])
+    expect(cfg.select.has('genres')).toBe(false)
+    expect(warn).not.toHaveBeenCalled()
+  })
+  it('select: [] é válido', () => {
+    const { cfg, warn } = parse({ status: { select: [] } })
+    expect(cfg.select.get('status')).toEqual([])
+    expect(warn).not.toHaveBeenCalled()
+  })
+  it('select que não é array sai inteiro com aviso; vizinhos ficam', () => {
+    const { cfg, warn } = parse({ a: { select: 'x' }, b: { select: ['y'] } })
+    expect(cfg.select.has('a')).toBe(false)
+    expect(cfg.select.get('b')).toEqual(['y'])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('.vaultwright/properties.json')
+    expect(warn.mock.calls[0][0]).toContain('"a"')
+  })
+  it('select com item que não é string sai inteiro com aviso', () => {
+    const { cfg, warn } = parse({ a: { select: ['x', 3] } })
+    expect(cfg.select.has('a')).toBe(false)
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
+  it('apara itens, tira vazios e repetidos com aviso', () => {
+    const { cfg, warn } = parse({ a: { select: [' x ', '', '  ', 'x', 'y'] } })
+    expect(cfg.select.get('a')).toEqual(['x', 'y'])
+    expect(warn).toHaveBeenCalledTimes(3)
+    for (const [msg] of warn.mock.calls) {
+      expect(msg).toContain('.vaultwright/properties.json')
+      expect(msg).toContain('"a"')
+    }
+  })
+  it('colors que não é objeto sai inteiro com aviso', () => {
+    const { cfg, warn } = parse({ a: { colors: ['green'] }, b: { colors: { x: 'red' } } })
+    expect(cfg.colors.has('a')).toBe(false)
+    expect(cfg.colors.get('b')!.get('x')).toBe('red')
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('"a"')
+  })
+  it('cor fora da lista, valor vazio e valor repetido saem com aviso', () => {
+    const { cfg, warn } = parse({
+      a: { colors: { x: 'teal', '': 'red', ' ': 'red', y: 'blue', ' y': 'red', z: 'default' } },
+    })
+    expect([...cfg.colors.get('a')!]).toEqual([['y', 'blue'], ['z', 'default']])
+    expect(warn).toHaveBeenCalledTimes(4)
+  })
+  it('mapa de cores vazio no fim: a chave não entra', () => {
+    const { cfg } = parse({ a: { colors: { x: 'teal' } }, b: { colors: {} } })
+    expect(cfg.colors.has('a')).toBe(false)
+    expect(cfg.colors.has('b')).toBe(false)
+  })
+  it('__proto__ como chave, opção e valor de colors', () => {
+    const cfg = parseVaultwrightProperties(
+      '{"version":1,"properties":{"__proto__":{"select":["__proto__","a"],"colors":{"__proto__":"red"}}}}',
+    )!
+    expect(cfg.select.get('__proto__')).toEqual(['__proto__', 'a'])
+    expect(cfg.colors.get('__proto__')!.get('__proto__')).toBe('red')
+  })
+  it('settings que não é objeto: ignorado em silêncio', () => {
+    const { cfg, warn } = parse({ a: 3, b: null })
+    expect(cfg.select.size).toBe(0)
+    expect(warn).not.toHaveBeenCalled()
+  })
+  it('lookupSelectOptions e lookupChosenColors: exata, depois sem caixa', () => {
+    const { cfg } = parse({
+      Status: { select: ['a'], colors: { a: 'red' } },
+      Rating: { select: ['r1'] },
+      rating: { select: ['r2'] },
+    })
+    const config: PropertyConfig = { ...EMPTY_PROPERTY_CONFIG, select: cfg.select, colors: cfg.colors }
+    expect(lookupSelectOptions(config, 'status')).toEqual(['a'])
+    expect(lookupChosenColors(config, 'status')!.get('a')).toBe('red')
+    expect(lookupSelectOptions(config, 'rating')).toEqual(['r2'])
+    expect(lookupSelectOptions(config, 'Rating')).toEqual(['r1'])
+    expect(lookupSelectOptions(config, 'other')).toBeUndefined()
+    expect(lookupSelectOptions(EMPTY_PROPERTY_CONFIG, 'constructor')).toBeUndefined()
+    expect(lookupChosenColors(EMPTY_PROPERTY_CONFIG, 'constructor')).toBeUndefined()
+  })
+  it('loadPropertyConfig carrega select e colors e passa o warn adiante', () => {
+    const v = tmpVault()
+    fs.mkdirSync(path.join(v, '.vaultwright'))
+    fs.writeFileSync(
+      path.join(v, '.vaultwright', 'properties.json'),
+      file({ status: { select: ['todo', 'todo'], colors: { todo: 'blue' } } }),
+    )
+    const warn = vi.fn()
+    const cfg = loadPropertyConfig(v, warn)
+    expect(cfg.select.get('status')).toEqual(['todo'])
+    expect(cfg.colors.get('status')!.get('todo')).toBe('blue')
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -149,6 +262,8 @@ describe('busca de chave', () => {
     const cfg: PropertyConfig = {
       types: parseObsidianTypes('{"types":{"Rating":"number","rating":"text"}}')!,
       readonly: new Set(),
+      select: new Map(),
+      colors: new Map(),
     }
     expect(lookupPropertyType(cfg, 'rating')).toBe('text')
     expect(lookupPropertyType(cfg, 'RATING')).toBe('number')
@@ -185,7 +300,7 @@ describe('inferência', () => {
     expect(inferPropertyType('other', 3)).toBe('number')
   })
   it('resolvePropertyType prefere a config', () => {
-    const cfg: PropertyConfig = { types: new Map([['rating', 'text']]), readonly: new Set() }
+    const cfg: PropertyConfig = { ...EMPTY_PROPERTY_CONFIG, types: new Map([['rating', 'text']]) }
     expect(resolvePropertyType('rating', 3, cfg)).toBe('text')
     expect(resolvePropertyType('other', 3, cfg)).toBe('number')
     expect(resolvePropertyType('tags', 'x', cfg)).toBe('tags')

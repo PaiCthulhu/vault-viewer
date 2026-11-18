@@ -12,7 +12,7 @@ import { LinkResolver } from '../../../builder/link-resolver'
 import { EMPTY_PROPERTY_CONFIG, type PropertyConfig } from '../../../builder/property-types'
 import type { ScannedFile } from '../../../builder/scanner'
 import type { PageProperty, PropertyType } from '../../../builder/types'
-import { propertyColor } from '../../../lib/property-color'
+import { propertyColor, type ChipColor } from '../../../lib/property-color'
 
 const files: ScannedFile[] = [
   { absolutePath: '/v/Notes/X.md', relativePath: 'Notes/X', title: 'X' },
@@ -20,7 +20,7 @@ const files: ScannedFile[] = [
 const resolver = new LinkResolver(files)
 
 function makeConfig(types: Record<string, PropertyType> = {}, readonly: string[] = []): PropertyConfig {
-  return { types: new Map(Object.entries(types)), readonly: new Set(readonly) }
+  return { ...EMPTY_PROPERTY_CONFIG, types: new Map(Object.entries(types)), readonly: new Set(readonly) }
 }
 
 function makeCtx(config: PropertyConfig = EMPTY_PROPERTY_CONFIG) {
@@ -520,5 +520,162 @@ describe('collectPropertyValues', () => {
       { properties: props({ genres: ['Ação'], tags: ['co-op'] }) },
     ]
     expect(collectPropertyValues(pages)).toStrictEqual({ genres: ['Ação', 'RPG'], tags: ['co-op', 'solo'] })
+  })
+})
+
+// ── seleção única e cores escolhidas (.vaultwright) ──────────────────────────
+function selectConfig(
+  select: Record<string, string[]> = {},
+  colors: Record<string, Record<string, ChipColor>> = {},
+  extra: Partial<PropertyConfig> = {},
+): PropertyConfig {
+  return {
+    ...EMPTY_PROPERTY_CONFIG,
+    select: new Map(Object.entries(select)),
+    colors: new Map(Object.entries(colors).map(([k, v]) => [k, new Map(Object.entries(v))])),
+    ...extra,
+  }
+}
+const STATUS_CFG = selectConfig(
+  { status: ['todo', 'doing', 'done', 'dropped'] },
+  { status: { done: 'green', dropped: 'red' } },
+)
+const rawChip = (color: string, inner: string) => `<span class="vault-prop-chip" data-color="${color}">${inner}</span>`
+
+describe('toPageProperty — select', () => {
+  it('valor com cor escolhida: chip, select e colors na ordem das chaves', () => {
+    const row = one('status', 'done', STATUS_CFG)
+    expect(row).toStrictEqual({
+      key: 'status', type: 'text', value: 'done', html: rawChip('green', 'done'),
+      select: true, colors: { done: 'green', dropped: 'red' },
+    })
+    expect(Object.keys(row)).toEqual(['key', 'type', 'value', 'html', 'select', 'colors'])
+  })
+
+  it('sem cor escolhida cai em propertyColor; valor aparado; default', () => {
+    expect(one('status', 'todo', STATUS_CFG).html).toBe(rawChip(propertyColor('status', 'todo'), 'todo'))
+    const row = one('status', ' done ', STATUS_CFG)
+    expect(row.html).toBe(rawChip('green', 'done'))
+    const def = one('status', 'x', selectConfig({ status: ['x'] }, { status: { x: 'default' } }))
+    expect(def.html).toBe(rawChip('default', 'x'))
+    expect('colors' in one('status', 'todo', selectConfig({ status: ['todo'] }))).toBe(false)
+  })
+
+  it('vazio: html vazio e select; chave do arquivo em outra caixa vale', () => {
+    expect(one('status', null, STATUS_CFG)).toMatchObject({ html: '', select: true, value: null })
+    const cfg = selectConfig({ Status: ['a'] }, { Status: { a: 'blue' } })
+    expect(one('status', 'a', cfg)).toMatchObject({ select: true, colors: { a: 'blue' }, html: rawChip('blue', 'a') })
+  })
+
+  it('fora do select: número, lista, data, quebra de linha, mismatch', () => {
+    const cases: [unknown, PropertyConfig | undefined][] = [
+      [3, undefined],
+      [['a'], undefined],
+      [new Date('2024-01-02T00:00:00Z'), undefined],
+      ['a\nb', undefined],
+      ['x', makeConfig({ status: 'number' })],
+    ]
+    for (const [raw, types] of cases) {
+      const withSel = types ? { ...types, select: STATUS_CFG.select, colors: STATUS_CFG.colors } : STATUS_CFG
+      const got = one('status', raw, withSel)
+      const base = one('status', raw, types)
+      expect('select' in got).toBe(false)
+      // `colors` só aparece no caso lista (o `colors` de `status` vale para qualquer linha de lista).
+      const { colors, ...rest } = got
+      expect(colors !== undefined).toBe(Array.isArray(raw))
+      expect(rest).toStrictEqual(base)
+    }
+  })
+
+  it('lista com colors: cor escolhida no chip e colors na linha', () => {
+    const cfg = selectConfig({}, { genres: { RPG: 'purple' } })
+    const row = one('genres', ['RPG', 'Indie'], cfg)
+    expect(row.html).toBe(rawChip('purple', 'RPG') + rawChip(propertyColor('genres', 'Indie'), 'Indie'))
+    expect(row.colors).toStrictEqual({ RPG: 'purple' })
+    expect('select' in row).toBe(false)
+  })
+
+  it('readonly + select: trava, select e chip', () => {
+    const cfg = selectConfig({ status: ['done'] }, {}, { readonly: new Set(['status']) })
+    expect(one('status', 'done', cfg)).toMatchObject({ locked: 'readonly', select: true, html: rawChip(propertyColor('status', 'done'), 'done') })
+  })
+
+  it('__proto__ como valor de colors e da nota', () => {
+    const cfg = selectConfig({ status: ['__proto__'] }, { status: Object.fromEntries([['__proto__', 'red']]) as Record<string, ChipColor> })
+    const row = one('status', '__proto__', cfg)
+    expect(row.html).toBe(rawChip('red', '__proto__'))
+    expect(Object.hasOwn(row.colors!, '__proto__')).toBe(true)
+  })
+
+  it('__proto__ e constructor como CHAVE da propriedade', () => {
+    for (const key of ['__proto__', 'constructor']) {
+      const cfg = selectConfig(
+        Object.fromEntries([[key, ['todo', 'done']]]),
+        Object.fromEntries([[key, { done: 'green' as ChipColor }]]),
+      )
+      const fm = JSON.parse(`{"${key}": "done"}`) as Record<string, unknown>
+      const rows = props(fm, false, cfg)
+      expect(rows).toHaveLength(1)
+      const row = rows[0]
+      expect(row.key).toBe(key)
+      expect(row.select).toBe(true)
+      expect(Object.hasOwn(row, 'colors')).toBe(true)
+      expect(row.colors).toStrictEqual({ done: 'green' })
+      expect(row.html).toBe(rawChip('green', 'done'))
+    }
+  })
+
+  it('valor com quebra de linha no fim: a checagem roda no valor sem aparar', () => {
+    const withSel = one('status', 'done\n', STATUS_CFG)
+    expect('select' in withSel).toBe(false)
+    const { colors, ...rest } = withSel
+    expect(colors).toBeUndefined()
+    expect(rest).toStrictEqual(one('status', 'done\n'))
+  })
+
+  it('sem .vaultwright: só key, type, value, html', () => {
+    for (const [k, raw] of [['a', 'texto'], ['genres', ['x']], ['n', 3]] as [string, unknown][]) {
+      expect(Object.keys(one(k, raw))).toEqual(['key', 'type', 'value', 'html'])
+    }
+  })
+})
+
+describe('collectPropertyValues — select', () => {
+  const pagesOf = (...vals: unknown[]) => vals.map(v => ({ properties: props({ status: v }, false, STATUS_CFG) }))
+
+  it('opções na ordem do arquivo, depois os usados fora delas em pt-BR', () => {
+    const pages = pagesOf('done', 'zeta', 'alpha', '')
+    expect(collectPropertyValues(pages, STATUS_CFG)).toStrictEqual({
+      status: ['todo', 'doing', 'done', 'dropped', 'alpha', 'zeta'],
+    })
+  })
+
+  it('só valores vazios: a chave sai com as opções', () => {
+    expect(collectPropertyValues(pagesOf(null, ''), STATUS_CFG)).toStrictEqual({
+      status: ['todo', 'doing', 'done', 'dropped'],
+    })
+  })
+
+  it('linha travada não entra: nem valor nem chave', () => {
+    const cfg = { ...STATUS_CFG, readonly: new Set(['status']) }
+    const pages = [{ properties: props({ status: 'zeta' }, false, cfg) }]
+    // Travada, a linha não entra no índice (como hoje): nem valor, nem chave.
+    expect(collectPropertyValues(pages, cfg)).toStrictEqual({})
+  })
+
+  it('__proto__ como OPÇÃO: entra como valor, sem poluir o protótipo', () => {
+    const cfg = selectConfig({ status: ['__proto__', 'todo'] })
+    const pages = [{ properties: props({ status: 'zeta' }, false, cfg) }]
+    const protoBefore = Object.getPrototypeOf({})
+    const out = collectPropertyValues(pages, cfg)
+    expect(out.status).toStrictEqual(['__proto__', 'todo', 'zeta'])
+    expect(Object.getPrototypeOf(out)).toBe(protoBefore)
+    expect(({} as Record<string, unknown>).todo).toBeUndefined()
+    expect(({} as Record<string, unknown>).zeta).toBeUndefined()
+  })
+
+  it('sem config, a saída de hoje', () => {
+    const pages = [{ properties: props({ status: 'zeta', genres: ['b', 'a'] }) }]
+    expect(collectPropertyValues(pages)).toStrictEqual({ genres: ['a', 'b'] })
   })
 })

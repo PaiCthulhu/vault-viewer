@@ -1016,3 +1016,30 @@ describe('linha de log da gravação', () => {
     expect(runRebuild).toHaveBeenCalledWith('v', { first: [] })
   })
 })
+
+describe('seleção única', () => {
+  beforeEach(async () => {
+    write('.vaultwright/properties.json', JSON.stringify({
+      version: 1,
+      properties: { ID: { readonly: true }, status: { select: ['ok', 'todo', 'done'], colors: { done: 'green' } } },
+    }))
+    await build()
+    vi.mocked(console.log).mockClear()
+  })
+
+  it('a linha devolvida é a que o build seguinte grava', async () => {
+    const res = await edit('status', 'done', 'ok')
+    expect(res.status).toBe(200)
+    await build()
+    expect(res.json.property).toStrictEqual(builtRow(NOTE, 'status'))
+    expect(res.json.property).toMatchObject({ select: true, colors: { done: 'green' } })
+  })
+
+  it('um valor fora da lista é aceito e gravado como texto entre aspas', async () => {
+    const res = await edit('status', 'novo', 'ok')
+    expect(res.status).toBe(200)
+    expect(read()).toContain('status: "novo"')
+    await build()
+    expect(res.json.property).toStrictEqual(builtRow(NOTE, 'status'))
+  })
+})

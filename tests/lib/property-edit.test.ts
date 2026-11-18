@@ -7,6 +7,10 @@ import {
   isEditable,
   isListType,
   listDraftValue,
+  MAX_SUGGESTIONS,
+  menuEntries,
+  menuModel,
+  enterPick,
   provisionalRow,
   sameValue,
   textDraftValue,
@@ -238,5 +242,99 @@ describe('sameValue', () => {
     expect(sameValue(null, '')).toBe(false)
     expect(sameValue(1, '1')).toBe(false)
     expect(sameValue(null, null)).toBe(true)
+  })
+})
+
+describe('provisionalRow com cor escolhida e seleção única', () => {
+  it('lista: o chip usa a cor escolhida, e `colors` é copiado', () => {
+    const base = row('multitext', ['RPG'], { key: 'genres', colors: { RPG: 'green' } })
+    const out = provisionalRow(base, ['RPG', 'Indie'])
+    expect(out.html).toContain('data-color="green">RPG</span>')
+    expect(out.html).toContain(`data-color="${propertyColor('genres', 'Indie')}">Indie</span>`)
+    expect(out.colors).toEqual({ RPG: 'green' })
+    expect(out.select).toBeUndefined()
+  })
+
+  it('sem select nem colors a linha sai como antes (chaves e ordem)', () => {
+    const out = provisionalRow(row('text', 'x'), 'y')
+    expect(Object.keys(out)).toEqual(['key', 'type', 'value', 'html'])
+  })
+
+  it('select: um chip do valor aparado, select e colors copiados, sem mismatch nem locked', () => {
+    const base = row('text', 'todo', { key: 'status', select: true, colors: { done: 'red' }, mismatch: true, locked: 'readonly' })
+    const out = provisionalRow(base, '  done  ')
+    expect(out.html).toBe('<span class="vault-prop-chip" data-color="red">done</span>')
+    expect(out.select).toBe(true)
+    expect(out.colors).toEqual({ done: 'red' })
+    expect(out.mismatch).toBeUndefined()
+    expect(out.locked).toBeUndefined()
+    expect(Object.keys(out)).toEqual(['key', 'type', 'value', 'html', 'select', 'colors'])
+  })
+
+  it('select com valor nulo ou em branco: html vazio', () => {
+    const base = row('text', 'todo', { key: 'status', select: true })
+    expect(provisionalRow(base, null).html).toBe('')
+    expect(provisionalRow(base, '   ').html).toBe('')
+  })
+})
+
+describe('menuModel', () => {
+  const entries = menuEntries(['RPG Tático', 'RPG', 'Ação', 'Indie'])
+  const none = { exclude: [], taken: [] }
+
+  it('texto vazio lista tudo e não cria', () => {
+    const m = menuModel(entries, '', none)
+    expect(m.suggested).toEqual(['RPG Tático', 'RPG', 'Ação', 'Indie'])
+    expect(m.hidden).toBe(0)
+    expect(m.create).toBeNull()
+  })
+
+  it('filtra por cru e nome, ignorando caixa e acento; o igual ao digitado vem primeiro', () => {
+    expect(menuModel(entries, 'rpg', none).suggested).toEqual(['RPG', 'RPG Tático'])
+    expect(menuModel(entries, 'acao', none).suggested).toEqual(['Ação'])
+    const links = menuEntries(['[[Nota A]]'])
+    expect(menuModel(links, 'nota a', none).suggested).toEqual(['[[Nota A]]'])
+  })
+
+  it('`create` é o texto aparado, salvo se já existe nas entries ou em taken', () => {
+    expect(menuModel(entries, '  Novo ', none).create).toBe('Novo')
+    expect(menuModel(entries, 'RPG', none).create).toBeNull()
+    expect(menuModel(entries, 'Novo', { exclude: [], taken: ['Novo'] }).create).toBeNull()
+  })
+
+  it('exclude some do menu; taken só barra o Criar', () => {
+    const m = menuModel(entries, '', { exclude: ['RPG'], taken: [] })
+    expect(m.suggested).not.toContain('RPG')
+    expect(menuModel(entries, 'RPG', { exclude: ['RPG'], taken: [] }).create).toBeNull()
+    expect(menuModel(entries, '', { exclude: [], taken: ['RPG'] }).suggested).toContain('RPG')
+  })
+
+  it('corta em MAX_SUGGESTIONS e conta o resto; o igual ao digitado não fica de fora', () => {
+    const many = menuEntries([...Array.from({ length: 70 }, (_, i) => `item ${i}`), 'item'])
+    const m = menuModel(many, 'item', none)
+    expect(m.suggested).toHaveLength(MAX_SUGGESTIONS)
+    expect(m.suggested[0]).toBe('item')
+    expect(m.hidden).toBe(71 - MAX_SUGGESTIONS)
+  })
+})
+
+describe('enterPick', () => {
+  const entries = menuEntries(['RPG Tático', 'rpg', 'Ação', '[[Nota A]]'])
+
+  it('os degraus: cru exato, nome exato, cru normalizado, nome normalizado', () => {
+    expect(enterPick(entries, 'rpg', [])).toEqual({ value: 'rpg', chosen: false })
+    expect(enterPick(entries, 'Nota A', [])).toEqual({ value: '[[Nota A]]', chosen: false })
+    expect(enterPick(entries, 'acao', [])).toEqual({ value: 'Ação', chosen: false })
+    expect(enterPick(entries, 'nota a', [])).toEqual({ value: '[[Nota A]]', chosen: false })
+  })
+
+  it('"RPG" não vira "RPG Tático"; sem correspondência entra o texto aparado', () => {
+    expect(enterPick(menuEntries(['RPG Tático']), 'RPG', [])).toEqual({ value: 'RPG', chosen: false })
+    expect(enterPick(entries, '  Novo ', [])).toEqual({ value: 'Novo', chosen: false })
+  })
+
+  it('já entre os escolhidos (cru ou nome, normalizados): chosen', () => {
+    expect(enterPick(entries, 'ACAO', ['Ação'])).toEqual({ value: 'Ação', chosen: true })
+    expect(enterPick(entries, 'nota a', ['[[Nota A]]'])).toEqual({ value: '[[Nota A]]', chosen: true })
   })
 })

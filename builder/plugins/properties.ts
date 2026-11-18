@@ -4,21 +4,24 @@
 // (`PageProperty[]`), cada uma com o tipo, o valor normalizado, o HTML de exibição
 // já escapado, a trava e o mismatch; o viewer monta o bloco onde a página tem
 // `PROPERTIES_MARKER`. `collectPropertyValues` junta os valores das propriedades
-// de lista do vault inteiro.
+// de lista e de seleção única do vault inteiro.
 
 import { escapeHtml as esc } from '../link-resolver'
 import {
   inferValueType,
   isNestedObject,
+  EMPTY_PROPERTY_CONFIG,
   isReadonlyProperty,
   LIST_PROPERTY_TYPES,
+  lookupChosenColors,
+  lookupSelectOptions,
   normalizePropertyValue,
   resolvePropertyType,
   toJsonSafe,
   type PropertyConfig,
 } from '../property-types'
 import type { PageMeta, PageProperty, PropertyJson, PropertyLock, PropertyType, PropertyValue } from '../types'
-import { propertyColor } from '@/lib/property-color'
+import { chipColor, type ChosenColors } from '@/lib/property-color'
 
 // Wikilink de imagem: `[[pasta/img.png]]` ou `[[img.png|alias]]`.
 const IMAGE_WIKILINK_RE = /^\[\[(.+\.(?:png|jpe?g|gif|webp|svg|avif))(?:\|[^\]]*)?\]\]$/i
@@ -42,6 +45,9 @@ const FAMILY_ONLY_KEYS = new Set(['parent', 'order'])
 // Data e data-hora já normalizadas (ver normalizePropertyValue).
 const DATE_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 const DATETIME_VALUE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
+
+// Quebra de linha que um campo de uma linha não guarda (a mesma lista da API de edição).
+const LINE_BREAK_RE = /[\r\n\u0085\u2028\u2029]/
 
 export interface PropertyRenderContext {
   /** Troca os wikilinks do texto por links; o texto, o display e o href saem escapados. */
@@ -104,11 +110,11 @@ function listItems(value: PropertyValue): string[] {
 }
 
 /** Item de lista: imagem vira miniatura solta; o resto vira chip colorido. */
-function renderListItem(key: string, item: string, ctx: PropertyRenderContext): string {
+function renderListItem(key: string, item: string, ctx: PropertyRenderContext, colors?: ChosenColors): string {
   if (item.trim() === '') return ''
   const img = imageTarget(item)
   if (img !== null) return thumbnail(img, ctx)
-  return `<span class="vault-prop-chip" data-color="${propertyColor(key, item)}">${renderText(item, ctx)}</span>`
+  return `<span class="vault-prop-chip" data-color="${chipColor(key, item.trim(), colors)}">${renderText(item, ctx)}</span>`
 }
 
 /** HTML de exibição de um valor já normalizado, no tipo dado. Tudo sai escapado. */
@@ -117,10 +123,15 @@ export function renderPropertyValue(
   type: PropertyType,
   value: PropertyValue,
   ctx: PropertyRenderContext,
+  opts: { select?: boolean; colors?: ChosenColors } = {},
 ): string {
   if (value === null || (Array.isArray(value) && value.length === 0)) return ''
   if (LIST_PROPERTY_TYPES.has(type)) {
-    return listItems(value).map(item => renderListItem(key, item, ctx)).join('')
+    return listItems(value).map(item => renderListItem(key, item, ctx, opts.colors)).join('')
+  }
+  // Seleção única: o valor de texto aparece como o chip de um item de lista.
+  if (opts.select && type === 'text' && typeof value === 'string') {
+    return renderListItem(key, value.trim(), ctx, opts.colors)
   }
   switch (type) {
     case 'checkbox':
@@ -170,10 +181,23 @@ export function toPageProperty(key: string, raw: unknown, ctx: PropertyRenderCon
   const { value, mismatch } = normalizePropertyValue(type, raw)
   // Com mismatch, o valor vem na forma do tipo inferido, e é nesse tipo que se mostra.
   const shown = mismatch ? inferValueType(raw) : type
-  const row: PageProperty = { key, type, value, html: renderPropertyValue(key, shown, value, ctx) }
+  // Seleção única: a chave tem `select` no config e o valor é um texto de uma linha (ou vazio).
+  const select =
+    !mismatch &&
+    type === 'text' &&
+    lookupSelectOptions(ctx.config, key) !== undefined &&
+    (value === null || (typeof value === 'string' && !LINE_BREAK_RE.test(value)))
+  const chosenMap = select || LIST_PROPERTY_TYPES.has(type) ? lookupChosenColors(ctx.config, key) : undefined
+  const chosen = chosenMap && Object.fromEntries(chosenMap)
+  const row: PageProperty = {
+    key, type, value,
+    html: renderPropertyValue(key, shown, value, ctx, { select, colors: chosen }),
+  }
   const locked: PropertyLock | null = readonly ? 'readonly' : citesImage(shown, value) ? 'image' : null
   if (locked) row.locked = locked
   if (mismatch) row.mismatch = true
+  if (select) row.select = true
+  if (chosen) row.colors = chosen
   return row
 }
 
@@ -198,12 +222,18 @@ function compareText(a: string, b: string): number {
 }
 
 /**
- * Índice dos valores das propriedades de lista: chave exata → valores distintos,
- * chaves e valores em ordem pt-BR. Linha travada não entra; uma string solta com
+ * Índice dos valores das propriedades de lista e de seleção única: chave exata →
+ * valores distintos, chaves e valores em ordem pt-BR. Uma chave de seleção única
+ * entra mesmo com todos os valores vazios; suas opções vêm primeiro, na ordem do
+ * arquivo (usadas ou não), e depois os valores usados fora da lista, em pt-BR.
+ * Linha travada não entra; uma string solta com
  * mismatch numa propriedade de lista entra aparada, porque vai virar item de lista
  * (e os itens de lista já vêm aparados da normalização).
  */
-export function collectPropertyValues(pages: Pick<PageMeta, 'properties'>[]): Record<string, string[]> {
+export function collectPropertyValues(
+  pages: Pick<PageMeta, 'properties'>[],
+  config: PropertyConfig = EMPTY_PROPERTY_CONFIG,
+): Record<string, string[]> {
   const byKey = new Map<string, Set<string>>()
   const add = (key: string, v: string) => {
     if (v === '') return
@@ -214,7 +244,11 @@ export function collectPropertyValues(pages: Pick<PageMeta, 'properties'>[]): Re
   for (const page of pages) {
     for (const row of page.properties ?? []) {
       if (row.locked) continue
-      if (Array.isArray(row.value)) {
+      if (row.select) {
+        // Seleção única: a chave existe mesmo sem valor usado (as opções entram no fim).
+        if (!byKey.has(row.key)) byKey.set(row.key, new Set())
+        if (typeof row.value === 'string') add(row.key, row.value.trim())
+      } else if (Array.isArray(row.value)) {
         for (const item of row.value) if (typeof item === 'string') add(row.key, item)
       } else if (row.mismatch && LIST_PROPERTY_TYPES.has(row.type) && typeof row.value === 'string') {
         add(row.key, row.value.trim())
@@ -224,6 +258,12 @@ export function collectPropertyValues(pages: Pick<PageMeta, 'properties'>[]): Re
   return Object.fromEntries(
     [...byKey]
       .sort(([a], [b]) => compareText(a, b))
-      .map(([key, values]) => [key, [...values].sort(compareText)]),
+      .map(([key, values]) => {
+        const options = lookupSelectOptions(config, key)
+        if (!options) return [key, [...values].sort(compareText)]
+        // Opções na ordem do arquivo (usadas ou não), depois os usados fora delas.
+        const extra = [...values].filter(v => !options.includes(v)).sort(compareText)
+        return [key, [...options, ...extra]]
+      }),
   )
 }

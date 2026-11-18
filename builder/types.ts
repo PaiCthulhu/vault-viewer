@@ -1,3 +1,5 @@
+import type { ChipColor } from '../lib/property-color'
+
 export interface PageMeta {
   path: string                         // e.g. "Personalidades/Aldor" — forward slashes
   title: string                        // filename sem .md
@@ -31,6 +33,10 @@ export interface PageProperty {
   html: string
   locked?: PropertyLock
   mismatch?: true
+  /** Seleção única (`select` no `.vaultwright`): o valor segue texto; o editor oferece as opções. */
+  select?: true
+  /** Cores escolhidas por valor (`colors` no `.vaultwright`), em linha select ou de lista. */
+  colors?: Record<string, ChipColor>
 }
 
 export interface PageComment {

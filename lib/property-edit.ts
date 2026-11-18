@@ -2,7 +2,8 @@
 // campo mostra, valida o que o usuário digitou e monta a linha provisória exibida até o
 // build confirmar. Tudo puro, sem React nem Node (roda no navegador).
 import type { PageProperty, PropertyType, PropertyValue } from '@/builder/types'
-import { propertyColor } from '@/lib/property-color'
+import { chipColor } from '@/lib/property-color'
+import { normalizeForSearch } from '@/lib/gallery-search'
 import { decodeEntities } from '@/lib/preview'
 import { itemLabel } from '@/lib/wikilink-label'
 
@@ -183,8 +184,14 @@ function provisionalHtml(row: PageProperty, value: PropertyValue): string {
   if (Array.isArray(value)) {
     return value
       .map(i => String(i))
-      .map(i => `<span class="vault-prop-chip" data-color="${propertyColor(row.key, i)}">${escapeHtml(itemLabel(i))}</span>`)
+      .map(i => `<span class="vault-prop-chip" data-color="${chipColor(row.key, i, row.colors)}">${escapeHtml(itemLabel(i))}</span>`)
       .join('')
+  }
+  // Seleção única: um chip só, do valor aparado (como o builder).
+  if (row.select && typeof value === 'string') {
+    const v = value.trim()
+    if (v === '') return ''
+    return `<span class="vault-prop-chip" data-color="${chipColor(row.key, v, row.colors)}">${escapeHtml(itemLabel(v))}</span>`
   }
   if (row.type === 'checkbox' && typeof value === 'boolean') {
     return `<input type="checkbox" class="vault-prop-checkbox"${value ? ' checked' : ''} disabled>`
@@ -200,5 +207,83 @@ function provisionalHtml(row: PageProperty, value: PropertyValue): string {
 // A linha que o editor mostra até o build confirmar. Não resolve link (a resposta da API
 // traz o HTML certo) e nunca é `mismatch` nem travada.
 export function provisionalRow(row: PageProperty, value: PropertyValue): PageProperty {
-  return { key: row.key, type: row.type, value, html: provisionalHtml(row, value) }
+  const out: PageProperty = { key: row.key, type: row.type, value, html: provisionalHtml(row, value) }
+  if (row.select) out.select = row.select
+  if (row.colors) out.colors = row.colors
+  return out
+}
+
+// ─── regras do menu de opções (lista e seleção única) ────────────────────────────────
+
+// Sugestões mostradas de uma vez (sem contar o "Criar"). Uma chave com milhares de valores
+// faria um menu enorme; o resto aparece digitando para filtrar.
+export const MAX_SUGGESTIONS = 50
+
+// `label` é o texto que a leitura mostra (o nome de um link); o filtro acha por ele e pelo
+// cru. Normalizadas uma vez por carga, não a cada tecla.
+export interface MenuEntry {
+  value: string
+  label: string
+  search: string
+  labelSearch: string
+}
+
+export function menuEntries(values: readonly string[]): MenuEntry[] {
+  return values.map(value => {
+    const label = itemLabel(value)
+    return { value, label, search: normalizeForSearch(value), labelSearch: normalizeForSearch(label) }
+  })
+}
+
+export interface MenuModel {
+  suggested: string[]
+  // As que ficaram de fora do limite: a linha "Mais n" no fim das sugestões, que não é opção.
+  hidden: number
+  // O texto digitado (aparado) a criar, ou `null`.
+  create: string | null
+}
+
+// `exclude` some do menu (os itens já escolhidos); `taken` só barra o "Criar". O valor igual
+// ao digitado (ignorando caixa e acento, pelo cru ou pelo nome) vem primeiro: com o limite, ele
+// não pode ficar de fora do menu, onde o "Criar" também não aparece para ele.
+export function menuModel(
+  entries: readonly MenuEntry[],
+  text: string,
+  opts: { exclude: readonly string[]; taken: readonly string[] },
+): MenuModel {
+  const query = text.trim()
+  const needle = normalizeForSearch(query)
+  const found = entries.filter(s => !opts.exclude.includes(s.value) && (s.search.includes(needle) || s.labelSearch.includes(needle)))
+  const same = (s: MenuEntry) => s.search === needle || s.labelSearch === needle
+  const matches = needle === '' ? found : [...found.filter(same), ...found.filter(s => !same(s))]
+  const create =
+    query !== '' && !opts.taken.includes(query) && !entries.some(s => s.value === query) ? query : null
+  return {
+    suggested: matches.slice(0, MAX_SUGGESTIONS).map(s => s.value),
+    hidden: Math.max(0, matches.length - MAX_SUGGESTIONS),
+    create,
+  }
+}
+
+// O que o Enter sem opção ativa adiciona. O valor que já existe igual ao digitado, ignorando
+// caixa e acento ("acao" e "Ação"), vence o texto, para o Enter não criar um quase-duplicado
+// que passaria a ser sugerido a todo editor do vault: se já está entre os escolhidos, não
+// entra nada (`chosen: true`); se é uma sugestão, entra a sugestão. Não pega a primeira opção
+// do menu: "RPG" não vira "RPG Tático". O nome de um link conta como o valor: a ordem é cru
+// exato, nome exato, cru normalizado, nome normalizado, e o mais específico vence o mais frouxo.
+export function enterPick(
+  entries: readonly MenuEntry[],
+  text: string,
+  chosen: readonly string[],
+): { value: string; chosen: boolean } {
+  const query = text.trim()
+  const needle = normalizeForSearch(query)
+  const taken = chosen.find(i => normalizeForSearch(i) === needle || normalizeForSearch(itemLabel(i)) === needle)
+  if (taken !== undefined) return { value: taken, chosen: true }
+  const hit =
+    entries.find(s => s.value === query) ??
+    entries.find(s => s.label === query) ??
+    entries.find(s => s.search === needle) ??
+    entries.find(s => s.labelSearch === needle)
+  return { value: hit?.value ?? query, chosen: false }
 }

@@ -412,7 +412,7 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   const graph = buildGraph(listed)
   // Índice dos valores das propriedades de lista, das páginas gravadas: abas entram;
   // comentários e o resto de `_comments/` não, porque não viram página.
-  const propertyValues = collectPropertyValues(pages)
+  const propertyValues = collectPropertyValues(pages, propertyCtx.config)
   const builtAt = new Date().toISOString()
   writeOutput(
     vault.slug, pages, graph,

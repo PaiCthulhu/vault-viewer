@@ -26,3 +26,27 @@ export function propertyColor(key: string, value: string): PropertyColor {
   }
   return PROPERTY_COLORS[(h >>> 0) % PROPERTY_COLORS.length]
 }
+
+/**
+ * Cores que um chip pode ter. `default` (a cor mais clara do Notion) só existe como cor
+ * escolhida no `.vaultwright`: nunca sai do hash, por isso não está em `PROPERTY_COLORS`.
+ */
+export const CHIP_COLORS = [...PROPERTY_COLORS, 'default'] as const
+
+export type ChipColor = PropertyColor | 'default'
+
+export function isChipColor(x: unknown): x is ChipColor {
+  return typeof x === 'string' && (CHIP_COLORS as readonly string[]).includes(x)
+}
+
+/** Cores escolhidas por valor (`colors` do `.vaultwright`), já validadas. */
+export type ChosenColors = Readonly<Record<string, ChipColor>>
+
+/** A cor escolhida para o valor, se houver; senão a do hash. */
+export function chipColor(key: string, value: string, colors?: ChosenColors): ChipColor {
+  if (colors && Object.hasOwn(colors, value)) {
+    const chosen: unknown = colors[value]
+    if (isChipColor(chosen)) return chosen
+  }
+  return propertyColor(key, value)
+}

@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type Ref } from 'react'
 import { useI18n } from '@/components/i18n/I18nProvider'
-import { normalizeForSearch } from '@/lib/gallery-search'
 import { fetchPropertyValues } from '@/lib/property-client'
-import { propertyColor } from '@/lib/property-color'
+import { chipColor, type ChosenColors } from '@/lib/property-color'
 import { itemLabel } from '@/lib/wikilink-label'
-import { MAX_PROPERTY_TEXT, sameValue, type ScalarEditorType } from '@/lib/property-edit'
+import {
+  MAX_PROPERTY_TEXT, enterPick, menuEntries, menuModel, sameValue,
+  type MenuModel, type ScalarEditorType,
+} from '@/lib/property-edit'
 
 // Controles de edição do bloco Propriedades. Eles só coletam o que o usuário escolheu: o
 // PropertiesBlock valida, confirma e grava.
@@ -108,14 +110,65 @@ export function ScalarEditor({ type, initial, label, onCommit, onCancel }: {
 // o editor antes do click.
 const keepFocus = (e: MouseEvent) => e.preventDefault()
 
-interface ListOption {
-  value: string
-  create: boolean
-}
+// Menu de opções (lista e seleção única): "Carregando", as sugestões, a linha "Mais n" e o
+// "Criar". Só desenha: o estado (texto, opção ativa, itens) é de quem o usa. `active` é o
+// índice em [sugestões..., "Criar"], o mesmo das setas e do Enter; `onPick` recebe o valor.
+export function OptionMenu({ id, label, menuRef, loading, model, active, optionId, onPick, propKey, colors }: {
+  id: string
+  label: string
+  menuRef?: Ref<HTMLUListElement>
+  loading: boolean
+  model: MenuModel
+  active: number
+  optionId(i: number): string
+  onPick(value: string): void
+  propKey: string
+  colors?: ChosenColors
+}) {
+  const { t } = useI18n()
+  // `i` é o índice em [sugestões..., "Criar"].
+  function renderOption(value: string, create: boolean, i: number) {
+    const chip = (
+      <span className="vault-prop-chip" data-color={chipColor(propKey, value, colors)}>
+        {create ? value : itemLabel(value)}
+      </span>
+    )
+    // O "Criar" mostra o texto digitado cru (o chip é o que ele vai ser; o nome só aparece
+    // depois de criado). O modelo da frase vem sem variáveis e é partido em `{value}`.
+    const [before, after = ''] = create ? t('properties.edit.create').split('{value}') : []
+    return (
+      <li
+        key={(create ? '+' : '=') + value}
+        id={optionId(i)}
+        role="option"
+        aria-selected={i === active}
+        className={'vault-prop-option' + (i === active ? ' is-active' : '')}
+        onMouseDown={keepFocus}
+        onClick={() => onPick(value)}
+      >
+        {create ? <>{before}{chip}{after}</> : chip}
+      </li>
+    )
+  }
 
-// Sugestões mostradas de uma vez (sem contar o "Criar"). Uma chave com milhares de valores
-// faria um menu enorme; o resto aparece digitando para filtrar.
-const MAX_SUGGESTIONS = 50
+  return (
+    <ul ref={menuRef} id={id} className="vault-prop-menu is-open" role="listbox" aria-label={label}>
+      {loading ? (
+        <li className="vault-prop-option is-loading" role="option" aria-disabled="true" aria-selected="false">
+          {t('properties.edit.loading')}
+        </li>
+      ) : null}
+      {model.suggested.map((v, i) => renderOption(v, false, i))}
+      {/* Não é opção: sem id, fora do índice das setas, sem clique. */}
+      {model.hidden > 0 ? (
+        <li className="vault-prop-option is-more" role="option" aria-disabled="true" aria-selected="false">
+          {t('properties.edit.more', { n: model.hidden })}
+        </li>
+      ) : null}
+      {model.create !== null ? renderOption(model.create, true, model.suggested.length) : null}
+    </ul>
+  )
+}
 
 // Seleção múltipla de uma propriedade de lista (multitext, tags, aliases): os itens como
 // chips, um campo para buscar ou criar e o menu de sugestões, que são os valores que o vault
@@ -125,9 +178,10 @@ const MAX_SUGGESTIONS = 50
 // Fecha uma vez só, como o ScalarEditor. Sair (o foco vai para fora do editor) sem mudar os
 // itens cancela; o Enter com o campo vazio entrega os itens ao pai, que compara com os de
 // antes (fecha sem chamada, ou confirma a troca de um valor fora do tipo).
-export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }: {
+export function ListEditor({ propKey, slug, initial, label, colors, onCommit, onCancel }: {
   propKey: string
   slug: string
+  colors?: ChosenColors
   initial: string[]
   label: string
   onCommit(items: string[]): void
@@ -161,37 +215,13 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
     }
   }, [slug, propKey])
 
-  // Normalizadas uma vez por carga, não a cada tecla. `label` é o texto que a leitura mostra
-  // (o nome de um link), e o filtro acha por ele e pelo cru.
-  const normalized = useMemo(
-    () => (suggestions ?? []).map(value => {
-      const label = itemLabel(value)
-      return { value, label, search: normalizeForSearch(value), labelSearch: normalizeForSearch(label) }
-    }),
-    [suggestions],
-  )
+  // Normalizadas uma vez por carga, não a cada tecla.
+  const entries = useMemo(() => menuEntries(suggestions ?? []), [suggestions])
 
   const query = text.trim()
-  const needle = normalizeForSearch(query)
-  const found = normalized.filter(s => !items.includes(s.value) && (s.search.includes(needle) || s.labelSearch.includes(needle)))
-  // O valor igual ao digitado (ignorando caixa e acento, pelo cru ou pelo nome) vem primeiro:
-  // com o limite, ele não pode ficar de fora do menu, onde o "Criar" também não aparece para ele.
-  const same = (s: { search: string; labelSearch: string }) => s.search === needle || s.labelSearch === needle
-  const matches = needle === ''
-    ? found
-    : [...found.filter(same), ...found.filter(s => !same(s))]
-  // As que ficaram de fora do limite: a linha "Mais n" no fim das sugestões, que não é opção
-  // (fica fora de `options`, então as setas e o Enter nunca a pegam).
-  const hidden = Math.max(0, matches.length - MAX_SUGGESTIONS)
-  const suggested: ListOption[] = matches
-    .slice(0, MAX_SUGGESTIONS)
-    .map(s => ({ value: s.value, create: false }))
-  const createOption: ListOption | null =
-    query !== '' && !items.includes(query) && !(suggestions ?? []).includes(query)
-      ? { value: query, create: true }
-      : null
+  const model = menuModel(entries, text, { exclude: items, taken: items })
   // Na ordem do menu, e o índice das setas: as sugestões, depois o "Criar".
-  const options = createOption ? [...suggested, createOption] : suggested
+  const options = model.create !== null ? [...model.suggested, model.create] : model.suggested
   const loading = suggestions === undefined
   const open = loading || options.length > 0
   const current = active < options.length ? active : -1
@@ -224,53 +254,10 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
     if (value !== '' && !items.includes(value)) setItems([...items, value])
   }
 
-  // O que o Enter sem opção ativa adiciona. O valor que já existe igual ao digitado, ignorando
-  // caixa e acento ("acao" e "Ação"), vence a query, para o Enter não criar um quase-duplicado
-  // que passaria a ser sugerido a todo editor do vault: se já está entre os itens, não entra
-  // nada (`''` limpa o campo); se é uma sugestão, entra a sugestão. O "Criar" fica nas setas,
-  // para quem quer mesmo o valor sem acento. Não pega a primeira opção do menu: "RPG" não vira
-  // "RPG Tático". O nome de um link conta como o valor (o chip mostra o nome, então "nota a"
-  // é o link "[[Nota A]]"): a ordem é cru exato, nome exato, cru normalizado, nome normalizado,
-  // e o mais específico vence o mais frouxo.
-  function enterValue(): string {
-    if (items.some(i => normalizeForSearch(i) === needle || normalizeForSearch(itemLabel(i)) === needle)) return ''
-    return (
-      normalized.find(s => s.value === query) ??
-      normalized.find(s => s.label === query) ??
-      normalized.find(s => s.search === needle) ??
-      normalized.find(s => s.labelSearch === needle)
-    )?.value ?? query
-  }
-
   // Pelo índice: um valor do disco pode ter item repetido.
   function remove(index: number) {
     setItems(items.filter((_, i) => i !== index))
     setActive(-1)
-  }
-
-  // `i` é o índice em `options`, o mesmo das setas e do Enter.
-  function renderOption(o: ListOption, i: number) {
-    const chip = (
-      <span className="vault-prop-chip" data-color={propertyColor(propKey, o.value)}>
-        {o.create ? o.value : itemLabel(o.value)}
-      </span>
-    )
-    // O "Criar" mostra o texto digitado cru (o chip é o que ele vai ser; o nome só aparece
-    // depois de criado). O modelo da frase vem sem variáveis e é partido em `{value}`.
-    const [before, after = ''] = o.create ? t('properties.edit.create').split('{value}') : []
-    return (
-      <li
-        key={(o.create ? '+' : '=') + o.value}
-        id={optionId(i)}
-        role="option"
-        aria-selected={i === current}
-        className={'vault-prop-option' + (i === current ? ' is-active' : '')}
-        onMouseDown={keepFocus}
-        onClick={() => add(o.value)}
-      >
-        {o.create ? <>{before}{chip}{after}</> : chip}
-      </li>
-    )
   }
 
   return (
@@ -298,7 +285,7 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
       }}
     >
       {items.map((item, i) => (
-        <span key={i + '\u0000' + item} className="vault-prop-chip" data-color={propertyColor(propKey, item)}>
+        <span key={i + '\u0000' + item} className="vault-prop-chip" data-color={chipColor(propKey, item, colors)}>
           {itemLabel(item)}
           <button
             type="button"
@@ -346,8 +333,12 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
             else setActive(current <= 0 ? n - 1 : current - 1)
           } else if (e.key === 'Enter') {
             e.preventDefault()
-            if (current >= 0) add(options[current].value)
-            else if (query !== '') add(enterValue())
+            if (current >= 0) add(options[current])
+            else if (query !== '') {
+              // Já entre os itens: não entra nada, só limpa o campo.
+              const pick = enterPick(entries, text, items)
+              add(pick.chosen ? '' : pick.value)
+            }
             else finish('enter')
           } else if (e.key === 'Backspace' && text === '' && items.length > 0) {
             e.preventDefault()
@@ -358,21 +349,164 @@ export function ListEditor({ propKey, slug, initial, label, onCommit, onCancel }
       {/* Dentro da caixa, numa linha própria: o menu abre logo abaixo dela e não o cobre. */}
       {tooLong ? <span className="vault-prop-error" role="alert">{t('properties.error.tooLong')}</span> : null}
       {open ? (
-        <ul ref={menuRef} id={menuId} className="vault-prop-menu is-open" role="listbox" aria-label={label}>
-          {loading ? (
-            <li className="vault-prop-option is-loading" role="option" aria-disabled="true" aria-selected="false">
-              {t('properties.edit.loading')}
-            </li>
-          ) : null}
-          {suggested.map((o, i) => renderOption(o, i))}
-          {/* Não é opção: sem id, fora do índice das setas, sem clique. */}
-          {hidden > 0 ? (
-            <li className="vault-prop-option is-more" role="option" aria-disabled="true" aria-selected="false">
-              {t('properties.edit.more', { n: hidden })}
-            </li>
-          ) : null}
-          {createOption ? renderOption(createOption, suggested.length) : null}
-        </ul>
+        <OptionMenu
+          id={menuId} label={label} menuRef={menuRef} loading={loading} model={model}
+          active={current} optionId={optionId} onPick={add} propKey={propKey} colors={colors}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// O encanamento do combobox (busca das sugestões, modelo, opção ativa, scroll, blur/alt-tab e teclado)
+// espelha o do ListEditor: uma correção num precisa ser conferida no outro.
+// Seleção única de uma propriedade `select` (declarada no .vaultwright): o valor atual como
+// um chip com ×, um campo para buscar ou criar e o menu com os valores que o vault já usa
+// nessa chave. Escolher (clique ou Enter) entrega o valor ao pai na hora; o × entrega `null`.
+//
+// Fecha uma vez só, como o ListEditor. O valor atual fica entre as opções (escolhê-lo só
+// fecha, o pai compara), mas não pode ser "criado" de novo. Sair sem escolher cancela; o
+// Enter com o campo vazio entrega o valor de antes (o pai fecha sem chamada).
+export function SelectEditor({ propKey, slug, initial, colors, label, onCommit, onCancel }: {
+  propKey: string
+  slug: string
+  initial: string | null
+  colors?: ChosenColors
+  label: string
+  onCommit(value: string | null): void
+  onCancel(): void
+}) {
+  const { t } = useI18n()
+  const menuId = useId()
+  const closed = useRef(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLUListElement>(null)
+  const [text, setText] = useState('')
+  const [active, setActive] = useState(-1)
+  // O texto passou do limite ao tentar escolher: o aviso fica até o texto mudar.
+  const [tooLong, setTooLong] = useState(false)
+  // `undefined`: carregando; `null`: a busca falhou (sem sugestões, e criar continua).
+  const [suggestions, setSuggestions] = useState<string[] | null | undefined>(undefined)
+
+  useEffect(() => {
+    let alive = true
+    void fetchPropertyValues(slug, propKey).then(values => {
+      if (!alive) return
+      setSuggestions(values)
+      setActive(-1)
+    })
+    return () => {
+      alive = false
+    }
+  }, [slug, propKey])
+
+  const entries = useMemo(() => menuEntries(suggestions ?? []), [suggestions])
+  const chosen = initial ? [initial] : []
+
+  const query = text.trim()
+  const model = menuModel(entries, text, { exclude: [], taken: chosen })
+  const options = model.create !== null ? [...model.suggested, model.create] : model.suggested
+  const loading = suggestions === undefined
+  const open = loading || options.length > 0
+  const current = active < options.length ? active : -1
+  const optionId = (i: number) => `${menuId}-${i}`
+
+  useEffect(() => {
+    if (current >= 0) menuRef.current?.querySelector('.is-active')?.scrollIntoView?.({ block: 'nearest' })
+  }, [current])
+
+  function finish(how: 'commit' | 'cancel', value: string | null = null) {
+    if (closed.current) return
+    closed.current = true
+    if (how === 'cancel') return onCancel()
+    onCommit(value)
+  }
+
+  // Texto grande demais não grava: fica no campo, para encurtar, com o aviso. O pai ainda
+  // recusa ao gravar.
+  function pick(value: string) {
+    if (value.trim().length > MAX_PROPERTY_TEXT) {
+      setTooLong(true)
+      return
+    }
+    finish('commit', value)
+  }
+
+  return (
+    <div
+      className="vault-prop-multiselect vault-prop-select"
+      onMouseDown={e => {
+        if (e.target !== inputRef.current) e.preventDefault()
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
+          e.preventDefault()
+          finish('cancel')
+        }
+      }}
+      onBlur={e => {
+        const next = e.relatedTarget
+        if (next instanceof Node && e.currentTarget.contains(next)) return
+        // Alt-tab ou troca de aba: a janela sem foco não é "terminei".
+        if (!document.hasFocus()) return
+        finish('cancel')
+      }}
+    >
+      {initial ? (
+        <span className="vault-prop-chip" data-color={chipColor(propKey, initial, colors)}>
+          {itemLabel(initial)}
+          <button
+            type="button"
+            className="vault-prop-chip-remove"
+            aria-label={t('properties.edit.remove', { value: itemLabel(initial) })}
+            onMouseDown={keepFocus}
+            // Grava na hora, sem devolver o foco ao campo: o editor fecha e o `rememberFocus` do
+            // `commitSelect` devolve o foco à linha.
+            onClick={() => finish('commit', null)}
+          >
+            ×
+          </button>
+        </span>
+      ) : null}
+      <input
+        ref={inputRef}
+        className="vault-prop-input vault-prop-list-input"
+        role="combobox"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-autocomplete="list"
+        aria-activedescendant={current >= 0 ? optionId(current) : undefined}
+        placeholder={t('properties.edit.listPlaceholder')}
+        autoFocus
+        value={text}
+        onChange={e => {
+          setText(e.target.value)
+          setActive(-1)
+          setTooLong(false)
+        }}
+        onKeyDown={e => {
+          if (e.nativeEvent.isComposing) return
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            const n = options.length
+            if (n === 0) return
+            if (e.key === 'ArrowDown') setActive((current + 1) % n)
+            else setActive(current <= 0 ? n - 1 : current - 1)
+          } else if (e.key === 'Enter') {
+            e.preventDefault()
+            if (current >= 0) pick(options[current])
+            else if (query !== '') pick(enterPick(entries, text, chosen).value)
+            else finish('commit', initial)
+          }
+        }}
+      />
+      {tooLong ? <span className="vault-prop-error" role="alert">{t('properties.error.tooLong')}</span> : null}
+      {open ? (
+        <OptionMenu
+          id={menuId} label={label} menuRef={menuRef} loading={loading} model={model}
+          active={current} optionId={optionId} onPick={pick} propKey={propKey} colors={colors}
+        />
       ) : null}
     </div>
   )
