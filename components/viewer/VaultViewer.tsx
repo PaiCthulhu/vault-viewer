@@ -37,6 +37,8 @@ interface VaultViewerProps {
   // username → nome de exibição (null = usuário sem nome); ausente do mapa = autor desconhecido.
   // Vem à parte do `page` para não alterar a versão da página.
   displayNames?: Record<string, string | null>
+  // O usuário edita propriedades neste vault (editor ou admin). Também fora do `page`.
+  canEditProperties?: boolean
 }
 
 export function VaultViewer({
@@ -52,6 +54,7 @@ export function VaultViewer({
   pending,
   pageVersion,
   displayNames,
+  canEditProperties,
 }: VaultViewerProps) {
   const { t } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -165,6 +168,7 @@ export function VaultViewer({
               pagePath={page.path}
               tabs={page.tabs}
               properties={page.properties}
+              editProperties={canEditProperties}
               comments={
                 // A flag do vault é aplicada aqui: o `PageMeta` traz os comentários mesmo com ela desligada.
                 vault.comments === true && page.commentable === true

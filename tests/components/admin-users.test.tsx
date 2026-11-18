@@ -227,6 +227,27 @@ describe('UsersTable', () => {
     expect(screen.getByText('my-vault').textContent).toContain('editor')
     expect(screen.getByText('test-vault').textContent).not.toContain('editor')
   })
+
+  it('a coluna Função mostra Usuário para quem não é admin e Admin para o admin', () => {
+    render(
+      <UsersTable
+        users={[user({ id: 1, username: 'ana' }), user({ id: 2, username: 'root', isAdmin: true })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+      />,
+    )
+    // a linha 0 é o cabeçalho; a Função é a segunda célula
+    const [, ana, root] = screen.getAllByRole('row')
+    expect(within(ana).getAllByRole('cell')[1].textContent).toBe('Usuário')
+    expect(within(root).getAllByRole('cell')[1].textContent).toBe('Admin')
+    expect(screen.queryByText('Leitor')).toBeNull()
+  })
+
+  it('em inglês a coluna Função mostra User', async () => {
+    const { getDict, translate } = await import('@/lib/i18n')
+    expect(translate(getDict('en'), 'admin.users.roleUser')).toBe('User')
+    expect(translate(getDict('pt-BR'), 'admin.users.roleUser')).toBe('Usuário')
+  })
 })
 
 describe('AdminPageClient', () => {

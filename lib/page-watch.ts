@@ -146,6 +146,9 @@ const NON_TEXT_INPUTS = new Set([
 // O usuário está no meio de algo que um refresh atrapalharia?
 export function isUserBusy(doc: Document, lastInteractionAt: number, now: number): boolean {
   if (doc.querySelector('.dv-filter-menu.is-open')) return true
+  // Propriedade sendo editada: o refresh fecharia o editor e perderia o que foi digitado,
+  // então vale mesmo sem interação recente.
+  if (doc.querySelector('.vault-properties .vault-prop.is-editing')) return true
   const el = doc.activeElement
   if (!el || now - lastInteractionAt >= BUSY_QUIET_MS) return false
   const tag = el.tagName

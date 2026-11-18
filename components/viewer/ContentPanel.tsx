@@ -42,6 +42,9 @@ interface ContentPanelProps {
   comments?: ContentPanelComments
   // Linhas do bloco Propriedades (`PageMeta.properties`), montado no segmento `properties`.
   properties?: PageProperty[]
+  // Quem edita (editor do vault ou admin): liga os editores e os cadeados do bloco Propriedades.
+  // Sem ela o bloco é só leitura, sem nenhum controle.
+  editProperties?: boolean
 }
 
 const BG_URL_RE = /url\(['"]?([^'")]+)['"]?\)/
@@ -58,7 +61,7 @@ const externalPreviewCache = new Map<string, Promise<ExternalPreviewData>>()
 const PREVIEW_DELAY = 350
 const CARD_WIDTH = 320
 
-export function ContentPanel({ segments: incoming, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay', tabs, comments, properties }: ContentPanelProps) {
+export function ContentPanel({ segments: incoming, css, articleClass, slug, pagePath, notice, noticePlacement = 'overlay', tabs, comments, properties, editProperties }: ContentPanelProps) {
   // Um router.refresh() entrega um `segments` novo mesmo quando o HTML não mudou (só os
   // comentários mudaram, por exemplo). Com o conteúdo igual na mesma página, fica o
   // array antigo: os elementos memoizados continuam os mesmos, o React não reaplica o
@@ -945,7 +948,11 @@ export function ContentPanel({ segments: incoming, css, articleClass, slug, page
             // valores, e a chave por página mantém o <details> (aberto ou não) no refresh.
             return (
               <div key={`properties:${slug}:${pagePath}`} className={`${articleClass} vault-properties-wrap`}>
-                <PropertiesBlock properties={properties} />
+                <PropertiesBlock
+                  properties={properties}
+                  showLocks={editProperties === true}
+                  edit={editProperties ? { slug, pagePath } : undefined}
+                />
               </div>
             )
           }

@@ -52,4 +52,15 @@ describe('isUserBusy', () => {
     focused('button')
     expect(isUserBusy(document, 0, 100)).toBe(false)
   })
+
+  it('linha de propriedade em edição é ocupado, sem olhar a janela de interação', () => {
+    document.body.innerHTML =
+      '<details class="vault-properties"><div class="vault-prop is-editing"></div></details>'
+    expect(isUserBusy(document, -Infinity, 10_000)).toBe(true)
+  })
+
+  it('linha de propriedade fora de edição não é ocupado', () => {
+    document.body.innerHTML = '<details class="vault-properties"><div class="vault-prop"></div></details>'
+    expect(isUserBusy(document, -Infinity, 10_000)).toBe(false)
+  })
 })

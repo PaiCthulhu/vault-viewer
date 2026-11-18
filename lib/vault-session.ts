@@ -41,12 +41,20 @@ export async function vaultSession(slug: string): Promise<VaultSession | NextRes
   return { vault, userId: user.id, username: user.username, isAdmin }
 }
 
+// Mesma regra do editorSession, sem sessão HTTP: a linha do usuário existe e ele é admin ou
+// tem nível `editor` no vault. Lida do banco, para a página decidir se mostra os editores.
+export function canEditVault(userId: number, slug: string): boolean {
+  const user = dbGetUserById(userId)
+  if (!user) return false
+  return Boolean(user.is_admin) || dbGetUserVaultLevel(userId, slug) === 'editor'
+}
+
 // Quem pode editar o vault: a sessão comum e, para quem não é admin, nível `editor` gravado
 // no banco. O admin conta como editor em todo vault. Um leitor leva 403.
 export async function editorSession(slug: string): Promise<VaultSession | NextResponse> {
   const session = await vaultSession(slug)
   if (session instanceof NextResponse) return session
-  if (!session.isAdmin && dbGetUserVaultLevel(session.userId, slug) !== 'editor') {
+  if (!canEditVault(session.userId, slug)) {
     return fail(403, 'Sem permissão de edição neste vault')
   }
   return session

@@ -139,6 +139,131 @@
 .vault-prop-chip[data-color="pink"]   { background: var(--vault-chip-pink); }
 .vault-prop-chip[data-color="red"]    { background: var(--vault-chip-red); }
 
+/* Edição no próprio bloco (quem edita o vault). A coluna de valor de uma linha
+   editável empilha o valor, o "Salvando…", a confirmação e o erro. */
+.vault-properties .vault-prop-val-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.vault-properties .vault-prop-editable {
+  cursor: pointer;
+  border-radius: 4px;
+  margin: -0.1rem -0.3rem;
+  padding: 0.1rem 0.3rem;
+  min-height: 1.4em;
+}
+.vault-properties .vault-prop-editable:hover { background: var(--background-modifier-hover); }
+.vault-properties .vault-prop-editable:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.vault-properties .vault-prop-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+.vault-properties .vault-prop-input:focus { outline: none; border-color: var(--accent); }
+.vault-properties .vault-prop.is-saving .vault-prop-val { opacity: 0.65; }
+.vault-properties .vault-prop-saving { font-size: 0.75rem; color: var(--text-muted); }
+.vault-properties .vault-prop-current { color: var(--text-muted); }
+.vault-properties .vault-prop-checkbox + .vault-prop-current { margin-left: 0.5rem; }
+.vault-properties .vault-prop-error { display: block; font-size: 0.8rem; color: #dc2626; }
+.dark .vault-properties .vault-prop-error { color: #f87171; }
+.vault-properties .vault-prop-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+}
+/* Os botões da confirmação são os da faixa de comentários (o .vault-comment-btn, mais
+   abaixo, com os seletores agrupados); aqui só o que é deles: a altura para o toque. */
+.vault-properties .vault-prop-btn { min-height: 28px; }
+
+/* Seleção múltipla das listas: os chips e o campo numa caixa com a cara do
+   .vault-prop-input, e o menu de sugestões logo abaixo dela. */
+.vault-properties .vault-prop-multiselect {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+.vault-properties .vault-prop-multiselect:focus-within { border-color: var(--accent); }
+.vault-properties .vault-prop-multiselect .vault-prop-chip { margin: 0; }
+.vault-properties .vault-prop-list-input {
+  border: none;
+  flex: 1 1 8ch;
+  min-width: 8ch;
+  padding: 0.1rem 0;
+  background: transparent;
+}
+.vault-properties .vault-prop-chip-remove {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+  color: inherit;
+  margin-left: 0.2rem;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.vault-properties .vault-prop-chip-remove:hover,
+.vault-properties .vault-prop-chip-remove:focus { opacity: 1; }
+/* Toque: o iOS dá zoom ao focar um campo com fonte menor que 16px, e o × de 12px é um alvo
+   pequeno demais. A margem negativa devolve ao chip o tamanho de antes. */
+@media (pointer: coarse) {
+  .vault-properties .vault-prop-input { font-size: 16px; }
+  .vault-properties .vault-prop-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+    margin-block: -6px;
+    margin-right: -6px;
+  }
+}
+.vault-properties .vault-prop-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 14rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.vault-properties .vault-prop-option {
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+.vault-properties .vault-prop-option:not(.is-loading):hover { background: var(--accent-bg); }
+.vault-properties .vault-prop-option.is-active { background: var(--accent-bg); }
+.vault-properties .vault-prop-option.is-loading { cursor: default; color: var(--text-muted); }
+/* O bloco corta o que passa da borda (overflow: hidden, para os cantos): com o menu
+   aberto ele não corta, senão o menu de uma das últimas linhas sairia cortado. */
+.vault-properties:has(.vault-prop-menu.is-open) { overflow: visible; }
+
 /* No HTML novo o bloco é um segmento próprio, numa caixa .vault-article só dele.
    Sem o padding vertical entre ele e as caixas vizinhas (o título antes, o corpo
    depois), as margens do título, do <details> e do corpo colapsam como quando o
@@ -257,7 +382,9 @@
   color: var(--accent);
 }
 
-.vault-comment-btn {
+/* Também os botões da confirmação do bloco Propriedades (.vault-prop-btn). */
+.vault-comment-btn,
+.vault-properties .vault-prop-btn {
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--accent);
@@ -268,13 +395,17 @@
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
-.vault-comment-btn:hover:not(:disabled) { background: var(--accent-bg); }
-.vault-comment-btn.is-primary { background: var(--accent); color: #fff; }
-.vault-comment-btn.is-primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.1); }
+.vault-comment-btn:hover:not(:disabled),
+.vault-properties .vault-prop-btn:hover:not(:disabled) { background: var(--accent-bg); }
+.vault-comment-btn.is-primary,
+.vault-properties .vault-prop-btn.is-primary { background: var(--accent); color: #fff; }
+.vault-comment-btn.is-primary:hover:not(:disabled),
+.vault-properties .vault-prop-btn.is-primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.1); }
 .vault-comment-btn.is-danger { color: #dc2626; border-color: #dc2626; }
 .vault-comment-btn.is-danger:hover:not(:disabled) { background: rgba(220, 38, 38, 0.12); }
 .vault-comment-btn:disabled { opacity: 0.45; cursor: default; }
 .vault-comment-btn:focus-visible,
+.vault-properties .vault-prop-btn:focus-visible,
 .vault-comment-action:focus-visible,
 .vault-comments-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

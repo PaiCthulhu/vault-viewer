@@ -42,6 +42,7 @@ import { loadVaultIgnore, type VaultIgnore } from '@/builder/vault-ignore'
 import { editFrontmatterValue, readFrontmatterData, validateEditValue, type EditRefusal } from '@/lib/frontmatter-edit'
 import { safePagePath, scannedVaultFile } from '@/lib/pending-page'
 import { pageFilePath } from '@/lib/vault'
+import { IMAGE_VALUE_ERROR, TYPE_CHANGE_ERROR } from '@/lib/property-messages'
 import { codeOf, markWrote, overLocks, replaceFileIfUnchanged, vaultLinkResolver, withVaultLock } from '@/lib/vault-write'
 
 // A primeira tentativa mais até 3 refeitas, quando a nota muda entre a leitura e a troca.
@@ -275,7 +276,7 @@ export function editProperty(
         (current.type === 'text' || LIST_PROPERTY_TYPES.has(current.type)) &&
         toPageProperty(key, value, ctx).locked === 'image'
       ) {
-        throw new PropertyError(400, 'O valor não pode citar imagem do vault')
+        throw new PropertyError(400, IMAGE_VALUE_ERROR)
       }
 
       if (!current.mismatch && sameJson(value, current.value)) return { property: current, notePath, wrote: false }
@@ -290,7 +291,7 @@ export function editProperty(
         throw new PropertyError(422, REFUSAL_MESSAGES['verify-failed'])
       }
       if (resolvePropertyType(key, next.data[key], ctx.config) !== current.type) {
-        throw new PropertyError(400, 'O valor mudaria o tipo da propriedade')
+        throw new PropertyError(400, TYPE_CHANGE_ERROR)
       }
 
       const abs = file.abs

@@ -157,3 +157,23 @@ describe('vaultSession', () => {
     expect(await mod.vaultSession('test-vault')).toMatchObject({ username: 'ana', isAdmin: false })
   })
 })
+
+describe('canEditVault', () => {
+  it('editor do vault pode; no vault em que é leitor, não', () => {
+    expect(mod.canEditVault(ids.ana, 'my-vault')).toBe(true)
+    expect(mod.canEditVault(ids.ana, 'test-vault')).toBe(false)
+  })
+
+  it('admin pode em qualquer vault', () => {
+    expect(mod.canEditVault(ids.root, 'my-vault')).toBe(true)
+    expect(mod.canEditVault(ids.root, 'nao-existe')).toBe(true)
+  })
+
+  it('usuário apagado não pode', () => {
+    expect(mod.canEditVault(99999, 'my-vault')).toBe(false)
+  })
+
+  it('usuário sem grant não pode', () => {
+    expect(mod.canEditVault(ids.bia, 'my-vault')).toBe(false)
+  })
+})

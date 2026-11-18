@@ -38,13 +38,13 @@ const pageHtml = (body = BODY, extra = '') =>
 const panel = (
   html: string,
   properties: PageProperty[] | undefined,
-  opts: { comments?: ContentPanelComments; pagePath?: string } = {},
+  opts: { comments?: ContentPanelComments; pagePath?: string; editProperties?: boolean } = {},
 ) => (
   <I18nProvider locale="pt-BR">
     <ContentPanel
       segments={parseHtmlSegments(html, { properties: true, comments: !!opts.comments })}
       css="" articleClass="vault-article" slug="my-vault" pagePath={opts.pagePath ?? PAGE}
-      properties={properties} comments={opts.comments}
+      properties={properties} comments={opts.comments} editProperties={opts.editProperties}
     />
   </I18nProvider>
 )
@@ -309,19 +309,48 @@ describe('ContentPanel: segmento de Propriedades', () => {
 
   it('refresh que preenche uma vazia e tira a trava mantém o <details> aberto', async () => {
     const before: PageProperty[] = [{ key: 'status', type: 'text', value: null, html: '', locked: 'readonly' }]
-    const { container, rerender } = render(panel(pageHtml(), before))
+    const { container, rerender } = render(panel(pageHtml(), before, { editProperties: true }))
     const details = container.querySelector<HTMLDetailsElement>('details.vault-properties')!
     details.open = true
     expect(container.textContent).toContain('Vazio')
     expect(container.querySelector('.vault-prop-lock')).not.toBeNull()
 
     const after: PageProperty[] = [{ key: 'status', type: 'text', value: 'ok', html: 'ok' }]
-    await act(async () => { rerender(panel(pageHtml(), after)) })
+    await act(async () => { rerender(panel(pageHtml(), after, { editProperties: true })) })
 
     expect(container.querySelector('details.vault-properties')).toBe(details)
     expect(details.open).toBe(true)
     expect(container.textContent).not.toContain('Vazio')
     expect(container.querySelector('.vault-prop-lock')).toBeNull()
+  })
+
+  describe('quem edita e quem só lê', () => {
+    const ROWS: PageProperty[] = [
+      { key: 'rating', type: 'number', value: 3, html: '3' },
+      { key: 'status', type: 'text', value: 'x', html: 'x', locked: 'readonly' },
+      { key: 'done', type: 'checkbox', value: true, html: '<input type="checkbox" class="vault-prop-checkbox" checked disabled>' },
+    ]
+
+    it('com editProperties o bloco tem linhas editáveis e o cadeado da travada', () => {
+      const { container } = render(panel(pageHtml(), ROWS, { editProperties: true }))
+      expect(container.querySelector('.vault-properties .vault-prop-editable')).not.toBeNull()
+      expect(container.querySelector('.vault-properties .vault-prop-lock[data-lock="readonly"]')).not.toBeNull()
+    })
+
+    it('sem a prop não há cadeado nem nenhum controle dentro do bloco', () => {
+      for (const opts of [{}, { editProperties: false }]) {
+        const { container } = render(panel(pageHtml(), ROWS, opts))
+        const block = container.querySelector('.vault-properties')!
+        expect(block).not.toBeNull()
+        expect(block.querySelector('.vault-prop-lock')).toBeNull()
+        expect(block.querySelector('.vault-prop-editable')).toBeNull()
+        expect(block.querySelector('input:not([disabled])')).toBeNull()
+        expect(block.querySelector('button')).toBeNull()
+        expect(block.querySelector('[role=button]')).toBeNull()
+        expect(block.querySelector('[tabindex]')).toBeNull()
+        cleanup()
+      }
+    })
   })
 
   it('formato antigo traduz o rótulo data-i18n', () => {

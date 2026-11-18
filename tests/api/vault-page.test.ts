@@ -21,8 +21,12 @@ vi.mock('@/lib/vault-config', () => ({
 }))
 
 const dbGetDisplayNames = vi.fn()
+let mockUser: { id: number; is_admin: number } | undefined = { id: 1, is_admin: 1 }
+let mockLevel: 'reader' | 'editor' | null = null
 vi.mock('@/lib/db', () => ({
   dbUserHasVaultAccess: () => true,
+  dbGetUserById: () => mockUser,
+  dbGetUserVaultLevel: () => mockLevel,
   dbGetDisplayNames: (...a: unknown[]) => dbGetDisplayNames(...a),
 }))
 vi.mock('@/lib/pending-page', async importActual => ({
@@ -63,6 +67,8 @@ beforeEach(() => {
   fs.writeFileSync(path.join(base, 'tree.json'), JSON.stringify([]))
   cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmp)
   mockComments = true
+  mockUser = { id: 1, is_admin: 1 }
+  mockLevel = null
   dbGetDisplayNames.mockReset()
   dbGetDisplayNames.mockImplementation(() => ({ ana: 'Ana Souza', bia: null }))
 })
@@ -116,5 +122,24 @@ describe('página do vault com comentários', () => {
     const props = await render()
     expect(props.page).toEqual(plain)
     expect(Object.keys(props.page as object)).not.toContain('comments')
+  })
+})
+
+describe('página do vault: quem edita propriedades', () => {
+  it('admin e editor recebem canEditProperties, fora do page e sem mexer na versão', async () => {
+    const admin = await render()
+    expect(admin.canEditProperties).toBe(true)
+    expect(Object.keys(admin.page as object)).not.toContain('canEditProperties')
+    expect(admin.pageVersion).toBe(currentPageVersion('v', 'Notas/Minha Nota'))
+
+    mockUser = { id: 2, is_admin: 0 }
+    mockLevel = 'editor'
+    expect((await render()).canEditProperties).toBe(true)
+  })
+
+  it('leitor não recebe', async () => {
+    mockUser = { id: 2, is_admin: 0 }
+    mockLevel = 'reader'
+    expect((await render()).canEditProperties).toBe(false)
   })
 })

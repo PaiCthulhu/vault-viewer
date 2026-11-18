@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { verifyToken, COOKIE_NAME } from '@/lib/auth'
 import { getVaultBySlug } from '@/lib/vault-config'
 import { dbUserHasVaultAccess } from '@/lib/db'
+import { canEditVault } from '@/lib/vault-session'
 import { getPageData, getPagesIndex, getGraphData, getVaultTree, findHomePage, pageJsonMtimeMs } from '@/lib/vault'
 import { isPending, provisionalPage } from '@/lib/pending-page'
 import { getFolderPage } from '@/lib/folder-page'
@@ -90,6 +91,9 @@ export default async function VaultPage({ params }: Props) {
   // Nomes dos autores dos comentários: à parte, nunca dentro do `page` (a versão é o hash do JSON do disco).
   const displayNames = vault.comments === true ? pageDisplayNames(page, user.username) : {}
 
+  // Quem edita propriedades: lido do banco e passado à parte, como os nomes; fora do `page`.
+  const canEdit = canEditVault(user.userId, slug)
+
   // A versão é o hash do `PageMeta` do disco (o mesmo do `currentPageVersion`). Só depois, e só
   // no que vai ao navegador, a flag desligada esvazia os comentários: esconder a faixa não basta.
   const version = pending ? null : pageVersion(page)
@@ -109,6 +113,7 @@ export default async function VaultPage({ params }: Props) {
       pending={pending}
       pageVersion={version}
       displayNames={displayNames}
+      canEditProperties={canEdit}
     />
   )
 }

@@ -38,7 +38,7 @@ export function UsersTable({ users, selectedId, onSelect }: Props) {
               <td className="px-4 py-3 font-semibold text-[var(--text)]">{u.username}</td>
               <td className="px-4 py-3">
                 <span className={`rounded px-2.5 py-0.5 text-xs font-semibold ${u.isAdmin ? 'bg-indigo-500/20 text-indigo-300' : 'bg-[var(--bg-secondary)] text-[var(--text-muted)]'}`}>
-                  {u.isAdmin ? t('admin.users.roleAdmin') : t('admin.users.roleReader')}
+                  {u.isAdmin ? t('admin.users.roleAdmin') : t('admin.users.roleUser')}
                 </span>
               </td>
               <td className="px-4 py-3">
