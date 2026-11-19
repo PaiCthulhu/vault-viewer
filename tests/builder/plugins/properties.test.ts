@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildPageProperties,
   collectPropertyValues,
+  imageTarget,
   isHiddenProperty,
   PROPERTIES_MARKER,
   renderPropertyValue,
@@ -13,6 +14,8 @@ import { EMPTY_PROPERTY_CONFIG, type PropertyConfig } from '../../../builder/pro
 import type { ScannedFile } from '../../../builder/scanner'
 import type { PageProperty, PropertyType } from '../../../builder/types'
 import { propertyColor, type ChipColor } from '../../../lib/property-color'
+import { isNoteItem, itemLabel } from '../../../lib/wikilink-label'
+import { decodeEntities } from '../../../lib/preview'
 
 const files: ScannedFile[] = [
   { absolutePath: '/v/Notes/X.md', relativePath: 'Notes/X', title: 'X' },
@@ -688,9 +691,10 @@ describe('toPageProperty — relation', () => {
   })
 
   it('lista com relation ganha relation: true', () => {
-    const plain = one('related', ['[[A]]', 'solto'])
     expect(one('related', ['[[A]]', 'solto'], rel())).toStrictEqual({
-      key: 'related', type: 'multitext', value: ['[[A]]', 'solto'], html: plain.html, relation: true,
+      key: 'related', type: 'multitext', value: ['[[A]]', 'solto'],
+      html: '<span class="vault-prop-note"><span class="vault-dead-link">A</span></span>' + chip('related', 'solto', 'solto'),
+      relation: true,
     })
   })
 
@@ -720,5 +724,126 @@ describe('toPageProperty — relation', () => {
 
   it('lista sem relation no config: sem a chave', () => {
     expect(Object.keys(one('related', ['a']))).not.toContain('relation')
+  })
+})
+
+describe('toPageProperty — relação: a nota sai como título, sem chip', () => {
+  const relFiles: ScannedFile[] = [
+    { absolutePath: '/v/Games/Alpha.md', relativePath: 'Games/Alpha', title: 'Alpha' },
+    { absolutePath: '/v/Notes/X.md', relativePath: 'Notes/X', title: 'X' },
+  ]
+  const relResolver = new LinkResolver(relFiles)
+  const relConfig = (extra: Partial<PropertyConfig> = {}): PropertyConfig => ({
+    ...EMPTY_PROPERTY_CONFIG,
+    relation: new Map([['related', 'Games']]),
+    colors: new Map([['related', new Map<string, ChipColor>([['solto', 'red'], ['[[Alpha]]', 'green'], ['[[X]]', 'green']])]]),
+    ...extra,
+  })
+  const relCtx = (config: PropertyConfig = relConfig()): PropertyRenderContext => ({
+    renderWikilinks: s => relResolver.replaceWikilinksEscaped(s, 'my-vault'),
+    resolveImage: p => '/vault-assets/my-vault/' + p,
+    config,
+  })
+  const note = (inner: string) => `<span class="vault-prop-note">${inner}</span>`
+
+  it('nota da pasta, nota de fora e link morto saem como título; o texto solto é chip na cor escolhida', () => {
+    const r = toPageProperty('related', ['[[Alpha]]', '[[X|a & <b>]]', '[[Missing]]', 'solto'], relCtx())
+    expect(r.html).toBe(
+      note('<a href="/vault/my-vault/Games/Alpha">Alpha</a>') +
+        note('<a href="/vault/my-vault/Notes/X">a &amp; &lt;b&gt;</a>') +
+        note('<span class="vault-dead-link">Missing</span>') +
+        '<span class="vault-prop-chip" data-color="red">solto</span>',
+    )
+    // `colors` não chega às notas (elas não têm pílula), mas a linha ainda o carrega.
+    expect(r.html).not.toContain('data-color="green"')
+    expect(r.colors).toEqual({ solto: 'red', '[[Alpha]]': 'green', '[[X]]': 'green' })
+    expect(r.relation).toBe(true)
+  })
+
+  it('texto com link no meio, dois links e [[]] continuam chip', () => {
+    const r = toPageProperty('related', ['ver [[Alpha]]', '[[Alpha]] [[X]]', '[[]]'], relCtx())
+    expect(r.html).toBe(
+      chip('related', 'ver [[Alpha]]', 'ver <a href="/vault/my-vault/Games/Alpha">Alpha</a>') +
+        chip('related', '[[Alpha]] [[X]]', '<a href="/vault/my-vault/Games/Alpha">Alpha</a> <a href="/vault/my-vault/Notes/X">X</a>') +
+        chip('related', '[[]]', '[[]]'),
+    )
+  })
+
+  it('imagem numa relação continua miniatura (e a linha trava)', () => {
+    const r = toPageProperty('related', ['[[capa.png]]', '[[Alpha]]'], relCtx())
+    expect(r.html).toBe(
+      '<img class="vault-prop-thumb" src="/vault-assets/my-vault/capa.png" alt="" />' +
+        note('<a href="/vault/my-vault/Games/Alpha">Alpha</a>'),
+    )
+    expect(r.locked).toBe('image')
+  })
+
+  it('linha de relação travada (readonly) também mostra o título', () => {
+    const r = toPageProperty('related', ['[[Alpha]]'], relCtx(relConfig({ readonly: new Set(['related']) })))
+    expect(r.locked).toBe('readonly')
+    expect(r.html).toBe(note('<a href="/vault/my-vault/Games/Alpha">Alpha</a>'))
+  })
+
+  it('o texto do título é itemLabel(item)', () => {
+    const items = ['[[Alpha]]', '[[Games/Alpha|Apelido]]', '[[X#Seção]]', '[[Missing]]', '[[#Seção]]']
+    const html = toPageProperty('related', items, relCtx()).html
+    const titles = [...html.matchAll(/<span class="vault-prop-note">([\s\S]*?)<\/span>(?=<span class="vault-prop-note">|$)/g)]
+    expect(titles).toHaveLength(items.length)
+    titles.forEach((t, i) => expect(decodeEntities(t[1].replace(/<[^>]*>/g, ''))).toBe(itemLabel(items[i])))
+  })
+
+  it('fuzz: o item vira título sse isNoteItem e não é imagem', () => {
+    const alfabeto = ['[', ']', '|', '#', '\\', ' ', 'a', 'X', '/', '.', '&', '<', 'p', 'n', 'g']
+    let seed = 777
+    const rand = (n: number) => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return (seed >>> 16) % n
+    }
+    let notes = 0
+    for (let i = 0; i < 3000; i++) {
+      let s = i % 2 === 0 ? '[[' : ''
+      for (let j = rand(12); j > 0; j--) s += alfabeto[rand(alfabeto.length)]
+      if (i % 4 === 0) s += ']]'
+      const r = toPageProperty('related', [s], relCtx())
+      if (!Array.isArray(r.value) || r.value.length === 0) continue
+      const item = r.value[0] as string
+      const expected = isNoteItem(item) && imageTarget(item) === null
+      if (expected) notes++
+      expect(r.html.startsWith('<span class="vault-prop-note">'), JSON.stringify(item)).toBe(expected)
+      expect(r.html.includes('vault-prop-chip'), JSON.stringify(item)).toBe(!expected && imageTarget(item) === null)
+    }
+    expect(notes).toBeGreaterThan(50)
+  })
+
+  it('sem relation, lista comum e seleção única com wikilink: chips como antes', () => {
+    const config = relConfig({ relation: new Map(), select: new Map([['related', ['[[Alpha]]']]]) })
+    expect(toPageProperty('tags', ['[[Alpha]]'], relCtx(config)).html)
+      .toBe(chip('tags', '[[Alpha]]', '<a href="/vault/my-vault/Games/Alpha">Alpha</a>'))
+    const sel = toPageProperty('related', '[[Alpha]]', relCtx(config))
+    expect(sel.select).toBe(true)
+    expect(sel.html).toBe('<span class="vault-prop-chip" data-color="green"><a href="/vault/my-vault/Games/Alpha">Alpha</a></span>')
+  })
+})
+
+describe('buildPageProperties — página sem relação: o mesmo JSON de antes', () => {
+  // Gravado do código anterior à relação como título: lista com nota, link morto, texto solto,
+  // alias com `&` e `<`, texto com link no meio e cor escolhida; seleção única com wikilink;
+  // tags; lista sem relation; texto.
+  const BEFORE = String.raw`[{"key":"genres","type":"multitext","value":["[[X]]","[[Missing]]","solto","[[Notes/X|a & <b>]]","ver [[X]]"],"html":"<span class=\"vault-prop-chip\" data-color=\"green\"><a href=\"/vault/my-vault/Notes/X\">X</a></span><span class=\"vault-prop-chip\" data-color=\"red\"><span class=\"vault-dead-link\">Missing</span></span><span class=\"vault-prop-chip\" data-color=\"red\">solto</span><span class=\"vault-prop-chip\" data-color=\"blue\"><a href=\"/vault/my-vault/Notes/X\">a &amp; &lt;b&gt;</a></span><span class=\"vault-prop-chip\" data-color=\"purple\">ver <a href=\"/vault/my-vault/Notes/X\">X</a></span>","colors":{"solto":"red","[[X]]":"green"}},{"key":"status","type":"text","value":"[[X]]","html":"<span class=\"vault-prop-chip\" data-color=\"purple\"><a href=\"/vault/my-vault/Notes/X\">X</a></span>","select":true},{"key":"tags","type":"tags","value":["[[X]]"],"html":"<span class=\"vault-prop-chip\" data-color=\"gray\"><a href=\"/vault/my-vault/Notes/X\">X</a></span>"},{"key":"related","type":"multitext","value":["[[X]]"],"html":"<span class=\"vault-prop-chip\" data-color=\"blue\"><a href=\"/vault/my-vault/Notes/X\">X</a></span>"},{"key":"title","type":"text","value":"[[X]]","html":"<a href=\"/vault/my-vault/Notes/X\">X</a>"}]`
+
+  it('byte a byte', () => {
+    const config: PropertyConfig = {
+      ...EMPTY_PROPERTY_CONFIG,
+      select: new Map([['status', ['todo', '[[X]]']]]),
+      colors: new Map([['genres', new Map<string, ChipColor>([['solto', 'red'], ['[[X]]', 'green']])]]),
+    }
+    const fm = {
+      genres: ['[[X]]', '[[Missing]]', 'solto', '[[Notes/X|a & <b>]]', 'ver [[X]]'],
+      status: '[[X]]',
+      tags: ['[[X]]'],
+      related: ['[[X]]'],
+      title: '[[X]]',
+    }
+    expect(JSON.stringify(props(fm, false, config))).toBe(BEFORE)
   })
 })

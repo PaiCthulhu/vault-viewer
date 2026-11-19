@@ -26,6 +26,16 @@ export function wikilinkLabel(item: string): string | null {
   return alias || title
 }
 
+/**
+ * O item é, inteiro, um wikilink válido: numa linha de relação ele é uma nota (da pasta, de
+ * fora dela, um link morto ou até um `[[#Seção]]` da própria página, que a leitura mostra como
+ * link para o heading) e aparece como o título dela, sem chip. A mesma regra serve ao
+ * builder e ao cliente; é o caso em que a leitura dá um link inteiro (ver o teste).
+ */
+export function isNoteItem(item: string): boolean {
+  return wikilinkLabel(item) !== null
+}
+
 /** O que a leitura mostra para o item: o nome do link, ou o próprio texto. */
 export function itemLabel(item: string): string {
   return wikilinkLabel(item) ?? item

@@ -5,7 +5,7 @@ import type { PageProperty, PropertyType, PropertyValue } from '@/builder/types'
 import { chipColor } from '@/lib/property-color'
 import { normalizeForSearch } from '@/lib/gallery-search'
 import { decodeEntities } from '@/lib/preview'
-import { itemLabel } from '@/lib/wikilink-label'
+import { isNoteItem, itemLabel } from '@/lib/wikilink-label'
 
 export const MAX_PROPERTY_TEXT = 10_000
 
@@ -35,10 +35,11 @@ export function isEditable(p: PageProperty): boolean {
 
 // O texto que o valor mostra na tela, para o nome acessível: o HTML do builder sem as tags,
 // com as entidades decodificadas e os espaços juntados. Os chips de uma lista vêm colados no
-// HTML; aqui saem separados por vírgula ("RPG, Indie", não "RPGIndie").
+// HTML, como os títulos de nota de uma relação; aqui saem separados por vírgula ("RPG, Indie",
+// não "RPGIndie").
 export function visibleText(html: string): string {
   return html
-    .split(/(?=<span class="vault-prop-chip")/)
+    .split(/(?=<span class="vault-prop-(?:chip|note)")/)
     .map(part => decodeEntities(part.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim())
     .filter(s => s !== '')
     .join(', ')
@@ -184,7 +185,10 @@ function provisionalHtml(row: PageProperty, value: PropertyValue): string {
   if (Array.isArray(value)) {
     return value
       .map(i => String(i))
-      .map(i => `<span class="vault-prop-chip" data-color="${chipColor(row.key, i, row.colors)}">${escapeHtml(itemLabel(i))}</span>`)
+      .map(i => row.relation && isNoteItem(i)
+        // Relação: a nota é o título dela, sem chip (como o builder escreve).
+        ? `<span class="vault-prop-note"><span class="vault-prop-note-title">${escapeHtml(itemLabel(i))}</span></span>`
+        : `<span class="vault-prop-chip" data-color="${chipColor(row.key, i, row.colors)}">${escapeHtml(itemLabel(i))}</span>`)
       .join('')
   }
   // Seleção única: um chip só, do valor aparado (como o builder).
@@ -210,6 +214,7 @@ export function provisionalRow(row: PageProperty, value: PropertyValue): PagePro
   const out: PageProperty = { key: row.key, type: row.type, value, html: provisionalHtml(row, value) }
   if (row.select) out.select = row.select
   if (row.colors) out.colors = row.colors
+  if (row.relation) out.relation = row.relation
   return out
 }
 

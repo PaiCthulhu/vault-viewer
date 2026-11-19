@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type Ref } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode, type Ref } from 'react'
 import { useI18n } from '@/components/i18n/I18nProvider'
 import type { RelationEntry } from '@/builder/types'
 import { fetchPropertyOptions, fetchPropertyValues } from '@/lib/property-client'
@@ -8,7 +8,7 @@ import { chipColor, type ChosenColors } from '@/lib/property-color'
 import {
   candidateOf, relationCreate, relationEnterPick, relationExclude, removeHints,
 } from '@/lib/property-relation'
-import { itemLabel } from '@/lib/wikilink-label'
+import { isNoteItem, itemLabel } from '@/lib/wikilink-label'
 import {
   MAX_PROPERTY_TEXT, enterPick, menuEntries, menuModel, sameValue,
   type MenuModel, type ScalarEditorType,
@@ -114,10 +114,27 @@ export function ScalarEditor({ type, initial, label, onCommit, onCancel }: {
 // o editor antes do click.
 const keepFocus = (e: MouseEvent) => e.preventDefault()
 
+// Um item como o bloco o mostra. Numa relação, a nota (o item que é, inteiro, um wikilink) é o
+// título dela, sem pílula nem cor, como na leitura; o resto é o chip na cor do valor. `children`
+// vem depois do nome (o ×).
+function ItemView({ value, label, note, propKey, colors, children }: {
+  value: string
+  label: string
+  note: boolean
+  propKey: string
+  colors?: ChosenColors
+  children?: ReactNode
+}) {
+  if (note) {
+    return <span className="vault-prop-note"><span className="vault-prop-note-title">{label}</span>{children}</span>
+  }
+  return <span className="vault-prop-chip" data-color={chipColor(propKey, value, colors)}>{label}{children}</span>
+}
+
 // Menu de opções (lista e seleção única): "Carregando", as sugestões, a linha "Mais n" e o
 // "Criar". Só desenha: o estado (texto, opção ativa, itens) é de quem o usa. `active` é o
 // índice em [sugestões..., "Criar"], o mesmo das setas e do Enter; `onPick` recebe o valor.
-export function OptionMenu({ id, label, menuRef, loading, model, active, optionId, onPick, propKey, colors, createNote }: {
+export function OptionMenu({ id, label, menuRef, loading, model, active, optionId, onPick, propKey, colors, relation }: {
   id: string
   label: string
   menuRef?: Ref<HTMLUListElement>
@@ -128,22 +145,24 @@ export function OptionMenu({ id, label, menuRef, loading, model, active, optionI
   onPick(value: string): void
   propKey: string
   colors?: ChosenColors
-  // Relação: o "Criar" é uma nota nova (`[[nome]]`), e o chip mostra o nome, não o `[[...]]`.
-  createNote?: boolean
+  // Relação: as notas aparecem como título, sem chip, e o "Criar" é uma nota nova (`[[nome]]`),
+  // mostrada pelo nome, não pelo `[[...]]`.
+  relation?: boolean
 }) {
   const { t } = useI18n()
   // `i` é o índice em [sugestões..., "Criar"].
   function renderOption(value: string, create: boolean, i: number) {
-    const chip = (
-      <span className="vault-prop-chip" data-color={chipColor(propKey, value, colors)}>
-        {create && !createNote ? value : itemLabel(value)}
-      </span>
+    const shown = (
+      <ItemView
+        value={value} label={create && !relation ? value : itemLabel(value)}
+        note={relation === true && isNoteItem(value)} propKey={propKey} colors={colors}
+      />
     )
     // O "Criar" mostra o texto digitado cru (o chip é o que ele vai ser; o nome só aparece
     // depois de criado). O modelo da frase vem sem variáveis e é partido em `{value}`.
-    // Em relação, o modelo é o de "Criar nota {name}".
+    // Em relação, o modelo é o de "Criar nota {name}", e o nome aparece como título.
     const [before, after = ''] = create
-      ? t(createNote ? 'properties.edit.createNote' : 'properties.edit.create').split(createNote ? '{name}' : '{value}')
+      ? t(relation ? 'properties.edit.createNote' : 'properties.edit.create').split(relation ? '{name}' : '{value}')
       : []
     return (
       <li
@@ -155,7 +174,7 @@ export function OptionMenu({ id, label, menuRef, loading, model, active, optionI
         onMouseDown={keepFocus}
         onClick={() => onPick(value)}
       >
-        {create ? <>{before}{chip}{after}</> : chip}
+        {create ? <>{before}{shown}{after}</> : shown}
       </li>
     )
   }
@@ -312,8 +331,10 @@ export function ListEditor({ propKey, slug, initial, label, colors, relation, on
       }}
     >
       {items.map((item, i) => (
-        <span key={i + '\u0000' + item} className="vault-prop-chip" data-color={chipColor(propKey, item, colors)}>
-          {itemLabel(item)}
+        <ItemView
+          key={i + '\u0000' + item} value={item} label={itemLabel(item)}
+          note={relation === true && isNoteItem(item)} propKey={propKey} colors={colors}
+        >
           <button
             type="button"
             className="vault-prop-chip-remove"
@@ -329,7 +350,7 @@ export function ListEditor({ propKey, slug, initial, label, colors, relation, on
           >
             ×
           </button>
-        </span>
+        </ItemView>
       ))}
       <input
         ref={inputRef}
@@ -388,7 +409,7 @@ export function ListEditor({ propKey, slug, initial, label, colors, relation, on
         <OptionMenu
           id={menuId} label={label} menuRef={menuRef} loading={loading} model={model}
           active={current} optionId={optionId} onPick={add} propKey={propKey} colors={colors}
-          createNote={relation}
+          relation={relation}
         />
       ) : null}
     </div>

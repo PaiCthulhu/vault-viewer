@@ -69,8 +69,10 @@ const inputOf = (el: HTMLElement) => el.querySelector<HTMLInputElement>('input.v
 const optionsOf = (el: HTMLElement) =>
   Array.from(el.querySelectorAll<HTMLElement>('.vault-prop-menu li[role="option"]:not([aria-disabled])'))
 const optionTexts = (el: HTMLElement) => optionsOf(el).map(o => o.textContent)
+// Os itens escolhidos, chip ou título de nota: o texto mostrado (sem o ×).
 const editorChips = (el: HTMLElement) =>
-  Array.from(editorOf(el).querySelectorAll(':scope > .vault-prop-chip')).map(c => c.firstChild!.textContent)
+  Array.from(editorOf(el).querySelectorAll(':scope > .vault-prop-chip, :scope > .vault-prop-note'))
+    .map(c => c.firstChild!.textContent)
 const removeLabels = (el: HTMLElement) =>
   Array.from(editorOf(el).querySelectorAll('button.vault-prop-chip-remove')).map(b => b.getAttribute('aria-label'))
 
@@ -169,7 +171,7 @@ describe('editor de relação', () => {
     expect(inputOf(container).value).toBe('a#b')
   })
 
-  it('item fora da pasta aparece como chip pelo nome e não é sugerido', async () => {
+  it('item fora da pasta aparece pelo nome e não é sugerido', async () => {
     setRelation([...BASE, cand('[[Outside]]', 'Outside', 'Elsewhere/Outside')])
     const { container } = render(view([relationRow(['[[Outside]]'])]))
     await open(container)
@@ -192,5 +194,97 @@ describe('editor de relação', () => {
     expect(optionTexts(container)).toEqual([])
     typeIn(container, 'X')
     expect(optionTexts(container)).toEqual(['Criar nota X'])
+  })
+})
+
+describe('relação: a nota aparece como título, sem chip', () => {
+  const readView = (properties: PageProperty[]) => (
+    <I18nProvider locale="pt-BR">
+      <PropertiesBlock properties={properties} />
+    </I18nProvider>
+  )
+  const itemsOf = (el: HTMLElement) => Array.from(editorOf(el).querySelectorAll<HTMLElement>(':scope > span'))
+
+  it('na leitura, a nota é um link sem chip e o alias sai literal; o texto solto é chip', () => {
+    const { container } = render(readView([relationRow(['[[Other]]', '[[Missing|a & <b>]]', 'solto'])]))
+    const val = container.querySelector<HTMLElement>('.vault-prop-val')!
+    const notes = Array.from(val.querySelectorAll(':scope > .vault-prop-note'))
+    expect(notes.map(n => n.textContent)).toEqual(['Other', 'a & <b>'])
+    expect(notes[0].querySelector('a')!.getAttribute('href')).toBe('/vault/my-vault/Notes/Other')
+    expect(notes[1].querySelector('.vault-dead-link')).not.toBeNull()
+    expect(Array.from(val.querySelectorAll('.vault-prop-chip')).map(c => c.textContent)).toEqual(['solto'])
+  })
+
+  it('o nome acessível do valor separa os títulos por vírgula', () => {
+    const { container } = render(view([relationRow(['[[Other]]', '[[Missing]]', 'solto'])]))
+    expect(rowOf(container).querySelector('.vault-prop-editable')!.getAttribute('aria-label'))
+      .toBe('Editar related: Other, Missing, solto')
+  })
+
+  it('no editor, a nota escolhida é título com o ×; o texto solto continua chip', async () => {
+    const { container } = render(view([relationRow(['[[Alpha]]', 'solto', '[[Outside]]'])]))
+    await open(container)
+    const items = itemsOf(container)
+    expect(items.map(i => i.className)).toEqual(['vault-prop-note', 'vault-prop-chip', 'vault-prop-note'])
+    expect(items[0].querySelector('.vault-prop-note-title')!.textContent).toBe('Alpha')
+    expect(items[0].hasAttribute('data-color')).toBe(false)
+    expect(items[2].hasAttribute('data-color')).toBe(false)
+    expect(items[1].getAttribute('data-color')).not.toBeNull()
+    expect(removeLabels(container)).toEqual(['Remover Alpha', 'Remover solto', 'Remover Outside'])
+  })
+
+  it('o × do título repetido mantém o "Remover {value} ({path})"', async () => {
+    const { container } = render(view([relationRow(['[[Alpha]]', '[[Games/Alpha|Alpha]]'])]))
+    await open(container)
+    expect(itemsOf(container).every(i => i.className === 'vault-prop-note')).toBe(true)
+    expect(removeLabels(container)).toEqual(['Remover Alpha (Games/Alpha)', 'Remover Alpha ([[Games/Alpha|Alpha]])'])
+  })
+
+  it('as opções do menu são títulos, e a ativa destaca a linha', async () => {
+    const { container } = render(view([relationRow([])]))
+    await open(container)
+    const opts = optionsOf(container)
+    expect(opts).toHaveLength(3)
+    for (const o of opts) {
+      expect(o.querySelector('.vault-prop-chip')).toBeNull()
+      expect(o.querySelector(':scope > .vault-prop-note > .vault-prop-note-title')).not.toBeNull()
+    }
+    press(container, 'ArrowDown')
+    expect(optionsOf(container)[0].classList.contains('is-active')).toBe(true)
+  })
+
+  it('"Criar nota {name}" mostra o nome como título', async () => {
+    const { container } = render(view([relationRow([])]))
+    await open(container)
+    typeIn(container, 'Nova')
+    const [create] = optionsOf(container)
+    expect(create.textContent).toBe('Criar nota Nova')
+    expect(create.querySelector('.vault-prop-chip')).toBeNull()
+    expect(create.querySelector('.vault-prop-note > .vault-prop-note-title')!.textContent).toBe('Nova')
+  })
+
+  it('a linha provisória depois de salvar já mostra o título, sem chip', async () => {
+    const { container } = render(view([relationRow(['solto'])]))
+    await open(container)
+    clickOption(container, 'Beta')
+    press(container, 'Enter')
+    expect(calls).toHaveLength(1)
+    const val = rowOf(container).querySelector<HTMLElement>('.vault-prop-val')!
+    expect(Array.from(val.querySelectorAll('.vault-prop-note')).map(n => n.textContent)).toEqual(['Beta'])
+    expect(Array.from(val.querySelectorAll('.vault-prop-chip')).map(n => n.textContent)).toEqual(['solto'])
+  })
+
+  it('lista comum (sem relation) com wikilink: chip no editor, no menu e no "Criar", como antes', async () => {
+    const plainCtx: PropertyRenderContext = { ...CTX, config: EMPTY_PROPERTY_CONFIG }
+    valuesReply = { status: 200, body: { values: ['[[Alpha]]', '[[Beta]]'] } }
+    const { container } = render(view([toPageProperty('related', ['[[Other]]'], plainCtx)]))
+    expect(container.querySelector('.vault-prop-note')).toBeNull()
+    await open(container)
+    expect(itemsOf(container).map(i => i.className)).toEqual(['vault-prop-chip'])
+    for (const o of optionsOf(container)) expect(o.querySelector(':scope > .vault-prop-chip')).not.toBeNull()
+    typeIn(container, '[[Nova]]')
+    const create = optionsOf(container).at(-1)!
+    expect(create.querySelector('.vault-prop-chip')!.textContent).toBe('[[Nova]]')
+    expect(container.querySelector('.vault-prop-note')).toBeNull()
   })
 })

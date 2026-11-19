@@ -144,6 +144,27 @@
    só existe como cor escolhida no .vaultwright, nunca sai do hash. */
 .vault-prop-chip[data-color="default"] { background: var(--vault-chip-default); }
 
+/* Numa relação, a nota (o item que é, inteiro, um wikilink) aparece como o título dela, à
+   Notion: sem pílula nem cor, na cor do texto, peso médio e um sublinhado mais apagado que o
+   texto, que fica forte no hover. O link morto continua com a cara do .vault-dead-link
+   (apagado e riscado): a regra do título é do filho, não do item. O texto solto da mesma
+   linha continua chip. */
+.vault-prop-note {
+  display: inline-block;
+  margin: 0.1rem 0.75rem 0.1rem 0;
+  line-height: 1.6;
+  font-weight: 500;
+  color: var(--text);
+}
+.vault-prop-val .vault-prop-note > a,
+.vault-prop-note > .vault-prop-note-title {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 0.18em;
+}
+.vault-prop-val .vault-prop-note > a:hover { text-decoration-color: currentColor; }
+
 /* Edição no próprio bloco (quem edita o vault). A coluna de valor de uma linha
    editável empilha o valor, o "Salvando…", a confirmação e o erro. */
 .vault-properties .vault-prop-val-wrap {
@@ -212,6 +233,8 @@
 }
 .vault-properties .vault-prop-multiselect:focus-within { border-color: var(--accent); }
 .vault-properties .vault-prop-multiselect .vault-prop-chip { margin: 0; }
+/* Sem fundo, o título precisa de um respiro a mais que o gap para não grudar no vizinho. */
+.vault-properties .vault-prop-multiselect .vault-prop-note { margin: 0 0.35rem 0 0; }
 /* O aviso do item grande demais, numa linha própria dentro da caixa. */
 .vault-properties .vault-prop-multiselect .vault-prop-error { flex-basis: 100%; }
 .vault-properties .vault-prop-list-input {
@@ -272,6 +295,7 @@
 /* O "Carregando…" e o "Mais n" são linhas do menu, não opções: apagadas e sem hover. */
 .vault-properties .vault-prop-option:not([aria-disabled="true"]):hover { background: var(--accent-bg); }
 .vault-properties .vault-prop-option .vault-prop-chip { margin: 0; }
+.vault-properties .vault-prop-option .vault-prop-note { margin: 0; }
 /* O chip tem fundo próprio: o destaque da opção ativa é da linha (fundo e uma barra à esquerda),
    que continua visível por cima do chip. */
 .vault-properties .vault-prop-option.is-active {

@@ -88,6 +88,17 @@ describe('visibleText', () => {
       .toBe('Other, a & b')
     expect(visibleText(chip('RPG'))).toBe('RPG')
   })
+
+  // Numa relação, a nota sai como título (sem chip), também colada no HTML.
+  it('títulos de nota de uma relação saem separados por vírgula, junto dos chips', () => {
+    const chip = (s: string) => `<span class="vault-prop-chip" data-color="blue">${s}</span>`
+    const note = (s: string) => `<span class="vault-prop-note">${s}</span>`
+    expect(visibleText(
+      note('<a href="/vault/my-vault/Games/Alpha">Alpha</a>') + note('<span class="vault-dead-link">Beta</span>') + chip('solto'),
+    )).toBe('Alpha, Beta, solto')
+    expect(visibleText(note('<span class="vault-prop-note-title">a &amp; b</span>') + note('<a href="/x">C</a>')))
+      .toBe('a & b, C')
+  })
 })
 
 describe('initialText', () => {
@@ -336,5 +347,36 @@ describe('enterPick', () => {
   it('já entre os escolhidos (cru ou nome, normalizados): chosen', () => {
     expect(enterPick(entries, 'ACAO', ['Ação'])).toEqual({ value: 'Ação', chosen: true })
     expect(enterPick(entries, 'nota a', ['[[Nota A]]'])).toEqual({ value: '[[Nota A]]', chosen: true })
+  })
+})
+
+describe('provisionalRow numa relação', () => {
+  const note = (s: string) => `<span class="vault-prop-note"><span class="vault-prop-note-title">${s}</span></span>`
+
+  it('o item que é nota sai como título, sem chip; o texto solto continua chip; relation é copiado', () => {
+    const base = row('multitext', [], { key: 'related', relation: true, colors: { solto: 'red', '[[Alpha]]': 'green' } })
+    const out = provisionalRow(base, ['[[Alpha]]', '[[Games/B|a & <b>]]', '[[Missing]]', 'solto'])
+    expect(out.html).toBe(
+      note('Alpha') + note('a &amp; &lt;b&gt;') + note('Missing') +
+        '<span class="vault-prop-chip" data-color="red">solto</span>',
+    )
+    expect(out.html).not.toContain('green')
+    expect(out.relation).toBe(true)
+    expect(Object.keys(out)).toEqual(['key', 'type', 'value', 'html', 'colors', 'relation'])
+  })
+
+  it('texto com link no meio e [[]] continuam chip', () => {
+    const base = row('multitext', [], { key: 'related', relation: true })
+    const out = provisionalRow(base, ['ver [[Alpha]]', '[[]]'])
+    expect(out.html).toBe(
+      `<span class="vault-prop-chip" data-color="${propertyColor('related', 'ver [[Alpha]]')}">ver [[Alpha]]</span>` +
+        `<span class="vault-prop-chip" data-color="${propertyColor('related', '[[]]')}">[[]]</span>`,
+    )
+  })
+
+  it('lista sem relation: chips como antes, sem a chave relation', () => {
+    const out = provisionalRow(row('multitext', [], { key: 'related' }), ['[[Alpha]]'])
+    expect(out.html).toBe(`<span class="vault-prop-chip" data-color="${propertyColor('related', '[[Alpha]]')}">Alpha</span>`)
+    expect('relation' in out).toBe(false)
   })
 })

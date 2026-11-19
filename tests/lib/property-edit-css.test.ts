@@ -57,3 +57,40 @@ describe('opção do menu de lista', () => {
     expect(m![1]).toContain('inset')
   })
 })
+
+describe('nota numa relação: título, sem chip', () => {
+  const noteRules = rules(css).filter(([sel]) => sel.includes('vault-prop-note'))
+  const rule = (selector: string) => noteRules.find(([sel]) => sel === selector)?.[1]
+
+  it('o item não tem pílula: sem fundo nem borda, cor do texto e peso médio', () => {
+    const decls = rule('.vault-prop-note')
+    expect(decls).toBeDefined()
+    expect(decls).toContain('color: var(--text)')
+    expect(decls).toContain('font-weight: 500')
+    expect(decls).not.toMatch(/background|border|padding/)
+  })
+
+  it('o título (link e texto do editor) é sublinhado discreto, na cor do texto', () => {
+    const decls = rule('.vault-prop-val .vault-prop-note > a, .vault-prop-note > .vault-prop-note-title')
+    expect(decls).toBeDefined()
+    expect(decls).toContain('color: var(--text)')
+    expect(decls).toContain('text-decoration: underline')
+    expect(decls).toMatch(/text-decoration-color: color-mix\(in srgb, currentColor \d+%, transparent\)/)
+  })
+
+  it('no hover o sublinhado fica forte', () => {
+    expect(rule('.vault-prop-val .vault-prop-note > a:hover')).toContain('text-decoration-color: currentColor')
+  })
+
+  it('no editor e no menu o título não leva a margem da leitura', () => {
+    const inEditor = rule('.vault-properties .vault-prop-multiselect .vault-prop-note')
+    expect(inEditor).toMatch(/margin: 0 [\d.]+rem 0 0/)
+    expect(inEditor).not.toContain('0.75rem')
+    expect(rule('.vault-properties .vault-prop-option .vault-prop-note')).toContain('margin: 0')
+  })
+
+  it('nenhuma cor fixa: só variáveis do tema', () => {
+    expect(noteRules.length).toBeGreaterThanOrEqual(5)
+    for (const [sel, decls] of noteRules) expect(decls, sel).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i)
+  })
+})

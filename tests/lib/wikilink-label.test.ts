@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { wikilinkLabel, wikilinkTarget, itemLabel } from '@/lib/wikilink-label'
+import { wikilinkLabel, wikilinkTarget, itemLabel, isNoteItem } from '@/lib/wikilink-label'
 import { LinkResolver } from '@/builder/link-resolver'
 import { toPageProperty, type PropertyRenderContext } from '@/builder/plugins/properties'
 import { EMPTY_PROPERTY_CONFIG } from '@/builder/property-types'
@@ -29,6 +29,20 @@ describe('wikilinkTarget', () => {
   it('devolve null sem título ou quando o item não é, inteiro, um wikilink', () => {
     for (const s of ['[[#s]]', '[[|x]]', '[[]]', 'ver [[X]]', 'RPG', '', '[[A]] [[B]]']) {
       expect(wikilinkTarget(s), JSON.stringify(s)).toBeNull()
+    }
+  })
+})
+
+describe('isNoteItem', () => {
+  it('é nota o item que é, inteiro, um wikilink válido (com ou sem nota que exista)', () => {
+    for (const s of ['[[A]]', '  [[A]]  ', '[[Games/A|x]]', '[[A#s]]', '[[#s]]', '[[Missing]]', '[[A|]]']) {
+      expect(isNoteItem(s), JSON.stringify(s)).toBe(true)
+    }
+  })
+
+  it('não é nota: texto solto, link no meio do texto, dois links e wikilink sem título', () => {
+    for (const s of ['RPG', '', 'ver [[A]]', '[[A]] [[B]]', '[[]]', '[[|x]]', '[[A]]x', '[[#]]']) {
+      expect(isNoteItem(s), JSON.stringify(s)).toBe(false)
     }
   })
 })
@@ -80,6 +94,7 @@ describe('wikilinkLabel', () => {
       const label = wikilinkLabel(s)
       if (wikilinkTarget(s) !== null) expect(label, JSON.stringify(s)).not.toBeNull()
       expect(label !== null, JSON.stringify(s)).toBe(whole !== null)
+      expect(isNoteItem(s), JSON.stringify(s)).toBe(whole !== null)
       if (whole) expect(label, JSON.stringify(s)).toBe(decodeEntities(whole[2]))
     }
   })

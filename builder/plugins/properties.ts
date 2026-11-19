@@ -23,6 +23,7 @@ import {
 } from '../property-types'
 import type { PageMeta, PageProperty, PropertyJson, PropertyLock, PropertyType, PropertyValue } from '../types'
 import { chipColor, type ChosenColors } from '@/lib/property-color'
+import { isNoteItem } from '@/lib/wikilink-label'
 
 // Wikilink de imagem: `[[pasta/img.png]]` ou `[[img.png|alias]]`.
 const IMAGE_WIKILINK_RE = /^\[\[(.+\.(?:png|jpe?g|gif|webp|svg|avif))(?:\|[^\]]*)?\]\]$/i
@@ -110,12 +111,19 @@ function listItems(value: PropertyValue): string[] {
   return (Array.isArray(value) ? value : [value]).map(textOf)
 }
 
-/** Item de lista: imagem vira miniatura solta; o resto vira chip colorido. */
-function renderListItem(key: string, item: string, ctx: PropertyRenderContext, colors?: ChosenColors): string {
+/**
+ * Item de lista: imagem vira miniatura solta; numa relação, o item que é nota (inteiro, um
+ * wikilink) vira o título dela, sem pílula nem cor, como na relação do Notion; o resto vira
+ * chip colorido.
+ */
+function renderListItem(
+  key: string, item: string, ctx: PropertyRenderContext, opts: { colors?: ChosenColors; relation?: boolean },
+): string {
   if (item.trim() === '') return ''
   const img = imageTarget(item)
   if (img !== null) return thumbnail(img, ctx)
-  return `<span class="vault-prop-chip" data-color="${chipColor(key, item.trim(), colors)}">${renderText(item, ctx)}</span>`
+  if (opts.relation && isNoteItem(item)) return `<span class="vault-prop-note">${renderText(item, ctx)}</span>`
+  return `<span class="vault-prop-chip" data-color="${chipColor(key, item.trim(), opts.colors)}">${renderText(item, ctx)}</span>`
 }
 
 /** HTML de exibição de um valor já normalizado, no tipo dado. Tudo sai escapado. */
@@ -124,15 +132,15 @@ export function renderPropertyValue(
   type: PropertyType,
   value: PropertyValue,
   ctx: PropertyRenderContext,
-  opts: { select?: boolean; colors?: ChosenColors } = {},
+  opts: { select?: boolean; colors?: ChosenColors; relation?: boolean } = {},
 ): string {
   if (value === null || (Array.isArray(value) && value.length === 0)) return ''
   if (LIST_PROPERTY_TYPES.has(type)) {
-    return listItems(value).map(item => renderListItem(key, item, ctx, opts.colors)).join('')
+    return listItems(value).map(item => renderListItem(key, item, ctx, opts)).join('')
   }
   // Seleção única: o valor de texto aparece como o chip de um item de lista.
   if (opts.select && type === 'text' && typeof value === 'string') {
-    return renderListItem(key, value.trim(), ctx, opts.colors)
+    return renderListItem(key, value.trim(), ctx, { colors: opts.colors })
   }
   switch (type) {
     case 'checkbox':
@@ -194,7 +202,7 @@ export function toPageProperty(key: string, raw: unknown, ctx: PropertyRenderCon
   const chosen = chosenMap && Object.fromEntries(chosenMap)
   const row: PageProperty = {
     key, type, value,
-    html: renderPropertyValue(key, shown, value, ctx, { select, colors: chosen }),
+    html: renderPropertyValue(key, shown, value, ctx, { select, colors: chosen, relation }),
   }
   const locked: PropertyLock | null = readonly ? 'readonly' : citesImage(shown, value) ? 'image' : null
   if (locked) row.locked = locked
