@@ -29,7 +29,7 @@ import { GET } from '@/app/api/vault/[slug]/page-version/route'
 
 const idle = { running: null, queued: false, first: [], lastAttemptStartedAt: null }
 
-function call(slug: string, qs = '?path=Jogos/Nova') {
+function call(slug: string, qs = '?path=Pasta/Nova') {
   const req = new NextRequest(`http://localhost/api/vault/${slug}/page-version${qs}`)
   return GET(req, { params: Promise.resolve({ slug }) })
 }
@@ -67,7 +67,7 @@ describe('GET page-version', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ version: 'abc', building: false })
     expect(res.headers.get('Cache-Control')).toBe('no-store')
-    expect(currentPageVersion).toHaveBeenCalledWith('v', 'Jogos/Nova')
+    expect(currentPageVersion).toHaveBeenCalledWith('v', 'Pasta/Nova')
   })
   it('building verdadeiro com running', async () => {
     getBuildState.mockReturnValue({ ...idle, running: { startedAt: 1 } })

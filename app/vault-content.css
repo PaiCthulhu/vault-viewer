@@ -183,10 +183,28 @@
 }
 .vault-properties .vault-prop-editable:hover { background: var(--background-modifier-hover); }
 .vault-properties .vault-prop-editable:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
-/* Toque: sem hover, nada diria que o valor abre um editor. Só no .vault-prop-editable, que
-   só existe para quem edita: o leitor não vê nada. */
+/* Toque: sem hover, nada diria que o valor abre um editor. Um lápis à direita do valor, na cor
+   apagada do tema, alinhado à primeira linha (um valor de lista pode quebrar em várias). Só no
+   .vault-prop-editable, que só existe para quem edita: o leitor não vê nada. O ícone é máscara
+   sobre a cor, então segue o tema; não recebe toque, que vai para o valor. */
 @media (hover: none) {
-  .vault-properties .vault-prop-editable { border-bottom: 1px dashed var(--border); }
+  .vault-properties .vault-prop-editable {
+    position: relative;
+    padding-right: calc(0.3rem + 14px + 0.45rem);
+  }
+  .vault-properties .vault-prop-editable::after {
+    content: '';
+    position: absolute;
+    right: 0.3rem;
+    top: 0.35em;
+    top: calc(0.1rem + 0.5lh - 7px);
+    width: 14px;
+    height: 14px;
+    background-color: var(--text-muted);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4L19.5 8.5a2.12 2.12 0 0 0-3-3L5 17v3z'/%3E%3Cpath d='M14.5 7.5l3 3'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4L19.5 8.5a2.12 2.12 0 0 0-3-3L5 17v3z'/%3E%3Cpath d='M14.5 7.5l3 3'/%3E%3C/svg%3E") center / contain no-repeat;
+    pointer-events: none;
+  }
 }
 .vault-properties .vault-prop-input {
   width: 100%;

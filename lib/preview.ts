@@ -140,7 +140,8 @@ export function extractSection(
   html: string,
   sectionId: string,
 ): { heading: string; html: string } | null {
-  const headOpen = new RegExp(`<h([1-6])\\b[^>]*\\bid="${escapeRegExp(sectionId)}"[^>]*>`, 'i')
+  // `\s` antes do `id`: um `\b` também casaria o `id=` de um `data-id=`.
+  const headOpen = new RegExp(`<h([1-6])\\b[^>]*\\sid="${escapeRegExp(sectionId)}"[^>]*>`, 'i')
   const m = headOpen.exec(html)
   if (!m) return null
   const level = Number(m[1])

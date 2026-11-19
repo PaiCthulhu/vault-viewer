@@ -99,21 +99,21 @@ describe('parseYamlFrontmatter', () => {
 describe('extractFrontmatter', () => {
   it('extrai frontmatter YAML e body', () => {
     const md = `---
-title: Aldor
+title: Alfa
 Tags:
-  - Personagem
-cover: Imagens/Aldor.png
+  - Exemplar
+cover: Midia/Alfa.png
 ---
 
-# Aldor
+# Alfa
 
 Conteúdo da nota.`
-    const result = extractFrontmatter(md, 'Aldor')
-    expect(result.frontmatter).toMatchObject({ title: 'Aldor', cover: 'Imagens/Aldor.png' })
-    expect(result.frontmatter.Tags).toEqual(['Personagem'])
-    expect(result.body).toContain('# Aldor')
+    const result = extractFrontmatter(md, 'Alfa')
+    expect(result.frontmatter).toMatchObject({ title: 'Alfa', cover: 'Midia/Alfa.png' })
+    expect(result.frontmatter.Tags).toEqual(['Exemplar'])
+    expect(result.body).toContain('# Alfa')
     expect(result.body).not.toContain('---')
-    expect(result.title).toBe('Aldor')
+    expect(result.title).toBe('Alfa')
   })
 
   it('usa filenameTitle quando frontmatter não tem title', () => {
@@ -141,7 +141,7 @@ describe('extractTags', () => {
   })
 
   it('converte string única em array', () => {
-    expect(extractTags({ Tags: 'Personagem' })).toEqual(['Personagem'])
+    expect(extractTags({ Tags: 'Exemplar' })).toEqual(['Exemplar'])
   })
 
   it('retorna [] quando sem tags', () => {

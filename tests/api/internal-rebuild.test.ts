@@ -46,7 +46,7 @@ describe('POST /api/internal/rebuild/[slug]', () => {
   })
 
   it('403 com Host público, mesmo com a chave certa; Host loopback com porta passa', async () => {
-    expect((await call({ 'x-rebuild-key': KEY, host: 'vaults.example.org:8443' })).status).toBe(403)
+    expect((await call({ 'x-rebuild-key': KEY, host: 'viewer.example.org' })).status).toBe(403)
     expect((await call({ 'x-rebuild-key': KEY, host: '127.0.0.1:3000' })).status).toBe(202)
     expect((await call({ 'x-rebuild-key': KEY, host: 'localhost' })).status).toBe(202)
     expect((await call({ 'x-rebuild-key': KEY, host: '[::1]:3000' })).status).toBe(202)

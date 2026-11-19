@@ -120,28 +120,52 @@ async function readConfigFile(vaultPath: string, rel: string): Promise<string | 
   }
 }
 
+// Espera antes de reler um arquivo de configuração malformado: o tempo de uma regravação que
+// não é atômica (esvaziar e escrever de novo) terminar.
+export const MALFORMED_REREAD_MS = 100
+
+// Um arquivo de configuração lido e interpretado; `null` = ausente. Malformado (o parser
+// devolve `null`: JSON inválido, versão ou formato inesperado, arquivo vazio) é relido uma vez
+// depois de `MALFORMED_REREAD_MS` e, se continuar, é 503: lido no meio de uma regravação, ele
+// tiraria por um instante as travas `readonly` e os tipos declarados.
+async function readConfig<T>(
+  vaultPath: string,
+  rel: string,
+  parse: (text: string) => T | null,
+  reason: string,
+): Promise<T | null> {
+  for (let attempt = 0; ; attempt++) {
+    const text = await readConfigFile(vaultPath, rel)
+    if (text === null) return null
+    const parsed = parse(text)
+    if (parsed !== null) return parsed
+    if (attempt === 1) break
+    await new Promise(resolve => setTimeout(resolve, MALFORMED_REREAD_MS))
+  }
+  console.warn(`${rel}: ${reason}; edição recusada`)
+  throw new PropertyError(503, CONFIG_UNREADABLE)
+}
+
 /**
  * A configuração de propriedades do vault, com os parsers do build (`parseObsidianTypes`,
- * `parseVaultwrightProperties`). Como no build, arquivo ausente conta como vazio e arquivo
- * malformado é ignorado com o mesmo aviso. Ao contrário do `loadPropertyConfig` do build, que
- * nunca lança, um erro de leitura não falha aberto: é `PropertyError` 503.
+ * `parseVaultwrightProperties`). Como no build, arquivo ausente conta como vazio. Ao contrário
+ * do `loadPropertyConfig` do build, que nunca lança e ignora o arquivo malformado, a API não
+ * falha aberta: um erro de leitura, ou um arquivo que continua malformado depois de relido, é
+ * `PropertyError` 503.
  */
 export async function readPropertyConfig(vaultPath: string): Promise<PropertyConfig> {
   const config: PropertyConfig = { types: new Map(), readonly: new Set(), select: new Map(), colors: new Map(), relation: new Map() }
 
-  const typesText = await readConfigFile(vaultPath, OBSIDIAN_TYPES_FILE)
-  if (typesText !== null) {
-    const types = parseObsidianTypes(typesText)
-    if (types) config.types = types
-    else console.warn(`${OBSIDIAN_TYPES_FILE}: JSON inválido ou formato inesperado; ignorado`)
-  }
+  const types = await readConfig(vaultPath, OBSIDIAN_TYPES_FILE, parseObsidianTypes, 'JSON inválido ou formato inesperado')
+  if (types) config.types = types
 
-  const vwText = await readConfigFile(vaultPath, VAULTWRIGHT_FILE)
-  if (vwText !== null) {
-    const vw = parseVaultwrightProperties(vwText, (msg) => console.warn(msg))
-    if (vw) Object.assign(config, vw)
-    else console.warn(`${VAULTWRIGHT_FILE}: JSON inválido, versão ou formato inesperado; ignorado`)
-  }
+  const vw = await readConfig(
+    vaultPath,
+    VAULTWRIGHT_FILE,
+    text => parseVaultwrightProperties(text, (msg) => console.warn(msg)),
+    'JSON inválido, versão ou formato inesperado',
+  )
+  if (vw) Object.assign(config, vw)
 
   return config
 }

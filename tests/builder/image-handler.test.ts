@@ -34,6 +34,17 @@ describe('ImageHandler', () => {
     expect(fs.readdirSync(TMP).sort()).toEqual(['fora.png', 'vault'])
   })
 
+  it('arquivo fora do vault no caminho completo não impede a busca pelo nome', () => {
+    const vault = path.join(TMP, 'vault')
+    fs.mkdirSync(path.join(vault, 'Imagens'), { recursive: true })
+    fs.writeFileSync(path.join(vault, 'Imagens', 'fora.png'), 'x')
+    fs.writeFileSync(path.join(TMP, 'fora.png'), 'x')
+    const handler = new ImageHandler(vault, 'v', new Map([['fora.png', 'Imagens/fora.png']]))
+
+    expect(handler.resolve('../fora.png')).toBe('/vault-assets/v/Imagens/fora.png')
+    expect(handler.assets()).toEqual(['Imagens/fora.png'])
+  })
+
   it('assets() guarda a forma normalizada, sem duplicar', () => {
     const vault = path.join(TMP, 'vault')
     fs.mkdirSync(path.join(vault, 'Imagens'), { recursive: true })

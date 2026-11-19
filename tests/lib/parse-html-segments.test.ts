@@ -48,7 +48,7 @@ describe('parseHtmlSegments', () => {
     expect(segs[1]).toEqual({ type: 'html', html: '<p>end</p>' })
   })
 
-  const BANNER = `<div class="vault-banner" style="height: 500px; background-image: url('/x.png');"><div class="vault-banner-gradient"></div><h1 class="vault-banner-title">Ntoto Ileri</h1></div>`
+  const BANNER = `<div class="vault-banner" style="height: 500px; background-image: url('/x.png');"><div class="vault-banner-gradient"></div><h1 class="vault-banner-title">Nota Exemplo</h1></div>`
 
   it('extracts a leading banner as its own segment followed by html', () => {
     const html = `${BANNER}<article class="vault-content"><p>body</p></article>`

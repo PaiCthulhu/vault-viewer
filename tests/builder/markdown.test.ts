@@ -5,7 +5,7 @@ describe('renderMarkdown — LaTeX math', () => {
   it('renderiza um bloco $$...$$ via KaTeX', async () => {
     const md = [
       '$$',
-      '\\sf{Elsiva}\\mskip{2.95em}\\sf{CR}\\mskip{0.25em}\\sf{38?}\\mskip{0.25em}\\sf{(XP}\\mskip{0.25em}\\sf{157,286,400)}',
+      '\\sf{Alfa}\\mskip{2.95em}\\sf{NV}\\mskip{0.25em}\\sf{12?}\\mskip{0.25em}\\sf{(PX}\\mskip{0.25em}\\sf{1,234,567)}',
       '$$',
     ].join('\n')
     const html = await renderMarkdown(md)

@@ -27,15 +27,21 @@ import { buildTree, countTreeFolders } from '@/lib/vault-tree'
 
 // Normalize a rendered <h1>'s text (or a plain title) for a tolerant comparison:
 // strip tags, decode common entities, unify dash/quote variants, collapse
-// whitespace, lowercase. So "START HERE — Projeto" matches "Start Here - Projeto".
+// whitespace, lowercase. So "NOTA ALFA — Exemplo" matches "Nota Alfa - Exemplo".
+// O rehype grava `&` e `<` como `&#x26;` e `&#x3C;`: as numéricas também são decodificadas,
+// numa passada só (`&amp;#x26;` vira `&#x26;`, não `&`).
+const NAMED_TEXT_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
+
+function decodeTextEntity(m: string, hex: string | undefined, dec: string | undefined, name: string | undefined): string {
+  if (name !== undefined) return NAMED_TEXT_ENTITIES[name.toLowerCase()] ?? m
+  const code = hex !== undefined ? parseInt(hex, 16) : parseInt(dec!, 10)
+  return code <= 0x10ffff ? String.fromCodePoint(code) : m
+}
+
 function htmlToText(s: string): string {
   return s
     .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&#x27;/gi, "'")
+    .replace(/&(?:#x([0-9a-f]{1,6})|#(\d{1,7})|(amp|lt|gt|quot|apos));/gi, decodeTextEntity)
     .replace(/[‐-―−]/g, '-') // hyphen/dash/minus variants → '-'
     .replace(/[‘’]/g, "'") // curly single quotes → '
     .replace(/[“”]/g, '"') // curly double quotes → "
@@ -98,7 +104,7 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
   // texto dos nós passaria pelo `renderBody`, que roda dataviewjs.
   const canvasFiles = scanCanvases(vault.path, ig).filter(c => !isInCommentsFolder(c.relativePath))
   const imageIndex = scanImages(vault.path, ig)
-  // Canvas files entram no resolver para [[Página Inicial]] resolver, mas NÃO nos stubs.
+  // Canvas files entram no resolver para [[Home]] resolver, mas NÃO nos stubs.
   const linkResolver = new LinkResolver([...files, ...canvasFiles])
   const imageHandler = new ImageHandler(vault.path, vault.slug, imageIndex)
   // Tipos (`.obsidian/types.json`) e travas (`.vaultwright/properties.json`), lidos uma
@@ -208,7 +214,8 @@ export async function buildVault(vault: VaultConfig, opts: { first?: string[]; d
     {
       const m = /^\s*<h1\b([^>]*)>([\s\S]*?)<\/h1>\s*/.exec(bodyHtml)
       if (m && htmlToText(m[2]) === htmlToText(stub.title)) {
-        const idMatch = /\bid="([^"]*)"/.exec(m[1])
+        // `\s` antes do `id`: um `\b` também casaria o `id=` de um `data-id=`.
+        const idMatch = /\sid="([^"]*)"/.exec(m[1])
         titleId = idMatch ? idMatch[1] : ''
         bodyHtml = bodyHtml.slice(m[0].length)
       }

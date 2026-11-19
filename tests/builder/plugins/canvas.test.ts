@@ -4,7 +4,7 @@ import { LinkResolver } from '../../../builder/link-resolver'
 import type { ScannedFile } from '../../../builder/scanner'
 
 const files: ScannedFile[] = [
-  { absolutePath: '/v/Aldor.md', relativePath: 'Personalidades/Aldor', title: 'Aldor' },
+  { absolutePath: '/v/Alfa.md', relativePath: 'Exemplares/Alfa', title: 'Alfa' },
 ]
 const linkResolver = new LinkResolver(files)
 const resolveImage = (p: string) => `/vault-assets/myvault/${p}`
@@ -12,9 +12,9 @@ const renderBody = async (md: string) => `<div>${md.trim()}</div>`
 
 const canvasJson = JSON.stringify({
   nodes: [
-    { id: 'g1', type: 'group', x: -500, y: -300, width: 1000, height: 360, color: '6', label: '🌎 Worldbuilding' },
-    { id: 't1', type: 'text', text: '# Olá\n\n[[Aldor]]', x: -500, y: -800, width: 1000, height: 450, color: '5' },
-    { id: 'f1', type: 'file', file: 'Imagens/Geral/Cover.png', x: -500, y: -1080, width: 1500, height: 260 },
+    { id: 'g1', type: 'group', x: -500, y: -300, width: 1000, height: 360, color: '6', label: '🌎 Agrupamento' },
+    { id: 't1', type: 'text', text: '# Olá\n\n[[Alfa]]', x: -500, y: -800, width: 1000, height: 450, color: '5' },
+    { id: 'f1', type: 'file', file: 'Midia/Geral/Cover.png', x: -500, y: -1080, width: 1500, height: 260 },
   ],
   edges: [],
 })
@@ -43,7 +43,7 @@ describe('renderCanvas', () => {
   it('renderiza nó de imagem com img', async () => {
     const html = await renderCanvas(canvasJson, renderBody, resolveImage, linkResolver, 'myvault')
     expect(html).toContain('class="canvas-node canvas-image"')
-    expect(html).toContain('<img src="/vault-assets/myvault/Imagens/Geral/Cover.png"')
+    expect(html).toContain('<img src="/vault-assets/myvault/Midia/Geral/Cover.png"')
   })
 
   it('renderiza grupos primeiro (z-index mais baixo)', async () => {
@@ -52,6 +52,28 @@ describe('renderCanvas', () => {
     const textIdx = html.indexOf('canvas-text')
     expect(groupIdx).toBeGreaterThanOrEqual(0)
     expect(groupIdx).toBeLessThan(textIdx)
+  })
+
+  it('rótulo, título, url e src saem escapados (texto e atributo)', async () => {
+    const json = JSON.stringify({
+      nodes: [
+        { id: 'g', type: 'group', x: 0, y: 0, width: 100, height: 100, label: '<b>Grupo</b> & "cia"' },
+        { id: 'c', type: 'file', file: 'Notas/A & B.md', x: 0, y: 200, width: 100, height: 100 },
+        { id: 'l', type: 'link', url: 'https://example.com/?a=1&b="2"<i>', x: 0, y: 400, width: 100, height: 100 },
+        { id: 'i', type: 'file', file: 'Imagens/C & D.png', x: 0, y: 600, width: 100, height: 100 },
+      ],
+      edges: [],
+    })
+    const lr = new LinkResolver([{ absolutePath: '/v/A & B.md', relativePath: 'Notas/A & B', title: 'A & B' }])
+    const html = await renderCanvas(json, renderBody, resolveImage, lr, 'myvault')
+    expect(html).toContain('<span class="canvas-group-label">&lt;b&gt;Grupo&lt;/b&gt; &amp; &quot;cia&quot;</span>')
+    expect(html).toContain('<a href="/vault/myvault/Notas/A%20%26%20B">A &amp; B</a>')
+    expect(html).toContain(
+      '<a href="https://example.com/?a=1&amp;b=&quot;2&quot;&lt;i&gt;" target="_blank" rel="noopener noreferrer">https://example.com/?a=1&amp;b=&quot;2&quot;&lt;i&gt;</a>',
+    )
+    expect(html).toContain('<img src="/vault-assets/myvault/Imagens/C &amp; D.png" alt=""/>')
+    expect(html).not.toContain('<b>')
+    expect(html).not.toContain('<i>')
   })
 
   it('aplica a cor da paleta do Obsidian como border-color', async () => {
@@ -107,6 +129,6 @@ describe('canvasTextSources', () => {
   it('extrai textos dos nós de texto', () => {
     const { texts } = canvasTextSources(canvasJson)
     expect(texts).toHaveLength(1)
-    expect(texts[0]).toContain('[[Aldor]]')
+    expect(texts[0]).toContain('[[Alfa]]')
   })
 })

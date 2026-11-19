@@ -5,7 +5,7 @@ import path from 'path'
 import { executeDataviewJS } from '../../../builder/plugins/dataview'
 import type { PageMeta } from '../../../builder/types'
 
-// Cobre o que as views do tipo `await dv.view("_codex/galeria", {...})` precisam
+// Cobre o que as views do tipo `await dv.view("_views/cards", {...})` precisam
 // do shim: await no bloco, dv.view, dv.io.load e o DOM que um renderizador
 // compartilhado usa (SVG, <details open>, classList, propriedades refletidas).
 
@@ -23,11 +23,11 @@ function makePage(overrides: Partial<PageMeta> & { path: string; title: string }
 
 const pages: PageMeta[] = [
   makePage({
-    path: 'Jogos/Alfa',
+    path: 'Pasta/Alfa',
     title: 'Alfa',
-    frontmatter: { Nome: 'Alfa', Status: 'Jogando', Data: new Date('2025-09-27T00:00:00Z') },
+    frontmatter: { Nome: 'Alfa', Status: 'Pausado', Data: new Date('2024-03-15T00:00:00Z') },
   }),
-  makePage({ path: 'Views/Todos', title: 'Todos', frontmatter: {} }),
+  makePage({ path: 'Ensaios/Consulta', title: 'Consulta', frontmatter: {} }),
 ]
 const current = pages[1]
 const noopResolve = (p: string) => p
@@ -47,14 +47,14 @@ beforeAll(() => {
   fs.mkdirSync(vault)
   fs.writeFileSync(path.join(root, 'segredo.txt'), 'NAO-PODE-VAZAR', 'utf-8')
   write(
-    '_v/galeria/view.js',
+    '_v/cards/view.js',
     `const cfg = JSON.parse(await dv.io.load("_v/dados.json"));
      dv.container.classList.add("raiz");
      const p = document.createElement("p");
      p.textContent = input.titulo + ":" + cfg.n;
      dv.container.appendChild(p);`,
   )
-  write('_v/galeria/view.css', '.raiz { color: red; }')
+  write('_v/cards/view.css', '.raiz { color: red; }')
   write('_v/dados.json', '{"n": 3}')
   write('_v/simples.js', 'dv.paragraph("simples " + input)')
   write('_v/quebra/view.js', 'dv.paragraph("antes"); throw new Error("pum")')
@@ -108,13 +108,13 @@ describe('executeDataviewJS — await, dv.io.load e dv.view', () => {
   })
 
   it('dv.view roda <pasta>/view.js com input e junta o view.css ao CSS da página', async () => {
-    const { html, css } = await run(`await dv.view("_v/galeria", { titulo: "Oi" })`)
+    const { html, css } = await run(`await dv.view("_v/cards", { titulo: "Oi" })`)
     expect(html).toContain('<div class="raiz"><p>Oi:3</p></div>')
     expect(css).toContain('.raiz { color: red; }')
   })
 
   it('dv.view sem await termina antes da saída', async () => {
-    const { html } = await run(`dv.view("_v/galeria", { titulo: "Solto" })`)
+    const { html } = await run(`dv.view("_v/cards", { titulo: "Solto" })`)
     expect(html).toContain('<div class="raiz"><p>Solto:3</p></div>')
   })
 
@@ -128,7 +128,7 @@ describe('executeDataviewJS — await, dv.io.load e dv.view', () => {
   })
 
   it('a mesma view chamada duas vezes põe o CSS uma vez só', async () => {
-    const { css } = await run(`await dv.view("_v/galeria", { titulo: "a" }); await dv.view("_v/galeria", { titulo: "b" })`)
+    const { css } = await run(`await dv.view("_v/cards", { titulo: "a" }); await dv.view("_v/cards", { titulo: "b" })`)
     expect(css.split('.raiz { color: red; }').length - 1).toBe(1)
   })
 
@@ -184,7 +184,7 @@ describe('executeDataviewJS — DOM de um renderizador compartilhado', () => {
     const { html } = await run(`
       const a = document.createElement("a");
       a.className = "internal-link";
-      a.href = "Jogos/Alfa";
+      a.href = "Pasta/Alfa";
       a.title = "dica";
       const img = document.createElement("img");
       img.loading = "lazy";
@@ -192,32 +192,32 @@ describe('executeDataviewJS — DOM de um renderizador compartilhado', () => {
       dv.container.appendChild(a);
       dv.container.appendChild(img);
     `)
-    expect(html).toContain('href="/vault/myvault/Jogos/Alfa"')
+    expect(html).toContain('href="/vault/myvault/Pasta/Alfa"')
     expect(html).toContain('title="dica"')
     expect(html).toContain('<img loading="lazy" src="capa.png">')
   })
 
   it('classe no dv.container embrulha a saída num div com essa classe', async () => {
-    const { html } = await run(`dv.container.classList.add("codex"); dv.paragraph("oi")`)
-    expect(html).toBe('<div class="codex"><p>oi</p></div>')
+    const { html } = await run(`dv.container.classList.add("minha-view"); dv.paragraph("oi")`)
+    expect(html).toBe('<div class="minha-view"><p>oi</p></div>')
   })
 
   it('p.file.frontmatter traz o frontmatter cru, com datas que passam em instanceof Date', async () => {
     const { html } = await run(`
-      const fm = dv.pages('"Jogos"').values[0].file.frontmatter;
+      const fm = dv.pages('"Pasta"').values[0].file.frontmatter;
       dv.paragraph(fm.Nome + "|" + (fm.Data instanceof Date) + "|" + fm.Data.toISOString().slice(0, 10));
     `)
-    expect(html).toContain('<p>Alfa|true|2025-09-27</p>')
+    expect(html).toContain('<p>Alfa|true|2024-03-15</p>')
   })
 
   it('dv.currentFilePath é o caminho da nota atual', async () => {
     const { html } = await run(`dv.paragraph(dv.currentFilePath)`)
-    expect(html).toContain('<p>Views/Todos</p>')
+    expect(html).toContain('<p>Ensaios/Consulta</p>')
   })
 
   it('o arquivo de getFirstLinkpathDest tem basename e extension, como o TFile', async () => {
     const { html } = await run(`
-      const f = app.metadataCache.getFirstLinkpathDest("Imagens/Galeria/Capa 1.webp", "");
+      const f = app.metadataCache.getFirstLinkpathDest("Midia/Fotos/Capa 1.webp", "");
       dv.paragraph(f.name + "|" + f.basename + "|" + f.extension);
     `)
     expect(html).toContain('<p>Capa 1.webp|Capa 1|webp</p>')

@@ -30,8 +30,8 @@ export class ImageHandler {
 
   // Resolve um caminho de imagem para a URL /vault-assets/[slug]/[relPath]. Não copia
   // nada: a rota do viewer serve direto da pasta do vault, e assets() lista o que existe.
-  // Accepts: full relative path ("Imagens/Capas/Aldor.png"), bare filename ("Aldor.png"),
-  // or Obsidian wikilink syntax ("[[Imagens/Capas/Aldor.png]]")
+  // Accepts: full relative path ("Midia/Capas/Alfa.png"), bare filename ("Alfa.png"),
+  // or Obsidian wikilink syntax ("[[Midia/Capas/Alfa.png]]")
   resolve(imagePath: string): string {
     // Strip Obsidian wikilink brackets if present
     const stripped = imagePath.replace(/^\[\[(.+)\]\]$/, '$1')
@@ -43,13 +43,16 @@ export class ImageHandler {
     // Caminho inválido não é procurado (nenhuma chamada a fs, nada em assets()); a URL sai
     // como sempre saiu.
     if (isValidImagePath(imagePath)) {
-      // Tenta como caminho completo primeiro, depois como nome de arquivo
-      if (!fs.existsSync(path.join(this.vaultPath, relPath))) {
+      // Tenta como caminho completo primeiro, depois como nome de arquivo. Só conta arquivo
+      // dentro do vault: um `../x.png` que existe fora dele não impede a busca pelo nome.
+      let normalized = this.insideVaultFile(relPath)
+      if (!normalized) {
         const byName = this.imageIndex.get(path.basename(imagePath).toLowerCase())
-        if (byName) relPath = byName
+        if (byName) {
+          relPath = byName
+          normalized = this.insideVaultFile(relPath)
+        }
       }
-
-      const normalized = this.insideVaultFile(relPath)
       if (normalized) this.found.add(normalized)
     }
 

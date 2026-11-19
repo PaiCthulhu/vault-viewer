@@ -719,7 +719,7 @@ describe('conflito', () => {
 })
 
 // A configuração de propriedades (tipos e travas) é lida a cada requisição. Ausente conta como
-// vazia e malformada é ignorada, como no build; um erro de leitura não falha aberto.
+// vazia, como no build; um erro de leitura, ou um arquivo que segue malformado, não falha aberto.
 describe('configuração de propriedades do vault', () => {
   const CONFIG_ERROR = 'A configuração de propriedades do vault não pôde ser lida'
   const warns = () => vi.mocked(console.warn).mock.calls.map(c => String(c[0]))
@@ -792,23 +792,71 @@ describe('configuração de propriedades do vault', () => {
     })
   })
 
-  it('.vaultwright/properties.json malformado: ignorado com o aviso do build, a chave não fica travada', async () => {
-    write('.vaultwright/properties.json', '{')
-    const res = await edit('ID', 8, 7)
-    expect(res.status).toBe(200)
-    expect(res.json.property).toMatchObject({ key: 'ID', type: 'number', value: 8 })
-    expect(res.json.property.locked).toBeUndefined()
-    expect(warns()).toContain('.vaultwright/properties.json: JSON inválido, versão ou formato inesperado; ignorado')
-  })
+  // Malformado não falha aberto: lido no meio de uma regravação que não é atômica, o arquivo
+  // vazio ou cortado tiraria as travas readonly e os tipos declarados por um instante. A API
+  // relê uma vez e, se continuar malformado, recusa a edição. O build segue ignorando o arquivo.
+  describe('malformado', () => {
+    const FILES = [
+      ['.vaultwright/properties.json', 'ID', 8, 7],
+      ['.obsidian/types.json', 'status', 'novo', 'ok'],
+    ] as const
+    // Conta as leituras do arquivo e, se pedido, troca o conteúdo das primeiras.
+    function spyConfigReads(rel: string, firstReads: string[] = []): () => number {
+      let reads = 0
+      const realAsync = fsp.readFile.bind(fsp) as (...a: unknown[]) => Promise<unknown>
+      vi.spyOn(fsp, 'readFile').mockImplementation(((p: unknown, ...rest: unknown[]) => {
+        if (typeof p !== 'string' || path.relative(vaultDir, p).split(path.sep).join('/') !== rel) return realAsync(p, ...rest)
+        reads++
+        return reads <= firstReads.length ? Promise.resolve(firstReads[reads - 1]) : realAsync(p, ...rest)
+      }) as typeof fsp.readFile)
+      return () => reads
+    }
 
-  it('.obsidian/types.json malformado: ignorado com o aviso do build, fica sem tipos declarados', async () => {
-    // Com o `number` declarado, `"12"` seria mismatch; sem tipos, é texto.
-    write(`${NOTE}.md`, NOTE_TEXT.replace('rating: 3', 'rating: "12"'))
-    write('.obsidian/types.json', '{')
-    const res = await edit('rating', 'treze', '12')
-    expect(res.status).toBe(200)
-    expect(res.json.property).toEqual({ key: 'rating', type: 'text', value: 'treze', html: 'treze' })
-    expect(warns()).toContain('.obsidian/types.json: JSON inválido ou formato inesperado; ignorado')
+    it.each(FILES.flatMap(f => [[...f, '{'], [...f, '']]))(
+      '%s malformado nas duas leituras (%#): 503, sem gravar nem pedir build',
+      async (rel, key, value, expected, content) => {
+        write(rel, content)
+        const reads = spyConfigReads(rel)
+        const before = snapshot()
+        const res = await edit(key, value, expected)
+        expect(res.status).toBe(503)
+        expect(res.json).toEqual({ error: CONFIG_ERROR })
+        expect(reads()).toBe(2)
+        expect(snapshot()).toEqual(before)
+        expect(runRebuild).not.toHaveBeenCalled()
+        expect(writeLogs()).toEqual([])
+        expect(warns().find(w => w.includes(rel))).toContain('edição recusada')
+        // O 503 sai antes de tocar a nota: nem uma nota inexistente chega ao 404.
+        expect((await patch({ path: 'Notas/Nao Existe', key, value, expected })).status).toBe(503)
+      },
+    )
+
+    it('.vaultwright/properties.json cortado só na primeira leitura: relê, e a trava readonly vale', async () => {
+      const reads = spyConfigReads('.vaultwright/properties.json', ['{"version":1,"propert'])
+      const res = await edit('ID', 8, 7)
+      expect(reads()).toBe(2)
+      expect(res.status).toBe(422)
+      expect(res.json.error).toBe('A propriedade é somente leitura')
+      expect(read()).toBe(NOTE_TEXT)
+      expect(runRebuild).not.toHaveBeenCalled()
+    })
+
+    it('.obsidian/types.json vazio só na primeira leitura: relê, e o tipo declarado vale', async () => {
+      // Com o `number` declarado, `"12"` é mismatch e pede confirmação; sem tipos, seria texto.
+      write(`${NOTE}.md`, NOTE_TEXT.replace('rating: 3', 'rating: "12"'))
+      const reads = spyConfigReads('.obsidian/types.json', [''])
+      const res = await edit('rating', 13, '12')
+      expect(reads()).toBe(2)
+      expect(res.status).toBe(409)
+      expect(res.json.property).toMatchObject({ key: 'rating', type: 'number', mismatch: true })
+      expect(read()).toContain('rating: "12"')
+    })
+
+    it('arquivo bem formado é lido uma vez só', async () => {
+      const reads = spyConfigReads('.vaultwright/properties.json')
+      expect((await edit('ID', 8, 7)).status).toBe(422)
+      expect(reads()).toBe(1)
+    })
   })
 
   it('os dois arquivos ausentes: sem tipos declarados nem travas', async () => {

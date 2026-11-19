@@ -18,17 +18,17 @@ vi.mock('@/components/i18n/I18nProvider', async () => {
 import { ContentPanel } from '@/components/viewer/ContentPanel'
 import type { HtmlSegment } from '@/lib/parse-html-segments'
 
-const ENGINES = ["Ren'Py", 'Unity', "Ren'Py", 'Unity', 'Godot', "Ren'Py"]
-const STATUSES = ['Jogando', 'Zerado', 'Jogando', 'Zerado', 'Jogando', 'Zerado']
+const ENGINES = ["Alfa'X", 'Gama', "Alfa'X", 'Gama', 'Ômega', "Alfa'X"]
+const STATUSES = ['Fase Um', 'Fase Dois', 'Fase Um', 'Fase Dois', 'Fase Um', 'Fase Dois']
 
 function card(i: number, engine: string, status: string) {
-  const props = encodeURIComponent(JSON.stringify({ Engine: [engine], Status: [status] }))
+  const props = encodeURIComponent(JSON.stringify({ Motor: [engine], Etapa: [status] }))
   return `<div class="dv-card" data-props="${props}">c${i}</div>`
 }
 
 function segs(extra = 0): HtmlSegment[] {
   const cards = ENGINES.map((e, i) => card(i, e, STATUSES[i]))
-  for (let i = 0; i < extra; i++) cards.push(card(100 + i, "Ren'Py", 'Jogando'))
+  for (let i = 0; i < extra; i++) cards.push(card(100 + i, "Alfa'X", 'Fase Um'))
   return [{ type: 'html', html: `<div class="dv-gallery">${cards.join('')}</div>` } as HtmlSegment]
 }
 
@@ -39,11 +39,11 @@ const panel = (segments: HtmlSegment[], pagePath: string) => (
 function pickEngine(container: HTMLElement) {
   fireEvent.click(container.querySelector('.dv-filter-add')!)
   const item = Array.from(container.querySelectorAll<HTMLElement>('.dv-filter-menu-item')).find(
-    b => b.textContent === 'Engine',
+    b => b.textContent === 'Motor',
   )!
   fireEvent.click(item)
   const select = container.querySelector<HTMLSelectElement>('.dv-filter-chip select')!
-  fireEvent.change(select, { target: { value: 'Unity' } })
+  fireEvent.change(select, { target: { value: 'Gama' } })
   return select
 }
 
@@ -54,24 +54,24 @@ describe('ContentPanel filtros', () => {
   afterEach(() => cleanup())
 
   it('filtro volta depois de um refresh da mesma página', async () => {
-    const { container, rerender } = render(panel(segs(), 'Views/X'))
+    const { container, rerender } = render(panel(segs(), 'Pasta/X'))
     pickEngine(container)
     expect(visibleCards(container)).toHaveLength(2)
 
-    await act(async () => { rerender(panel(segs(1), 'Views/X')) })
+    await act(async () => { rerender(panel(segs(1), 'Pasta/X')) })
 
     const chip = container.querySelector('.dv-filter-chip')
     expect(chip).not.toBeNull()
-    expect(chip!.querySelector('select')!.value).toBe('Unity')
+    expect(chip!.querySelector('select')!.value).toBe('Gama')
     const visible = visibleCards(container)
     expect(visible).toHaveLength(2)
-    expect(visible.every(c => decodeURIComponent(c.dataset.props!).includes('Unity'))).toBe(true)
+    expect(visible.every(c => decodeURIComponent(c.dataset.props!).includes('Gama'))).toBe(true)
   })
 
   it('navegar para outra página zera os filtros', async () => {
-    const { container, rerender } = render(panel(segs(), 'Views/X'))
+    const { container, rerender } = render(panel(segs(), 'Pasta/X'))
     pickEngine(container)
-    await act(async () => { rerender(panel(segs(1), 'Views/Y')) })
+    await act(async () => { rerender(panel(segs(1), 'Pasta/Y')) })
     expect(container.querySelector('.dv-filter-chip')).toBeNull()
   })
 })
@@ -79,12 +79,12 @@ describe('ContentPanel filtros', () => {
 // ─── Busca ────────────────────────────────────────────────────────────────
 type Entry = [string, Record<string, string[]> | null]
 const SEARCH_CARDS: Entry[] = [
-  ['Aldor', { Tier: ['Lendário'], Facções: ['Casa Kósmos', 'Zodíaco'] }],
-  ['Brakka', { Tier: ['Épico'], Facções: ['Império de Ksarshantallas'] }],
-  ['Cyrene', { Tier: ['Lendário'], Facções: ['Império de Ksarshantallas', 'Casa Kósmos'] }],
-  ['Dovran', { Tier: ['Épico'], Facções: ['Zodíaco'] }],
-  ['Elowen', { Tier: ['Comum'], Facções: ['Casa Kósmos'] }],
-  ['Fafnir Velho', null],
+  ['Alfa', { Nível: ['Ouro'], Seleções: ['Casa Órbita', 'Círculo Azul'] }],
+  ['Bravo', { Nível: ['Prata'], Seleções: ['Liga de Exemplópolis'] }],
+  ['Charlie', { Nível: ['Ouro'], Seleções: ['Liga de Exemplópolis', 'Casa Órbita'] }],
+  ['Delta', { Nível: ['Prata'], Seleções: ['Círculo Azul'] }],
+  ['Echo', { Nível: ['Bronze'], Seleções: ['Casa Órbita'] }],
+  ['Foxtrot Velho', null],
 ]
 
 function searchSegs(entries: Entry[] = SEARCH_CARDS): HtmlSegment[] {
@@ -107,7 +107,7 @@ const clearX = (c: HTMLElement) => c.querySelector<HTMLElement>('.dv-filter-sear
 function pickTier(c: HTMLElement, value: string) {
   fireEvent.click(c.querySelector('.dv-filter-add')!)
   const item = Array.from(c.querySelectorAll<HTMLElement>('.dv-filter-menu-item')).find(
-    b => b.textContent === 'Tier',
+    b => b.textContent === 'Nível',
   )!
   fireEvent.click(item)
   fireEvent.change(c.querySelector<HTMLSelectElement>('.dv-filter-chip select')!, {
@@ -135,36 +135,36 @@ describe('ContentPanel busca', () => {
 
   it('busca pelo texto visível', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    typeSearch(container, 'cyr')
-    expect(visibleNames(container)).toEqual(['Cyrene'])
+    typeSearch(container, 'cha')
+    expect(visibleNames(container)).toEqual(['Charlie'])
   })
 
   it('busca em valor de propriedade, sem acento', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    typeSearch(container, 'kosmos')
-    expect(visibleNames(container)).toEqual(['Aldor', 'Cyrene', 'Elowen'])
+    typeSearch(container, 'orbita')
+    expect(visibleNames(container)).toEqual(['Alfa', 'Charlie', 'Echo'])
   })
 
   it('várias palavras: todas, em qualquer ordem', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    typeSearch(container, 'kosmos ksar')
-    expect(visibleNames(container)).toEqual(['Cyrene'])
-    typeSearch(container, 'ksar kosmos')
-    expect(visibleNames(container)).toEqual(['Cyrene'])
+    typeSearch(container, 'orbita exemp')
+    expect(visibleNames(container)).toEqual(['Charlie'])
+    typeSearch(container, 'exemp orbita')
+    expect(visibleNames(container)).toEqual(['Charlie'])
   })
 
   it('card sem data-props entra pela busca', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    typeSearch(container, 'fafnir')
-    expect(visibleNames(container)).toEqual(['Fafnir Velho'])
+    typeSearch(container, 'foxtrot')
+    expect(visibleNames(container)).toEqual(['Foxtrot Velho'])
   })
 
   it('soma com chip (AND)', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    pickTier(container, 'Lendário')
-    expect(visibleNames(container)).toEqual(['Aldor', 'Cyrene', 'Fafnir Velho'])
-    typeSearch(container, 'kosmos')
-    expect(visibleNames(container)).toEqual(['Aldor', 'Cyrene'])
+    pickTier(container, 'Ouro')
+    expect(visibleNames(container)).toEqual(['Alfa', 'Charlie', 'Foxtrot Velho'])
+    typeSearch(container, 'orbita')
+    expect(visibleNames(container)).toEqual(['Alfa', 'Charlie'])
   })
 
   it('sem resultado mantém a barra e conta zero', () => {
@@ -179,14 +179,14 @@ describe('ContentPanel busca', () => {
 
   it('contador conta a busca', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    typeSearch(container, 'kosmos')
+    typeSearch(container, 'orbita')
     expect(container.querySelector('.dv-filter-count')!.textContent).toBe('3 itens')
   })
 
   it('✕ só aparece com texto no campo', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
     expect(clearX(container).style.visibility).toBe('hidden')
-    typeSearch(container, 'cyr')
+    typeSearch(container, 'cha')
     expect(clearX(container).style.visibility).not.toBe('hidden')
     typeSearch(container, '')
     expect(clearX(container).style.visibility).toBe('hidden')
@@ -195,7 +195,7 @@ describe('ContentPanel busca', () => {
   it('Esc limpa a busca e o foco fica no campo', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
     focusSearch(container)
-    typeSearch(container, 'cyr')
+    typeSearch(container, 'cha')
     fireEvent.keyDown(searchInput(container), { key: 'Escape' })
     expect(searchInput(container).value).toBe('')
     expect(document.activeElement).toBe(searchInput(container))
@@ -205,7 +205,7 @@ describe('ContentPanel busca', () => {
   it('✕ limpa a busca e devolve o foco ao campo', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
     focusSearch(container)
-    typeSearch(container, 'cyr')
+    typeSearch(container, 'cha')
     expect(fireEvent.mouseDown(clearX(container))).toBe(false)
     fireEvent.click(clearX(container))
     expect(searchInput(container).value).toBe('')
@@ -215,8 +215,8 @@ describe('ContentPanel busca', () => {
 
   it('Limpar zera chips e busca', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    pickTier(container, 'Lendário')
-    typeSearch(container, 'kosmos')
+    pickTier(container, 'Ouro')
+    typeSearch(container, 'orbita')
     fireEvent.click(container.querySelector('.dv-filter-clear')!)
     expect(container.querySelector('.dv-filter-chip')).toBeNull()
     expect(searchInput(container).value).toBe('')
@@ -226,49 +226,49 @@ describe('ContentPanel busca', () => {
 
   it('Limpar aparece só com busca', () => {
     const { container } = render(panel(searchSegs(), 'S/A'))
-    typeSearch(container, 'cyr')
+    typeSearch(container, 'cha')
     expect(container.querySelector<HTMLElement>('.dv-filter-clear')!.style.display).not.toBe('none')
   })
 
   it('busca e foco voltam depois de um refresh da mesma página', async () => {
     const { container, rerender } = render(panel(searchSegs(), 'S/A'))
     focusSearch(container)
-    typeSearch(container, 'kosmos')
+    typeSearch(container, 'orbita')
     await act(async () => { rerender(panel(searchSegs(), 'S/A')) })
     const input = searchInput(container)
-    expect(input.value).toBe('kosmos')
+    expect(input.value).toBe('orbita')
     expect(document.activeElement).toBe(input)
     expect(input.selectionStart).toBe(6)
     expect(clearX(container).style.visibility).not.toBe('hidden')
-    expect(visibleNames(container)).toEqual(['Aldor', 'Cyrene', 'Elowen'])
+    expect(visibleNames(container)).toEqual(['Alfa', 'Charlie', 'Echo'])
   })
 
   it('refresh sem foco no campo não rouba o foco', async () => {
     const { container, rerender } = render(panel(searchSegs(), 'S/A'))
     focusSearch(container)
-    typeSearch(container, 'kosmos')
+    typeSearch(container, 'orbita')
     searchInput(container).blur()
     await act(async () => { await new Promise(r => setTimeout(r, 0)) })
     await act(async () => { rerender(panel(searchSegs(), 'S/A')) })
     const input = searchInput(container)
-    expect(input.value).toBe('kosmos')
+    expect(input.value).toBe('orbita')
     expect(document.activeElement).not.toBe(input)
   })
 
   it('navegar para outra página zera a busca', async () => {
     const { container, rerender } = render(panel(searchSegs(), 'S/A'))
-    typeSearch(container, 'kosmos')
+    typeSearch(container, 'orbita')
     await act(async () => { rerender(panel(searchSegs(), 'S/B')) })
     expect(searchInput(container).value).toBe('')
   })
 
   it('barra aparece só com busca quando nenhuma propriedade serve de chip', () => {
-    const entries: Entry[] = ['Ana', 'Beto', 'Caio', 'Duda'].map(n => [n, { Tipo: ['Personagem'] }])
+    const entries: Entry[] = ['Item Um', 'Item Dois', 'Item Três', 'Item Quatro'].map(n => [n, { Tipo: ['Exemplo'] }])
     const { container } = render(panel(searchSegs(entries), 'S/C'))
     expect(container.querySelector('.dv-filterbar')).not.toBeNull()
     expect(container.querySelector<HTMLElement>('.dv-filter-add')!.style.display).toBe('none')
-    typeSearch(container, 'caio')
-    expect(visibleNames(container)).toEqual(['Caio'])
+    typeSearch(container, 'tres')
+    expect(visibleNames(container)).toEqual(['Item Três'])
   })
 
   it.each([
@@ -277,7 +277,7 @@ describe('ContentPanel busca', () => {
   ])('digitar, %s, rerender da mesma página: campo vazio e focado', async (_n, clear) => {
     const { container, rerender } = render(panel(searchSegs(), 'S/A'))
     focusSearch(container)
-    typeSearch(container, 'cyr')
+    typeSearch(container, 'cha')
     clear(container)
     await act(async () => { rerender(panel(searchSegs(), 'S/A')) })
     const input = searchInput(container)
@@ -289,7 +289,7 @@ describe('ContentPanel busca', () => {
   it('digitar, Limpar, rerender da mesma página: campo vazio e sem roubar o foco', async () => {
     const { container, rerender } = render(panel(searchSegs(), 'S/A'))
     focusSearch(container)
-    typeSearch(container, 'cyr')
+    typeSearch(container, 'cha')
     fireEvent.click(container.querySelector('.dv-filter-clear')!)
     await act(async () => { rerender(panel(searchSegs(), 'S/A')) })
     const input = searchInput(container)
@@ -302,7 +302,7 @@ describe('ContentPanel busca', () => {
     try {
       const { container, rerender } = render(panel(searchSegs(), 'S/A'))
       focusSearch(container)
-      typeSearch(container, 'kosmos')
+      typeSearch(container, 'orbita')
       spy.mockClear()
       await act(async () => { rerender(panel(searchSegs(), 'S/A')) })
       expect(spy).toHaveBeenCalledWith({ preventScroll: true })
@@ -314,7 +314,7 @@ describe('ContentPanel busca', () => {
   it('blur tardio de input removido não apaga o foco lembrado', async () => {
     const { container, rerender } = render(panel(searchSegs(), 'S/A'))
     focusSearch(container)
-    typeSearch(container, 'kosmos')
+    typeSearch(container, 'orbita')
     const old = searchInput(container)
     await act(async () => { rerender(panel(searchSegs(), 'S/A')) })
     expect(old.isConnected).toBe(false)

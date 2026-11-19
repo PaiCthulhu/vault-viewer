@@ -3,17 +3,17 @@ import { LinkResolver } from '../../builder/link-resolver'
 import type { ScannedFile } from '../../builder/scanner'
 
 const files: ScannedFile[] = [
-  { absolutePath: '/v/Aldor.md', relativePath: 'Personagens/Aldor', title: 'Aldor' },
-  { absolutePath: '/v/Magus.md', relativePath: 'Magia/Magus', title: 'Magus' },
-  { absolutePath: '/v/Página Inicial.md', relativePath: 'Página Inicial', title: 'Página Inicial' },
+  { absolutePath: '/v/Alfa.md', relativePath: 'Exemplares/Alfa', title: 'Alfa' },
+  { absolutePath: '/v/Gama.md', relativePath: 'Ensaios/Gama', title: 'Gama' },
+  { absolutePath: '/v/Página Exemplo.md', relativePath: 'Página Exemplo', title: 'Página Exemplo' },
 ]
 
 describe('LinkResolver.resolve', () => {
   it('resolve pelo título (case-insensitive)', () => {
     const lr = new LinkResolver(files)
-    expect(lr.resolve('aldor')).toBe('Personagens/Aldor')
-    expect(lr.resolve('Aldor')).toBe('Personagens/Aldor')
-    expect(lr.resolve('ALDOR')).toBe('Personagens/Aldor')
+    expect(lr.resolve('alfa')).toBe('Exemplares/Alfa')
+    expect(lr.resolve('Alfa')).toBe('Exemplares/Alfa')
+    expect(lr.resolve('ALFA')).toBe('Exemplares/Alfa')
   })
 
   it('retorna undefined para título desconhecido', () => {
@@ -24,54 +24,54 @@ describe('LinkResolver.resolve', () => {
   it('em caso de duplicata de título, mantém o de caminho mais curto', () => {
     const withDuplicate: ScannedFile[] = [
       ...files,
-      { absolutePath: '/v/X/Aldor.md', relativePath: 'X/Y/Z/Aldor', title: 'Aldor' },
+      { absolutePath: '/v/X/Alfa.md', relativePath: 'X/Y/Z/Alfa', title: 'Alfa' },
     ]
     const lr = new LinkResolver(withDuplicate)
-    expect(lr.resolve('aldor')).toBe('Personagens/Aldor') // mais curto
+    expect(lr.resolve('alfa')).toBe('Exemplares/Alfa') // mais curto
   })
 })
 
 describe('LinkResolver.extractOutlinks', () => {
   it('extrai links que existem no vault', () => {
     const lr = new LinkResolver(files)
-    const content = 'Veja [[Aldor]] e também [[Magus|O Mago]].'
+    const content = 'Veja [[Alfa]] e também [[Gama|O Terceiro]].'
     const outlinks = lr.extractOutlinks(content)
-    expect(outlinks).toContain('Personagens/Aldor')
-    expect(outlinks).toContain('Magia/Magus')
+    expect(outlinks).toContain('Exemplares/Alfa')
+    expect(outlinks).toContain('Ensaios/Gama')
   })
 
   it('ignora links para páginas que não existem', () => {
     const lr = new LinkResolver(files)
-    const content = '[[Aldor]] e [[PaginaInexistente]]'
+    const content = '[[Alfa]] e [[PaginaInexistente]]'
     const outlinks = lr.extractOutlinks(content)
     expect(outlinks).toHaveLength(1)
-    expect(outlinks[0]).toBe('Personagens/Aldor')
+    expect(outlinks[0]).toBe('Exemplares/Alfa')
   })
 
   it('deduplica outlinks', () => {
     const lr = new LinkResolver(files)
-    const content = '[[Aldor]] aparece aqui e [[Aldor]] novamente'
+    const content = '[[Alfa]] aparece aqui e [[Alfa]] novamente'
     expect(lr.extractOutlinks(content)).toHaveLength(1)
   })
 
-  it('resolve link com pipe escapado de tabela [[Aldor\\|alias]]', () => {
+  it('resolve link com pipe escapado de tabela [[Alfa\\|alias]]', () => {
     const lr = new LinkResolver(files)
-    const content = '| [[Aldor\\|O Mago]] | nota |'
-    expect(lr.extractOutlinks(content)).toContain('Personagens/Aldor')
+    const content = '| [[Alfa\\|O Primeiro]] | nota |'
+    expect(lr.extractOutlinks(content)).toContain('Exemplares/Alfa')
   })
 })
 
 describe('LinkResolver.replaceWikilinks', () => {
   it('substitui [[Titulo]] por âncora HTML', () => {
     const lr = new LinkResolver(files)
-    const result = lr.replaceWikilinks('Veja [[Aldor]]', 'myvault')
-    expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor">Aldor</a>')
+    const result = lr.replaceWikilinks('Veja [[Alfa]]', 'myvault')
+    expect(result).toContain('<a href="/vault/myvault/Exemplares/Alfa">Alfa</a>')
   })
 
   it('usa alias quando presente [[Titulo|Alias]]', () => {
     const lr = new LinkResolver(files)
-    const result = lr.replaceWikilinks('[[Aldor|O Guerreiro]]', 'myvault')
-    expect(result).toContain('>O Guerreiro</a>')
+    const result = lr.replaceWikilinks('[[Alfa|O Primeiro]]', 'myvault')
+    expect(result).toContain('>O Primeiro</a>')
   })
 
   it('envolve link não-resolvido em span.vault-dead-link', () => {
@@ -82,33 +82,33 @@ describe('LinkResolver.replaceWikilinks', () => {
 
   it('link de heading na mesma página [[#Heading]] vira âncora local', () => {
     const lr = new LinkResolver(files)
-    const result = lr.replaceWikilinks('[[#Draconis Fundamentum]]', 'myvault')
-    expect(result).toBe('<a href="#draconis-fundamentum">Draconis Fundamentum</a>')
+    const result = lr.replaceWikilinks('[[#Parte Um]]', 'myvault')
+    expect(result).toBe('<a href="#parte-um">Parte Um</a>')
   })
 
-  it('link de heading na mesma página com alias [[#Aether|Aether]]', () => {
+  it('link de heading na mesma página com alias [[#Panorama|Panorama]]', () => {
     const lr = new LinkResolver(files)
-    const result = lr.replaceWikilinks('**[[#Aether|Aether]]**', 'myvault')
-    expect(result).toContain('<a href="#aether">Aether</a>')
+    const result = lr.replaceWikilinks('**[[#Panorama|Panorama]]**', 'myvault')
+    expect(result).toContain('<a href="#panorama">Panorama</a>')
   })
 
   it('link cross-page com heading [[Page#Heading|alias]]', () => {
     const lr = new LinkResolver(files)
-    const result = lr.replaceWikilinks('[[Aldor#Secao Um|veja]]', 'myvault')
-    expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor#secao-um">veja</a>')
+    const result = lr.replaceWikilinks('[[Alfa#Secao Um|veja]]', 'myvault')
+    expect(result).toContain('<a href="/vault/myvault/Exemplares/Alfa#secao-um">veja</a>')
   })
 
   it('resolve pipe escapado de tabela [[Page\\|Alias]] (não vira dead-link)', () => {
     const lr = new LinkResolver(files)
-    const result = lr.replaceWikilinks('| [[Personagens/Aldor\\|Márcia]] | nota |', 'myvault')
-    expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor">Márcia</a>')
+    const result = lr.replaceWikilinks('| [[Exemplares/Alfa\\|Nota Única]] | nota |', 'myvault')
+    expect(result).toContain('<a href="/vault/myvault/Exemplares/Alfa">Nota Única</a>')
     expect(result).not.toContain('vault-dead-link')
   })
 
   it('resolve pipe escapado com heading [[Page#Heading\\|alias]]', () => {
     const lr = new LinkResolver(files)
-    const result = lr.replaceWikilinks('| [[Aldor#Secao Um\\|veja]] | nota |', 'myvault')
-    expect(result).toContain('<a href="/vault/myvault/Personagens/Aldor#secao-um">veja</a>')
+    const result = lr.replaceWikilinks('| [[Alfa#Secao Um\\|veja]] | nota |', 'myvault')
+    expect(result).toContain('<a href="/vault/myvault/Exemplares/Alfa#secao-um">veja</a>')
   })
 })
 

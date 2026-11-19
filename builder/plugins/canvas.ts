@@ -1,7 +1,7 @@
 // Renderiza um Obsidian Canvas (.canvas, JSON) em HTML responsivo.
 // Nós são posicionados absolutamente em porcentagens do bounding box.
 
-import type { LinkResolver } from '../link-resolver'
+import { escapeHtml, type LinkResolver } from '../link-resolver'
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'])
 
@@ -147,7 +147,7 @@ export async function renderCanvas(
     if (n.type === 'group') {
       parts.push(
         `<div class="canvas-node canvas-group" style="${posStyle} ${clrStyle}">` +
-          (n.label ? `<span class="canvas-group-label">${n.label}</span>` : '') +
+          (n.label ? `<span class="canvas-group-label">${escapeHtml(n.label)}</span>` : '') +
           `</div>`,
       )
     } else if (n.type === 'text') {
@@ -158,7 +158,7 @@ export async function renderCanvas(
     } else if (n.type === 'file') {
       const file = n.file ?? ''
       if (isImage(file)) {
-        const src = resolveImage(file)
+        const src = escapeHtml(resolveImage(file))
         parts.push(
           `<div class="canvas-node canvas-image" style="${posStyle} ${clrStyle}">` +
             `<img src="${src}" alt=""/>` +
@@ -171,14 +171,15 @@ export async function renderCanvas(
           const href = `/vault/${vaultSlug}/${resolved.split('/').map(encodeURIComponent).join('/')}`
           parts.push(
             `<div class="canvas-node canvas-card" style="${posStyle} ${clrStyle}">` +
-              `<a href="${href}">${title}</a>` +
+              `<a href="${href}">${escapeHtml(title)}</a>` +
               `</div>`,
           )
         }
       }
       // outros tipos de arquivo: ignorar
     } else if (n.type === 'link') {
-      const url = n.url ?? ''
+      // Rótulo, título, url e src vêm do JSON do canvas: saem escapados como texto e atributo.
+      const url = escapeHtml(n.url ?? '')
       parts.push(
         `<div class="canvas-node canvas-card" style="${posStyle} ${clrStyle}">` +
           `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>` +

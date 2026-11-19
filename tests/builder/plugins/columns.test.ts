@@ -76,7 +76,7 @@ Sem flex
   })
 
   it('insere linha em branco quando o bloco col é seguido por um heading colado', async () => {
-    // Caso real (Drakkonia): bloco ````col seguido SEM linha em branco por `# Demografia`.
+    // Caso real (uma nota com colunas): bloco ````col seguido SEM linha em branco por `# Parte Dois`.
     // Sem o fix, o <div> HTML gerado engole o heading (CommonMark continua o bloco
     // HTML até uma linha em branco).
     const md = `\`\`\`\`col
@@ -85,15 +85,15 @@ Sem flex
 Coluna
 \`\`\`
 \`\`\`\`
-# Demografia`
+# Parte Dois`
     const result = await renderColumns(md, identity)
     // Deve haver uma linha em branco entre o </div> das colunas e o heading.
-    expect(result).toMatch(/<\/div>\n\n# Demografia/)
+    expect(result).toMatch(/<\/div>\n\n# Parte Dois/)
     // E renderizado pelo markdown, o heading vira <h1>, não texto literal.
     const html = await renderMarkdown(result)
     expect(html).toContain('<h1')
-    expect(html).toContain('Demografia')
-    expect(html).not.toContain('# Demografia')
+    expect(html).toContain('Parte Dois')
+    expect(html).not.toContain('# Parte Dois')
   })
 
   it('emite text-align quando textAlign está nas settings', async () => {

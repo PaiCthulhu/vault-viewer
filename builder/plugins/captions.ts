@@ -1,3 +1,5 @@
+import { escapeHtml } from '../link-resolver'
+
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'])
 
 function isImage(filePath: string): boolean {
@@ -14,7 +16,9 @@ export function renderCaptions(
     (original, imgPath, pipePart, offset: number, full: string) => {
       if (!isImage(imgPath.trim())) return original
 
-      const src = resolveImage(imgPath.trim())
+      // A legenda é texto puro (no Obsidian ela é só o alt) e o src é atributo: os dois saem
+      // escapados, como texto e como atributo.
+      const src = escapeHtml(resolveImage(imgPath.trim()))
 
       // pipePart é algo como "" ou "|legenda" ou "|legenda|120" — separa as partes.
       const parts: string[] = pipePart
@@ -34,7 +38,7 @@ export function renderCaptions(
         }
       }
 
-      const caption = parts.join('|').trim()
+      const caption = escapeHtml(parts.join('|').trim())
       const sizeAttrs =
         (width ? ` width="${width}"` : '') + (height ? ` height="${height}"` : '')
 

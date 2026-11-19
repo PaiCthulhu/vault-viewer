@@ -191,6 +191,15 @@ describe('buildSectionPreview', () => {
     expect(buildSectionPreview(html, 'inexistente')).toBeNull()
   })
 
+  it('acha a seção pelo atributo id, não por um data-id com o mesmo valor', () => {
+    const h =
+      '<h2 data-id="alvo" id="outro">Errada</h2><p>não é esta</p>' +
+      '<h2 id="alvo">Certa</h2><p>é esta</p>'
+    const res = buildSectionPreview(h, 'alvo')
+    expect(res!.heading).toBe('Certa')
+    expect(res!.snippet).toBe('é esta')
+  })
+
   it('decodifica entidades no texto do heading', () => {
     const h = '<h2 id="x">Caf&eacute; &amp; Bar</h2><p>corpo</p>'
     const res = buildSectionPreview(h, 'x')

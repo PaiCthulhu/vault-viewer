@@ -15,9 +15,9 @@ function makePage(overrides: Partial<PageMeta> & { path: string; title: string }
 }
 
 const pages: PageMeta[] = [
-  makePage({ path: 'Personagens/Aldor', title: 'Aldor', frontmatter: { Tags: ['Personagem'], Tier: 'Lendário' }, tags: ['Personagem'] }),
-  makePage({ path: 'Personagens/Ragnar', title: 'Ragnar', frontmatter: { Tags: ['Personagem'], Tier: 'Épico' }, tags: ['Personagem'] }),
-  makePage({ path: 'Magia/Magus', title: 'Magus', frontmatter: { Tags: ['Conceito'], Tier: 'Raro' }, tags: ['Conceito'] }),
+  makePage({ path: 'Exemplares/Alfa', title: 'Alfa', frontmatter: { Tags: ['Exemplar'], Patamar: 'Ápice' }, tags: ['Exemplar'] }),
+  makePage({ path: 'Exemplares/Sigma', title: 'Sigma', frontmatter: { Tags: ['Exemplar'], Patamar: 'Alto' }, tags: ['Exemplar'] }),
+  makePage({ path: 'Ensaios/Gama', title: 'Gama', frontmatter: { Tags: ['Ensaio'], Patamar: 'Baixo' }, tags: ['Ensaio'] }),
 ]
 const current = pages[0]
 
@@ -25,33 +25,33 @@ const noopResolve = (p: string) => p
 
 describe('executeDQL', () => {
   it('TABLE retorna div.dataview-result com data-type=table', () => {
-    const query = 'TABLE Tier FROM "Personagens"'
+    const query = 'TABLE Patamar FROM "Exemplares"'
     const result = executeDQL(query, pages, 'myvault')
     expect(result).toContain('class="dataview-result"')
     expect(result).toContain('data-type="table"')
   })
 
   it('TABLE FROM filtra por pasta', () => {
-    const query = 'TABLE Tier FROM "Personagens"'
+    const query = 'TABLE Patamar FROM "Exemplares"'
     const result = executeDQL(query, pages, 'myvault')
-    // O dataset codificado deve conter Aldor e Ragnar, mas não Magus
+    // O dataset codificado deve conter Alfa e Sigma, mas não Gama
     const encoded = result.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const decoded = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'))
     expect(decoded).toHaveLength(2)
-    expect(decoded.map((p: PageMeta) => p.title)).toContain('Aldor')
-    expect(decoded.map((p: PageMeta) => p.title)).not.toContain('Magus')
+    expect(decoded.map((p: PageMeta) => p.title)).toContain('Alfa')
+    expect(decoded.map((p: PageMeta) => p.title)).not.toContain('Gama')
   })
 
   it('WHERE contains() filtra corretamente', () => {
-    const query = 'TABLE Tier FROM "Personagens" WHERE contains(Tags, "Personagem")'
+    const query = 'TABLE Patamar FROM "Exemplares" WHERE contains(Tags, "Exemplar")'
     const result = executeDQL(query, pages, 'myvault')
     const encoded = result.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const decoded = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'))
-    expect(decoded.every((p: PageMeta) => (p.tags as string[]).includes('Personagem'))).toBe(true)
+    expect(decoded.every((p: PageMeta) => (p.tags as string[]).includes('Exemplar'))).toBe(true)
   })
 
   it('data-columns contém as colunas da query', () => {
-    const query = 'TABLE Tier AS "Escalão", Tags FROM "Personagens"'
+    const query = 'TABLE Patamar AS "Escalão", Tags FROM "Exemplares"'
     const result = executeDQL(query, pages, 'myvault')
     const encoded = result.match(/data-columns="([^"]+)"/)?.[1] ?? ''
     const cols = JSON.parse(decodeURIComponent(encoded))
@@ -60,50 +60,50 @@ describe('executeDQL', () => {
   })
 
   it('LIST retorna div.dataview-result com data-type=list', () => {
-    const result = executeDQL('LIST FROM "Personagens"', pages, 'myvault')
+    const result = executeDQL('LIST FROM "Exemplares"', pages, 'myvault')
     expect(result).toContain('data-type="list"')
   })
 })
 
 describe('executeDataviewJS', () => {
   it('dv.table() produz placeholder .dataview-result interativo', async () => {
-    const code = `dv.table(["Nome", "Tier"], dv.pages().map(p => [p.file.name, p.Tier]))`
+    const code = `dv.table(["Nome", "Patamar"], dv.pages().map(p => [p.file.name, p.Patamar]))`
     const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     expect(html).toContain('class="dataview-result"')
     expect(html).toContain('data-type="table"')
     // Colunas codificadas em data-columns
     const colsEnc = html.match(/data-columns="([^"]+)"/)?.[1] ?? ''
     const cols = JSON.parse(decodeURIComponent(colsEnc))
-    expect(cols).toEqual(['Nome', 'Tier'])
+    expect(cols).toEqual(['Nome', 'Patamar'])
     // Linhas codificadas em base64 dentro de data-result
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const rows = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
-    expect(rows.some((r: string[]) => r[0] === 'Aldor')).toBe(true)
+    expect(rows.some((r: string[]) => r[0] === 'Alfa')).toBe(true)
   })
 
   it('dv.pages() filtra por pasta', async () => {
     const code = `
-      const ps = dv.pages('"Personagens"')
+      const ps = dv.pages('"Exemplares"')
       dv.table(["N"], ps.map(p => [p.file.name]))
     `
     const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const rows = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8')) as string[][]
     const flat = rows.flat()
-    expect(flat).toContain('Aldor')
-    expect(flat).not.toContain('Magus')
+    expect(flat).toContain('Alfa')
+    expect(flat).not.toContain('Gama')
   })
 
   it('dv.pages().where() filtra com predicado', async () => {
     const code = `
-      const ps = dv.pages().where(p => p.Tier === 'Lendário')
+      const ps = dv.pages().where(p => p.Patamar === 'Ápice')
       dv.list(ps.map(p => p.file.name))
     `
     const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const items = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
-    expect(items).toContain('Aldor')
-    expect(items).not.toContain('Ragnar')
+    expect(items).toContain('Alfa')
+    expect(items).not.toContain('Sigma')
   })
 
   it('dv.list() produz placeholder .dataview-result interativo', async () => {
@@ -119,7 +119,7 @@ describe('executeDataviewJS', () => {
   it('dv.current() retorna dados da página atual', async () => {
     const code = `dv.paragraph(dv.current().file.name)`
     const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
-    expect(html).toContain('Aldor')
+    expect(html).toContain('Alfa')
   })
 
   it('captura CSS injetado via document.createElement("style")', async () => {
@@ -141,7 +141,7 @@ describe('executeDataviewJS', () => {
   it('.array() retorna um array JS puro (sem métodos DvArray)', async () => {
     const code = `
       const out = []
-      const arr = dv.pages('"Personagens"').where(p => p.Tier === 'Lendário').array()
+      const arr = dv.pages('"Exemplares"').where(p => p.Patamar === 'Ápice').array()
       out.push('isArray=' + Array.isArray(arr))
       out.push('len=' + arr.length)
       out.push('hasWhere=' + (typeof arr.where))
@@ -152,12 +152,12 @@ describe('executeDataviewJS', () => {
     expect(html).toContain('isArray=true')
     expect(html).toContain('len=1')
     expect(html).toContain('hasWhere=undefined')
-    expect(html).toContain('name=Aldor')
+    expect(html).toContain('name=Alfa')
   })
 
   it('.values é um alias para o array plano', async () => {
     const code = `
-      const v = dv.pages('"Personagens"').values
+      const v = dv.pages('"Exemplares"').values
       dv.paragraph('isArray=' + Array.isArray(v) + '|len=' + v.length)
     `
     const { html } = await executeDataviewJS(code, pages, current, 'myvault', noopResolve)
@@ -177,7 +177,7 @@ describe('executeDataviewJS', () => {
     const { html } = await executeDataviewJS(code, localPages, current, 'myvault', noopResolve)
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const items = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
-    expect(items).toContain('Aldor=>Personagens:md')
+    expect(items).toContain('Alfa=>Exemplares:md')
     expect(items).toContain('TopLevel=>:md')
   })
 
@@ -186,14 +186,14 @@ describe('executeDataviewJS', () => {
       const card = dv.container.createEl('div', { cls: 'dv-card' })
       card.createEl('a', {
         cls: 'dv-card-name internal-link',
-        text: 'Donner',
-        attr: { 'data-href': 'Cosmologia/Astros/Donner', href: 'Cosmologia/Astros/Donner' },
+        text: 'Lambda',
+        attr: { 'data-href': 'Ensaios/Subpasta/Lambda', href: 'Ensaios/Subpasta/Lambda' },
       })
     `
     const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
-    expect(html).toContain('href="/vault/my-vault/Cosmologia/Astros/Donner"')
+    expect(html).toContain('href="/vault/my-vault/Ensaios/Subpasta/Lambda"')
     // The standalone href is rewritten (data-href may stay raw, which is fine).
-    expect(html).not.toMatch(/(\s)href="Cosmologia\/Astros\/Donner"/)
+    expect(html).not.toMatch(/(\s)href="Ensaios\/Subpasta\/Lambda"/)
   })
 
   it('decodifica entidades HTML no href antes de codificar a URL', async () => {
@@ -204,13 +204,13 @@ describe('executeDataviewJS', () => {
       const card = dv.container.createEl('div', { cls: 'dv-card' })
       card.createEl('a', {
         cls: 'internal-link',
-        text: 'Ntoto',
-        attr: { href: 'Personalidades & Facções/Nações/Ntoto Ileri' },
+        text: 'Nota',
+        attr: { href: 'Pasta & Cia/Seção Ação/Nota Exemplo' },
       })
     `
     const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
     expect(html).toContain(
-      'href="/vault/my-vault/Personalidades%20%26%20Fac%C3%A7%C3%B5es/Na%C3%A7%C3%B5es/Ntoto%20Ileri"',
+      'href="/vault/my-vault/Pasta%20%26%20Cia/Se%C3%A7%C3%A3o%20A%C3%A7%C3%A3o/Nota%20Exemplo"',
     )
     expect(html).not.toContain('%26amp%3B')
   })
@@ -253,16 +253,16 @@ describe('executeDataviewJS', () => {
     // deve ser reescrito para /vault/... DENTRO do payload base64 (o rewrite final
     // de output não cobre o conteúdo base64).
     const code = `
-      const link = '<a class="internal-link" href="Cosmologia/Astros/Donner">Donner</a>'
-      dv.table(["Astro"], [[link]])
+      const link = '<a class="internal-link" href="Ensaios/Subpasta/Lambda">Lambda</a>'
+      dv.table(["Lugar"], [[link]])
     `
     const { html } = await executeDataviewJS(code, pages, current, 'my-vault', noopResolve)
     expect(html).toContain('class="dataview-result"')
     expect(html).toContain('data-type="table"')
     const b64 = html.match(/data-result="([^"]+)"/)?.[1] ?? ''
     const rows = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
-    expect(rows[0][0]).toContain('href="/vault/my-vault/Cosmologia/Astros/Donner"')
-    expect(rows[0][0]).not.toMatch(/href="Cosmologia\/Astros\/Donner"/)
+    expect(rows[0][0]).toContain('href="/vault/my-vault/Ensaios/Subpasta/Lambda"')
+    expect(rows[0][0]).not.toMatch(/href="Ensaios\/Subpasta\/Lambda"/)
   })
 
   it('dv.table normaliza células de array via renderCell', async () => {
@@ -277,29 +277,29 @@ describe('executeDataviewJS', () => {
 describe('executeDataviewJS — data-props em .dv-card', () => {
   const cardPages: PageMeta[] = [
     makePage({
-      path: 'Personalidades/Aldor',
-      title: 'Aldor',
-      tags: ['Personagem', 'Herói'],
+      path: 'Exemplares/Alfa',
+      title: 'Alfa',
+      tags: ['Exemplar', 'Ícone'],
       frontmatter: {
-        Categoria: 'Personalidades Importantes',
-        Tier: 'Lendário',
-        Raça: ['[[Humano]]'],
-        Aliados: ['[[Personalidades/Ragnar|Ragnar, o Bravo]]'],
-        cover: 'Imagens/aldor-banner.png',
+        Agrupamento: 'Primeiro Grupo',
+        Patamar: 'Ápice',
+        Feição: ['[[Gama]]'],
+        Correlatos: ['[[Exemplares/Sigma|Sigma, o Segundo]]'],
+        cover: 'Midia/alfa-banner.png',
         ID: 'abc-123',
         Created: '2020-01-01',
-        URL: 'https://example.com/aldor',
+        URL: 'https://example.com/alfa',
         Notas: '',
       },
     }),
     makePage({
-      path: 'Personalidades/Ragnar',
-      title: 'Ragnar',
-      tags: ['Personagem'],
+      path: 'Exemplares/Sigma',
+      title: 'Sigma',
+      tags: ['Exemplar'],
       frontmatter: {
-        Categoria: 'Personalidades Importantes',
-        Tier: 'Épico',
-        cover: 'Imagens/ragnar.png',
+        Agrupamento: 'Primeiro Grupo',
+        Patamar: 'Alto',
+        cover: 'Midia/sigma.png',
       },
     }),
   ]
@@ -308,7 +308,7 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
   // pages above via data-href (raw vault paths).
   const GALLERY = `
     const gallery = dv.container.createEl("div", { cls: "dv-gallery" });
-    for (const page of dv.pages('"Personalidades"')) {
+    for (const page of dv.pages('"Exemplares"')) {
       const card = gallery.createEl("div", { cls: "dv-card" });
       const body = card.createEl("div", { cls: "dv-card-body" });
       body.createEl("a", {
@@ -329,26 +329,26 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
     const props = decodeProps(html)
     expect(props).toHaveLength(2)
 
-    const aldor = props.find(p => p.Tier?.[0] === 'Lendário')!
-    expect(aldor).toBeDefined()
-    expect(aldor.Categoria).toEqual(['Personalidades Importantes'])
-    expect(aldor.Tier).toEqual(['Lendário'])
+    const alfa = props.find(p => p.Patamar?.[0] === 'Ápice')!
+    expect(alfa).toBeDefined()
+    expect(alfa.Agrupamento).toEqual(['Primeiro Grupo'])
+    expect(alfa.Patamar).toEqual(['Ápice'])
     // Wikilink simples -> último segmento
-    expect(aldor.Raça).toEqual(['Humano'])
+    expect(alfa.Feição).toEqual(['Gama'])
     // Wikilink com alias -> alias
-    expect(aldor.Aliados).toEqual(['Ragnar, o Bravo'])
+    expect(alfa.Correlatos).toEqual(['Sigma, o Segundo'])
     // Tags vêm de page.tags
-    expect(aldor.Tags).toEqual(['Personagem', 'Herói'])
+    expect(alfa.Tags).toEqual(['Exemplar', 'Ícone'])
   })
 
   it('exclui chaves de cover/ID/Created/URL e strings vazias', async () => {
     const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'my-vault', noopResolve)
-    const aldor = decodeProps(html).find(p => p.Tier?.[0] === 'Lendário')!
-    expect(aldor.cover).toBeUndefined()
-    expect(aldor.ID).toBeUndefined()
-    expect(aldor.Created).toBeUndefined()
-    expect(aldor.URL).toBeUndefined()
-    expect(aldor.Notas).toBeUndefined() // string vazia ignorada
+    const alfa = decodeProps(html).find(p => p.Patamar?.[0] === 'Ápice')!
+    expect(alfa.cover).toBeUndefined()
+    expect(alfa.ID).toBeUndefined()
+    expect(alfa.Created).toBeUndefined()
+    expect(alfa.URL).toBeUndefined()
+    expect(alfa.Notas).toBeUndefined() // string vazia ignorada
   })
 
   it('cartões em document.body também são estampados', async () => {
@@ -357,21 +357,21 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
       const card = gallery.createEl("div", { cls: "dv-card" });
       card.createEl("a", {
         cls: "internal-link",
-        text: "Aldor",
-        attr: { "data-href": "Personalidades/Aldor" },
+        text: "Alfa",
+        attr: { "data-href": "Exemplares/Alfa" },
       });
     `
     const { html } = await executeDataviewJS(code, cardPages, cardPages[0], 'my-vault', noopResolve)
     const props = decodeProps(html)
     expect(props).toHaveLength(1)
-    expect(props[0].Tier).toEqual(['Lendário'])
+    expect(props[0].Patamar).toEqual(['Ápice'])
   })
 
   it('usa o data-href cru (não o href reescrito) para resolver a página', async () => {
     // Mesmo após rewriteInternalLinks alterar href, data-props deve ter sido
     // resolvido pelo caminho cru e estar presente.
     const { html } = await executeDataviewJS(GALLERY, cardPages, cardPages[0], 'my-vault', noopResolve)
-    expect(html).toContain('href="/vault/my-vault/Personalidades/Aldor"')
+    expect(html).toContain('href="/vault/my-vault/Exemplares/Alfa"')
     expect(html).toContain('data-props=')
   })
 
@@ -391,38 +391,37 @@ describe('executeDataviewJS — data-props em .dv-card', () => {
 })
 
 const GALLERY_SCRIPT = `
-if (!document.getElementById("dv-inline-gallery-style")) {
-    const s = document.createElement("style");
-    s.id = "dv-inline-gallery-style";
-    s.textContent = \`
-        .dv-inline-gallery { display: flex; gap: 8px; }
-        .dv-inline-gallery-card { border: 1px solid var(--background-modifier-border); background: var(--background-secondary); }
+const STYLE_ID = "dv-fotos-style";
+if (!document.getElementById(STYLE_ID)) {
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = \`
+        .dv-fotos { display: grid; grid-template-columns: repeat(3, 1fr); }
+        .dv-fotos-card { padding: 4px; background: var(--background-secondary); }
     \`;
-    document.head.appendChild(s);
+    document.head.appendChild(style);
 }
 
-const current = dv.current();
-const images = current["Ilustração"] ?? [];
-const gallery = dv.container.createEl("div", { cls: "dv-inline-gallery" });
+const page = dv.current();
+const fotos = page["Fotos"] ?? [];
+const grid = dv.container.createEl("div", { cls: "dv-fotos" });
 
-for (const image of images) {
-    const path = image?.path ?? image;
-    const file = typeof path === "string"
-        ? app.metadataCache.getFirstLinkpathDest(path, current.file.path)
-        : null;
+for (const foto of fotos) {
+    const alvo = typeof foto === "string" ? foto : foto?.path;
+    if (typeof alvo !== "string") continue;
+    const file = app.metadataCache.getFirstLinkpathDest(alvo, page.file.path);
     if (!file) continue;
-
-    const card = gallery.createEl("div", { cls: "dv-inline-gallery-card" });
+    const card = grid.createEl("div", { cls: "dv-fotos-card" });
     card.createEl("img", { attr: { src: app.vault.adapter.getResourcePath(file.path), alt: "" } });
 }
 `
 
 describe('executeDataviewJS — galeria de imagens inline', () => {
   const galleryPage = makePage({
-    path: 'Bestiário/Grandrak',
-    title: 'Grandrak',
+    path: 'Exemplares/Theta',
+    title: 'Theta',
     frontmatter: {
-      Ilustração: ['[[Imagens/Galerias/X_1.png]]', '[[Imagens/Galerias/X_2.png]]'],
+      Fotos: ['[[Midia/Fotos/X_1.png]]', '[[Midia/Fotos/X_2.png]]'],
     },
   })
   const galleryPages = [galleryPage]
@@ -445,18 +444,18 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
     const imgMatches = html.match(/<img/g) ?? []
     expect(imgMatches).toHaveLength(2)
     // Classe da galeria presente
-    expect(html).toContain('dv-inline-gallery')
-    expect(html).toContain('dv-inline-gallery-card')
+    expect(html).toContain('dv-fotos')
+    expect(html).toContain('dv-fotos-card')
     // src resolvido (sem brackets de wikilink)
-    expect(html).toContain('src="/vault-assets/my-vault/Imagens/Galerias/X_1.png"')
-    expect(html).toContain('src="/vault-assets/my-vault/Imagens/Galerias/X_2.png"')
+    expect(html).toContain('src="/vault-assets/my-vault/Midia/Fotos/X_1.png"')
+    expect(html).toContain('src="/vault-assets/my-vault/Midia/Fotos/X_2.png"')
     // resolveImage chamado com os caminhos limpos
-    expect(resolved).toContain('Imagens/Galerias/X_1.png')
-    expect(resolved).toContain('Imagens/Galerias/X_2.png')
+    expect(resolved).toContain('Midia/Fotos/X_1.png')
+    expect(resolved).toContain('Midia/Fotos/X_2.png')
     // img é void element: sem </img>
     expect(html).not.toContain('</img>')
     // CSS capturado
-    expect(css).toContain('.dv-inline-gallery')
+    expect(css).toContain('.dv-fotos')
     expect(css).toContain('--background-secondary')
   })
 
@@ -474,7 +473,7 @@ describe('executeDataviewJS — galeria de imagens inline', () => {
       resolveImage,
     )
     // O guard de getElementById deve impedir a segunda injeção do <style>
-    const occurrences = css.split('.dv-inline-gallery-card').length - 1
+    const occurrences = css.split('.dv-fotos-card').length - 1
     expect(occurrences).toBe(1)
   })
 })

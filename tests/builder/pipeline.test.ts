@@ -35,9 +35,9 @@ function spyWrites(): { file: string; content: string }[] {
 
 beforeEach(() => {
   TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-test-'))
-  write('Inicio.md', '# Inicio\n\n[[Jogos/A]]\n\n![[a.png]]\n\n```dataview\nLIST FROM "Jogos"\n```\n')
-  write('Jogos/A.md', '# A\n\ntexto A\n')
-  write('Jogos/B.md', '# B\n\n![[b.png]]\n')
+  write('Inicio.md', '# Inicio\n\n[[Pasta/A]]\n\n![[a.png]]\n\n```dataview\nLIST FROM "Pasta"\n```\n')
+  write('Pasta/A.md', '# A\n\ntexto A\n')
+  write('Pasta/B.md', '# B\n\n![[b.png]]\n')
   write('Imagens/a.png', 'a')
   write('Imagens/b.png', 'b')
   write('Mapa.canvas', JSON.stringify({ nodes: [{ id: '1', type: 'text', text: 'oi', x: 0, y: 0, width: 100, height: 50 }], edges: [] }))
@@ -57,7 +57,7 @@ describe('buildVault --first', () => {
     const A = path.join(TMP, 'outA')
     const B = path.join(TMP, 'outB')
     await buildVault(vault, { dataRoot: A })
-    await buildVault(vault, { dataRoot: B, first: ['Jogos/B', 'Inicio'] })
+    await buildVault(vault, { dataRoot: B, first: ['Pasta/B', 'Inicio'] })
 
     const a = listFiles(path.join(A, 'v'))
     expect(listFiles(path.join(B, 'v'))).toEqual(a)
@@ -80,7 +80,7 @@ describe('buildVault --first', () => {
   })
 
   it('nada é escrito em public/', async () => {
-    await buildVault(vault, { dataRoot: path.join(TMP, 'out'), first: ['Jogos/B'] })
+    await buildVault(vault, { dataRoot: path.join(TMP, 'out'), first: ['Pasta/B'] })
     expect(fs.existsSync(path.join(TMP, 'public'))).toBe(false)
   })
 
@@ -88,14 +88,14 @@ describe('buildVault --first', () => {
     const out = path.join(TMP, 'out')
     const writes = spyWrites()
 
-    await buildVault(vault, { dataRoot: out, first: ['Jogos/B'] })
+    await buildVault(vault, { dataRoot: out, first: ['Pasta/B'] })
 
     const idx = (re: RegExp) => writes.findIndex(w => re.test(w.file))
     const iAssets = idx(/\/assets\.json$/)
-    const iB = idx(/\/pages\/Jogos\/B\.json$/)
+    const iB = idx(/\/pages\/Pasta\/B\.json$/)
     const iIndex = idx(/\/pages-index\.json$/)
     const outros = writes
-      .map((w, i) => (/\/pages\/.+\.json$/.test(w.file) && !/Jogos\/B\.json$/.test(w.file) ? i : -1))
+      .map((w, i) => (/\/pages\/.+\.json$/.test(w.file) && !/Pasta\/B\.json$/.test(w.file) ? i : -1))
       .filter(i => i >= 0)
 
     expect(iAssets).toBeGreaterThanOrEqual(0)
@@ -112,8 +112,8 @@ describe('buildVault --first', () => {
     fs.mkdirSync(path.join(out, 'v'), { recursive: true })
     for (const lixo of ['{}', 'null', '7']) {
       fs.writeFileSync(path.join(out, 'v', 'assets.json'), lixo)
-      await buildVault(vault, { dataRoot: out, first: ['Jogos/B'] })
-      expect(fs.existsSync(path.join(out, 'v', 'pages', 'Jogos', 'B.json'))).toBe(true)
+      await buildVault(vault, { dataRoot: out, first: ['Pasta/B'] })
+      expect(fs.existsSync(path.join(out, 'v', 'pages', 'Pasta', 'B.json'))).toBe(true)
       expect(JSON.parse(fs.readFileSync(path.join(out, 'v', 'assets.json'), 'utf-8'))).toContain('Imagens/b.png')
     }
   })
@@ -124,10 +124,10 @@ describe('buildVault --first', () => {
     fs.writeFileSync(path.join(out, 'v', 'assets.json'), JSON.stringify(['Antiga/x.png']))
     const writes = spyWrites()
 
-    await buildVault(vault, { dataRoot: out, first: ['Jogos/B'] })
+    await buildVault(vault, { dataRoot: out, first: ['Pasta/B'] })
 
     const iAssets = writes.findIndex(w => /\/assets\.json$/.test(w.file))
-    const iB = writes.findIndex(w => /\/pages\/Jogos\/B\.json$/.test(w.file))
+    const iB = writes.findIndex(w => /\/pages\/Pasta\/B\.json$/.test(w.file))
     expect(iAssets).toBeLessThan(iB)
     const da_frente = JSON.parse(writes[iAssets].content)
     expect(da_frente).toContain('Antiga/x.png')
@@ -141,13 +141,13 @@ describe('buildVault --first', () => {
     await buildVault(vault, { dataRoot: out })
 
     const futuro = new Date(Date.now() + 60_000)
-    fs.utimesSync(path.join(TMP, 'vault', 'Jogos', 'A.md'), futuro, futuro)
+    fs.utimesSync(path.join(TMP, 'vault', 'Pasta', 'A.md'), futuro, futuro)
 
     const writes = spyWrites()
     await buildVault(vault, { dataRoot: out })
 
     const primeira = writes.find(w => /\/pages\/.+\.json$/.test(w.file))
-    expect(primeira?.file).toMatch(/\/pages\/Jogos\/A\.json$/)
+    expect(primeira?.file).toMatch(/\/pages\/Pasta\/A\.json$/)
   })
 })
 
@@ -176,17 +176,17 @@ describe('buildVault — frontmatter só em YAML', () => {
 })
 
 describe('buildVault — nota-filha e abas', () => {
-  const COMENTARIO = '_comments/Jogos/A/2026-11-16 153012 ana-k3f9'
-  const FILHAS = ['Visões/Lista', 'Visões/Zerados', 'Visões/Arquivo', 'Só Filhas/Aba X', COMENTARIO]
+  const COMENTARIO = '_comments/Pasta/A/2026-11-16 153012 ana-k3f9'
+  const FILHAS = ['Ômega/Lista', 'Ômega/Sumário', 'Ômega/Arquivo', 'Só Filhas/Aba X', COMENTARIO]
 
   beforeEach(() => {
     // A mãe cita uma aba e o comentário: nem isso vira aresta.
-    write('Visões/Visões.md', `---\ntab_label: Jogando\n---\n# Visões\n\n[[Jogos/B]] [[Visões/Lista]] [[${COMENTARIO}]]\n`)
-    write('Visões/Lista.md', '---\nnote_type: tab\nparent: "[[Visões/Visões]]"\norder: 1\n---\n[[Jogos/A]]\n')
-    write('Visões/Zerados.md', '---\nnote_type: tab\nparent: "[[visões/VISÕES]]"\norder: 2\n---\nz\n')
-    write('Visões/Arquivo.md', '---\nnote_type: tab\nparent: "[[Visões/Visões]]"\n---\nx\n')
-    write('Só Filhas/Aba X.md', '---\nnote_type: tab\nparent: "[[Jogos/A]]"\n---\n[[Jogos/B]]\n')
-    write(`${COMENTARIO}.md`, '---\nnote_type: comment\nparent: "[[Jogos/A]]"\nauthor: ana\n---\n[[Jogos/B]]\n')
+    write('Ômega/Ômega.md', `---\ntab_label: Panorama\n---\n# Ômega\n\n[[Pasta/B]] [[Ômega/Lista]] [[${COMENTARIO}]]\n`)
+    write('Ômega/Lista.md', '---\nnote_type: tab\nparent: "[[Ômega/Ômega]]"\norder: 1\n---\n[[Pasta/A]]\n')
+    write('Ômega/Sumário.md', '---\nnote_type: tab\nparent: "[[ômega/ÔMEGA]]"\norder: 2\n---\nz\n')
+    write('Ômega/Arquivo.md', '---\nnote_type: tab\nparent: "[[Ômega/Ômega]]"\n---\nx\n')
+    write('Só Filhas/Aba X.md', '---\nnote_type: tab\nparent: "[[Pasta/A]]"\n---\n[[Pasta/B]]\n')
+    write(`${COMENTARIO}.md`, '---\nnote_type: comment\nparent: "[[Pasta/A]]"\nauthor: ana\n---\n[[Pasta/B]]\n')
     write('Órfã.md', '---\nnote_type: tab\nparent: "[[Não Existe]]"\n---\nórfã\n')
   })
 
@@ -197,7 +197,7 @@ describe('buildVault — nota-filha e abas', () => {
     await buildVault(vault, { dataRoot: out })
     const files = listFiles(path.join(out, 'v', 'pages'))
     expect(files.some(f => f.startsWith('_comments/'))).toBe(false)
-    for (const f of ['Visões/Lista.json', 'Visões/Zerados.json', 'Visões/Arquivo.json', 'Só Filhas/Aba X.json', 'Órfã.json']) {
+    for (const f of ['Ômega/Lista.json', 'Ômega/Sumário.json', 'Ômega/Arquivo.json', 'Só Filhas/Aba X.json', 'Órfã.json']) {
       expect(files).toContain(f)
     }
     expect(read(out, 'index.json').pageCount).toBe(files.length)
@@ -208,7 +208,7 @@ describe('buildVault — nota-filha e abas', () => {
     await buildVault(vault, { dataRoot: out })
     const paths = (read(out, 'pages-index.json') as { path: string }[]).map(p => p.path)
     for (const p of FILHAS) expect(paths).not.toContain(p)
-    expect(paths).toContain('Visões/Visões')
+    expect(paths).toContain('Ômega/Ômega')
     expect(paths).toContain('Órfã')
   })
 
@@ -220,9 +220,9 @@ describe('buildVault — nota-filha e abas', () => {
     const names = tree.map(n => n.name)
     expect(names).not.toContain('Só Filhas')
     expect(names).not.toContain('_comments')
-    const visoes = tree.find(n => n.isFolder && n.name === 'Visões')!
-    expect(visoes.path).toBe('Visões/Visões')
-    expect(visoes.children).toEqual([])
+    const omega = tree.find(n => n.isFolder && n.name === 'Ômega')!
+    expect(omega.path).toBe('Ômega/Ômega')
+    expect(omega.children).toEqual([])
     expect(tree.find(n => n.path === 'Órfã')).toBeDefined()
   })
 
@@ -236,16 +236,16 @@ describe('buildVault — nota-filha e abas', () => {
       expect(FILHAS).not.toContain(e.source)
       expect(FILHAS).not.toContain(e.target)
     }
-    // A aba Lista cita Jogos/A, mas não vira backlink dela.
-    expect(g.edges.filter(e => e.target === 'Jogos/A').map(e => e.source)).toEqual(['Inicio'])
-    expect(g.edges.filter(e => e.source === 'Visões/Visões').map(e => e.target)).toEqual(['Jogos/B'])
+    // A aba Lista cita Pasta/A, mas não vira backlink dela.
+    expect(g.edges.filter(e => e.target === 'Pasta/A').map(e => e.source)).toEqual(['Inicio'])
+    expect(g.edges.filter(e => e.source === 'Ômega/Ômega').map(e => e.target)).toEqual(['Pasta/B'])
   })
 
   it('canvas com o mesmo caminho de uma filha continua listado, e a frente bate com o final', async () => {
     write('Só Filhas/Aba X.canvas', JSON.stringify({ nodes: [], edges: [] }))
     const out = path.join(TMP, 'out')
     const writes = spyWrites()
-    await buildVault(vault, { dataRoot: out, first: ['Visões/Lista'] })
+    await buildVault(vault, { dataRoot: out, first: ['Ômega/Lista'] })
     const finalIndex = fs.readFileSync(path.join(out, 'v', 'pages-index.json'), 'utf-8')
     expect((JSON.parse(finalIndex) as { path: string }[]).map(p => p.path)).toContain('Só Filhas/Aba X')
     const frente = writes.filter(w => w.file.endsWith('/pages-index.json'))
@@ -257,20 +257,20 @@ describe('buildVault — nota-filha e abas', () => {
     const out = path.join(TMP, 'out')
     await buildVault(vault, { dataRoot: out })
     const esperado = [
-      { path: 'Visões/Visões', label: 'Jogando' },
-      { path: 'Visões/Lista', label: 'Lista' },
-      { path: 'Visões/Zerados', label: 'Zerados' },
-      { path: 'Visões/Arquivo', label: 'Arquivo' },
+      { path: 'Ômega/Ômega', label: 'Panorama' },
+      { path: 'Ômega/Lista', label: 'Lista' },
+      { path: 'Ômega/Sumário', label: 'Sumário' },
+      { path: 'Ômega/Arquivo', label: 'Arquivo' },
     ]
-    for (const p of ['Visões/Visões', 'Visões/Lista', 'Visões/Zerados', 'Visões/Arquivo']) {
+    for (const p of ['Ômega/Ômega', 'Ômega/Lista', 'Ômega/Sumário', 'Ômega/Arquivo']) {
       expect(read(out, `pages/${p}.json`).tabs).toEqual(esperado)
     }
-    // Jogos/A é a mãe da aba que mora em "Só Filhas".
-    expect(read(out, 'pages/Jogos/A.json').tabs).toEqual([
-      { path: 'Jogos/A', label: 'A' },
+    // Pasta/A é a mãe da aba que mora em "Só Filhas".
+    expect(read(out, 'pages/Pasta/A.json').tabs).toEqual([
+      { path: 'Pasta/A', label: 'A' },
       { path: 'Só Filhas/Aba X', label: 'Aba X' },
     ])
-    expect('tabs' in read(out, 'pages/Jogos/B.json')).toBe(false)
+    expect('tabs' in read(out, 'pages/Pasta/B.json')).toBe(false)
     expect('tabs' in read(out, 'pages/Órfã.json')).toBe(false)
   })
 
@@ -278,7 +278,7 @@ describe('buildVault — nota-filha e abas', () => {
     const out = path.join(TMP, 'out')
     await buildVault(vault, { dataRoot: out })
     // Lista só tem campos do formato (note_type, parent, order): nenhuma linha, nenhum marcador.
-    const lista = read(out, 'pages/Visões/Lista.json')
+    const lista = read(out, 'pages/Ômega/Lista.json')
     expect('properties' in lista).toBe(false)
     expect(lista.html).not.toContain(PROPERTIES_MARKER)
     // A aba órfã continua nota-filha para as Propriedades: o parent fica escondido. Ela só
@@ -287,7 +287,7 @@ describe('buildVault — nota-filha e abas', () => {
     expect('properties' in orfa).toBe(false)
     expect(orfa.html).not.toContain(PROPERTIES_MARKER)
     // A mãe só tem tab_label, que é sempre escondido.
-    const mae = read(out, 'pages/Visões/Visões.json')
+    const mae = read(out, 'pages/Ômega/Ômega.json')
     expect('properties' in mae).toBe(false)
     expect(mae.html).not.toContain('tab_label')
   })
@@ -311,11 +311,11 @@ describe('buildVault — nota-filha e abas', () => {
     fs.utimesSync(path.join(TMP, 'vault', `${COMENTARIO}.md`), futuro, futuro)
 
     const writes = spyWrites()
-    await buildVault(vault, { dataRoot: out, first: [COMENTARIO, 'Visões/Lista'] })
+    await buildVault(vault, { dataRoot: out, first: [COMENTARIO, 'Ômega/Lista'] })
 
     expect(writes.some(w => w.file.includes('/pages/_comments/'))).toBe(false)
     const primeira = writes.find(w => /\/pages\/.+\.json$/.test(w.file))
-    expect(primeira?.file).toMatch(/\/pages\/Visões\/Lista\.json$/)
+    expect(primeira?.file).toMatch(/\/pages\/Ômega\/Lista\.json$/)
     // Todo pages-index/tree gravado na frente é igual ao do fim.
     const finalIndex = fs.readFileSync(path.join(out, 'v', 'pages-index.json'), 'utf-8')
     const finalTree = fs.readFileSync(path.join(out, 'v', 'tree.json'), 'utf-8')
@@ -341,16 +341,16 @@ describe('buildVault — folderCount', () => {
   const read = (out: string, rel: string) => JSON.parse(fs.readFileSync(path.join(out, 'v', rel), 'utf-8'))
 
   beforeEach(() => {
-    // Base do arquivo: Jogos/A, Jogos/B (contam), Imagens/ só com imagens (não conta), Mapa.canvas na raiz.
+    // Base do arquivo: Pasta/A, Pasta/B (contam), Imagens/ só com imagens (não conta), Mapa.canvas na raiz.
     write('Notas/Sub/C.md', '# C\n')
-    write('Visões/Visões.md', '# Visões\n')
-    write('Nações.md', '# Nações\n')
-    write('Nações/Brasil.md', '# Brasil\n')
-    write('Só Filhas/Aba X.md', '---\nnote_type: tab\nparent: "[[Jogos/A]]"\n---\naba\n')
-    write('_comments/Jogos/A/2026-11-16 153012 ana-k3f9.md', '---\nnote_type: comment\nparent: "[[Jogos/A]]"\nauthor: ana\n---\noi\n')
+    write('Ômega/Ômega.md', '# Ômega\n')
+    write('Épsilon.md', '# Épsilon\n')
+    write('Épsilon/Upsilon.md', '# Upsilon\n')
+    write('Só Filhas/Aba X.md', '---\nnote_type: tab\nparent: "[[Pasta/A]]"\n---\naba\n')
+    write('_comments/Pasta/A/2026-11-16 153012 ana-k3f9.md', '---\nnote_type: comment\nparent: "[[Pasta/A]]"\nauthor: ana\n---\noi\n')
     write('_comments/Lixo/quebrado.md', 'sem frontmatter\n')
     fs.mkdirSync(path.join(TMP, 'vault', 'Vazia'))
-    fs.mkdirSync(path.join(TMP, 'vault', 'Jogos', 'Vazia'))
+    fs.mkdirSync(path.join(TMP, 'vault', 'Pasta', 'Vazia'))
     write('Anexos/doc.pdf', 'pdf')
     write('Mapas/Mundo.canvas', JSON.stringify({ nodes: [], edges: [] }))
     write('Rascunhos/R.md', '# R\n')
@@ -361,7 +361,7 @@ describe('buildVault — folderCount', () => {
     const out = path.join(TMP, 'out')
     await buildVault(vault, { dataRoot: out })
     const pastas = folderPaths(read(out, 'tree.json') as N[]).sort()
-    expect(pastas).toEqual(['Jogos', 'Mapas', 'Nações', 'Notas', 'Notas/Sub', 'Visões'])
+    expect(pastas).toEqual(['Mapas', 'Notas', 'Notas/Sub', 'Pasta', 'Épsilon', 'Ômega'])
     expect(read(out, 'index.json').folderCount).toBe(pastas.length)
   })
 
@@ -369,7 +369,7 @@ describe('buildVault — folderCount', () => {
     const A = path.join(TMP, 'outA')
     const B = path.join(TMP, 'outB')
     await buildVault(vault, { dataRoot: A })
-    await buildVault(vault, { dataRoot: B, first: ['Notas/Sub/C', 'Jogos/A'] })
+    await buildVault(vault, { dataRoot: B, first: ['Notas/Sub/C', 'Pasta/A'] })
     expect(read(B, 'index.json').folderCount).toBe(read(A, 'index.json').folderCount)
   })
 })
@@ -437,6 +437,26 @@ describe('buildVault — banner tratado', () => {
     const h = html(out, 'Notas/Tag')
     expect(h).toMatch(/<h1 class="vault-banner-title" id="[^"]+">&lt;b>X&lt;\/b> Y<\/h1><\/div><article class="vault-content">/)
     expect(h).not.toContain('<b>')
+  })
+
+  it('título com & ou < se junta ao <h1> do corpo (o rehype grava &#x26; e &#x3C;)', async () => {
+    write('Notas/Amp.md', '---\nname: "A & B"\nimage: Imagens/a.png\n---\n# A & B\n\ntexto\n')
+    write('Notas/Menor.md', '---\nname: "A < B"\n---\n# A < B\n\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    const amp = html(out, 'Notas/Amp')
+    expect(amp).toContain('<h1 class="vault-banner-title" id="a--b">A &amp; B</h1></div><article class="vault-content">')
+    expect(amp.match(/<h1/g)).toHaveLength(1)
+    const menor = html(out, 'Notas/Menor')
+    expect(menor.startsWith('<article class="vault-content"><h1 class="vault-page-title" id="a--b">A &lt; B</h1>')).toBe(true)
+    expect(menor.match(/<h1/g)).toHaveLength(1)
+  })
+
+  it('o id herdado é o do atributo id, não o de um data-id antes dele', async () => {
+    write('Notas/DataId.md', '---\nname: Dado\nimage: Imagens/a.png\n---\n<h1 data-id="errado" id="certo">Dado</h1>\n\ntexto\n')
+    const out = path.join(TMP, 'out')
+    await buildVault(custom, { dataRoot: out })
+    expect(html(out, 'Notas/DataId')).toContain('<h1 class="vault-banner-title" id="certo">Dado</h1>')
   })
 
   it('sem banner, o vault-page-title escapa o título como antes', async () => {

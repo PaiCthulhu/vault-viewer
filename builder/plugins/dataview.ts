@@ -828,7 +828,7 @@ function createDvContext(
       stampCards(body, pagesByPath)
       const parts: string[] = []
       // O container só vira elemento quando o script mexeu nele (classe, id,
-      // atributo): `.codex .x` no CSS de uma view depende da classe da raiz.
+      // atributo): `.minha-view .x` no CSS de uma view depende da classe da raiz.
       const touched = container.className || container.id || Object.keys(container.attrs).length > 0
       const containerHtml = touched ? container.toHTML() : container.childrenHTML()
       if (containerHtml) parts.push(containerHtml)

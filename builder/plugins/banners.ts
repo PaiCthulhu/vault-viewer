@@ -33,11 +33,12 @@ export function bannerHeight(value: unknown): string {
 
 // URL da capa para `url('…')` dentro do atributo `style`. O `encodeURI` já codifica `"`,
 // `\`, quebras de linha e `<`; faltam `'` (fecha a string CSS), `(` e `)`, e `&` (uma
-// entidade como `&#39;` viraria `'` no atributo). Codificados com `%`, a rota de imagens
-// decodifica e acha o mesmo arquivo. Surrogate solto faria o `encodeURI` lançar e derrubar
-// o build do vault inteiro: vira U+FFFD antes.
+// entidade como `&#39;` viraria `'` no atributo), e `#` e `?` (viram fragmento e query: um
+// nome com eles nunca chegava à rota). Codificados com `%`, a rota de imagens decodifica e
+// acha o mesmo arquivo. Surrogate solto faria o `encodeURI` lançar e derrubar o build do
+// vault inteiro: vira U+FFFD antes.
 export function bannerImageUrl(url: string): string {
-  return encodeURI(url.toWellFormed()).replace(/['()&]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())
+  return encodeURI(url.toWellFormed()).replace(/['()&#?]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())
 }
 
 // Só conta como capa o texto que cita imagem do vault (wikilink, caminho ou nome de arquivo com

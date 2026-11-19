@@ -4,12 +4,12 @@ import { applyObsidianCompat } from '../../../builder/plugins/obsidian-compat'
 describe('applyObsidianCompat', () => {
   it('converte ==texto== em <mark>', () => {
     expect(applyObsidianCompat('==Comum==')).toBe('<mark>Comum</mark>')
-    expect(applyObsidianCompat('==Heroico==\\==Elite==')).toContain('<mark>Heroico</mark>')
+    expect(applyObsidianCompat('==Alfa==\\==Sigma==')).toContain('<mark>Alfa</mark>')
   })
 
   it('converte strong seguido de palavra', () => {
-    const out = applyObsidianCompat('**Agora, jovem Wilfred...**mesmo tão pequeno')
-    expect(out).toContain('<strong>Agora, jovem Wilfred...</strong>mesmo')
+    const out = applyObsidianCompat('**Então, caro leitor...**depois disso')
+    expect(out).toContain('<strong>Então, caro leitor...</strong>depois')
   })
 
   it('converte strong precedido de palavra (caso espelhado)', () => {

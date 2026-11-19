@@ -36,13 +36,13 @@ describe('renderCaptions', () => {
   })
 
   it('suporta paths com pastas', () => {
-    const result = renderCaptions('![[Imagens/Capas/Aldor.png|O Guerreiro]]', resolveImage)
-    expect(result).toContain('src="/vault-assets/myvault/Imagens/Capas/Aldor.png"')
-    expect(result).toContain('O Guerreiro')
+    const result = renderCaptions('![[Midia/Capas/Alfa.png|O Primeiro]]', resolveImage)
+    expect(result).toContain('src="/vault-assets/myvault/Midia/Capas/Alfa.png"')
+    expect(result).toContain('O Primeiro')
   })
 
   it('trata valor numérico no pipe como width, sem figcaption', () => {
-    const result = renderCaptions('![[Imagens/Geral/Aldor_3.png|120]]', resolveImage)
+    const result = renderCaptions('![[Midia/Geral/Alfa_3.png|120]]', resolveImage)
     expect(result).toContain('width="120"')
     expect(result).not.toContain('<figcaption>120<')
     expect(result).not.toContain('<figure')
@@ -64,12 +64,25 @@ describe('renderCaptions', () => {
   })
 
   it('embed isolado seguido de lista ganha linha em branco para fechar o bloco HTML', () => {
-    const md = `![[Imagens/Geral/Ato.png]]
-- [[Capítulo 1]]
-- [[Capítulo 2]]`
+    const md = `![[Midia/Geral/Ato.png]]
+- [[Parte Um]]
+- [[Parte Dois]]`
     const result = renderCaptions(md, resolveImage)
     // O <img> deve ser seguido por uma linha em branco antes da lista.
     expect(result).toMatch(/<img[^>]*\/>\n\n- /)
+  })
+
+  it('legenda e src saem escapados, como texto (o alt é texto puro, como no Obsidian)', () => {
+    const result = renderCaptions(`![[A & B.png|Diz "oi" & <b>tchau</b> d'água]]`, resolveImage)
+    expect(result).toContain(
+      '<img src="/vault-assets/myvault/A &amp; B.png" alt="Diz &quot;oi&quot; &amp; &lt;b&gt;tchau&lt;/b&gt; d&#39;água" />',
+    )
+    expect(result).toContain('<figcaption>Diz &quot;oi&quot; &amp; &lt;b&gt;tchau&lt;/b&gt; d&#39;água</figcaption>')
+    expect(result).not.toContain('<b>')
+  })
+
+  it('src sem legenda também sai escapado', () => {
+    expect(renderCaptions('![[x".png]]', resolveImage)).toBe('<img src="/vault-assets/myvault/x&quot;.png" alt="" />')
   })
 
   it('embed inline no meio de frase não ganha linha em branco extra', () => {

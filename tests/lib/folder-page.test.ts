@@ -11,28 +11,28 @@ function file(name: string, path: string): TreeNode {
 
 describe('buildFolderPage', () => {
   const children: TreeNode[] = [
-    folder('Regras', 'Outros/Regras', 'Outros/Regras/Regras'), // folder note
-    file('Retcons', 'Outros/Retcons'),
-    file('Sobre Zürich', 'Outros/Sobre Zürich'),
+    folder('Gama', 'Equipes/Gama', 'Equipes/Gama/Gama'), // folder note
+    file('Ômega', 'Equipes/Ômega'),
+    file('Sobre Zürich', 'Equipes/Sobre Zürich'),
   ]
 
   it('uses the last folderPath segment as the title', () => {
-    const page = buildFolderPage('my-vault', 'Outros', 'Outros', children)
-    expect(page.title).toBe('Outros')
-    expect(page.path).toBe('Outros')
-    expect(page.html).toContain('<h1 class="vault-page-title">Outros</h1>')
+    const page = buildFolderPage('my-vault', 'Equipes', 'Equipes', children)
+    expect(page.title).toBe('Equipes')
+    expect(page.path).toBe('Equipes')
+    expect(page.html).toContain('<h1 class="vault-page-title">Equipes</h1>')
   })
 
   it('wraps the list in the vault-content article with a folder-index list', () => {
-    const page = buildFolderPage('my-vault', 'Outros', 'Outros', children)
+    const page = buildFolderPage('my-vault', 'Equipes', 'Equipes', children)
     expect(page.html).toContain('<article class="vault-content">')
     expect(page.html).toContain('<ul class="folder-index">')
   })
 
   it('links a folder note to its real page with a document icon', () => {
-    const page = buildFolderPage('my-vault', 'Outros', 'Outros', children)
+    const page = buildFolderPage('my-vault', 'Equipes', 'Equipes', children)
     expect(page.html).toContain(
-      '<a href="/vault/my-vault/Outros/Regras/Regras"><span class="folder-index-icon">📄</span>Regras</a>',
+      '<a href="/vault/my-vault/Equipes/Gama/Gama"><span class="folder-index-icon">📄</span>Gama</a>',
     )
   })
 
@@ -44,8 +44,8 @@ describe('buildFolderPage', () => {
   })
 
   it('links file children to their page with a document icon', () => {
-    const page = buildFolderPage('my-vault', 'Outros', 'Outros', children)
-    expect(page.html).toContain('<span class="folder-index-icon">📄</span>Retcons')
+    const page = buildFolderPage('my-vault', 'Equipes', 'Equipes', children)
+    expect(page.html).toContain('<span class="folder-index-icon">📄</span>Ômega')
     expect(page.html).toContain('<span class="folder-index-icon">📄</span>Sobre Zürich')
   })
 

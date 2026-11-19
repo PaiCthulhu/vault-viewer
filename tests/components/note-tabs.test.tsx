@@ -22,9 +22,9 @@ import type { PageTab } from '@/builder/types'
 import type { HtmlSegment } from '@/lib/parse-html-segments'
 
 const TABS: PageTab[] = [
-  { path: 'Visões/Visões', label: 'Jogando' },
-  { path: 'Visões/Lista', label: 'Lista' },
-  { path: 'Visões/Zerados #1', label: 'Zerados' },
+  { path: 'Seleções/Seleções', label: 'Resumo' },
+  { path: 'Seleções/Lista', label: 'Lista' },
+  { path: 'Seleções/Cartões #1', label: 'Cartões' },
 ]
 
 const links = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLAnchorElement>('nav.vault-tabs a.vault-tab'))
@@ -55,33 +55,33 @@ describe('NoteTabs', () => {
   afterEach(() => cleanup())
 
   it('mostra as abas na ordem recebida, com rótulo e href codificado', () => {
-    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Visões" />)
+    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Seleções" />)
     const as = links(container)
-    expect(as.map(a => a.textContent)).toEqual(['Jogando', 'Lista', 'Zerados'])
+    expect(as.map(a => a.textContent)).toEqual(['Resumo', 'Lista', 'Cartões'])
     expect(as.map(a => a.getAttribute('href'))).toEqual([
-      '/vault/v/Vis%C3%B5es/Vis%C3%B5es',
-      '/vault/v/Vis%C3%B5es/Lista',
-      '/vault/v/Vis%C3%B5es/Zerados%20%231',
+      '/vault/v/Sele%C3%A7%C3%B5es/Sele%C3%A7%C3%B5es',
+      '/vault/v/Sele%C3%A7%C3%B5es/Lista',
+      '/vault/v/Sele%C3%A7%C3%B5es/Cart%C3%B5es%20%231',
     ])
     expect(container.querySelector('nav.vault-tabs')!.getAttribute('aria-label')).toBe('Abas')
   })
 
   it('destaca só a aba da página atual', () => {
-    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Lista" />)
+    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Lista" />)
     const as = links(container)
     expect(as.map(a => a.getAttribute('aria-current'))).toEqual([null, 'page', null])
     expect(as.map(a => a.classList.contains('is-active'))).toEqual([false, true, false])
   })
 
   it('clique simples navega por SPA', () => {
-    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Visões" />)
+    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Seleções" />)
     expect(click(links(container)[1])).toBe(true)
     expect(push).toHaveBeenCalledTimes(1)
-    expect(push).toHaveBeenCalledWith('/vault/v/Vis%C3%B5es/Lista')
+    expect(push).toHaveBeenCalledWith('/vault/v/Sele%C3%A7%C3%B5es/Lista')
   })
 
   it('clique com modificador ou outro botão fica com o navegador', () => {
-    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Visões" />)
+    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Seleções" />)
     const a = links(container)[2]
     expect(click(a, { ctrlKey: true })).toBe(false)
     expect(click(a, { metaKey: true })).toBe(false)
@@ -93,12 +93,12 @@ describe('NoteTabs', () => {
   })
 
   it('a mãe é a aba ativa na página da mãe', () => {
-    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Visões" />)
+    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Seleções" />)
     expect(links(container).map(a => a.getAttribute('aria-current'))).toEqual(['page', null, null])
   })
 
   it('clique na aba já ativa não navega (nem recarrega a página)', () => {
-    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Lista" />)
+    const { container } = render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Lista" />)
     expect(click(links(container)[1])).toBe(true)
     expect(push).not.toHaveBeenCalled()
     // Com modificador, continua com o navegador (abrir em outra aba).
@@ -127,7 +127,7 @@ describe('NoteTabs', () => {
       set: (v: number) => { scrolls.push(v) },
     })
     try {
-      render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Zerados #1" />)
+      render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Cartões #1" />)
       expect(scrolls).toEqual([100])
     } finally {
       Object.defineProperty(Element.prototype, 'scrollLeft', desc)
@@ -144,7 +144,7 @@ describe('NoteTabs', () => {
       set: (v: number) => { scrolls.push(v) },
     })
     try {
-      render(<NoteTabs slug="v" tabs={TABS} currentPath="Visões/Lista" />)
+      render(<NoteTabs slug="v" tabs={TABS} currentPath="Seleções/Lista" />)
       expect(scrolls).toEqual([])
     } finally {
       Object.defineProperty(Element.prototype, 'scrollLeft', desc)
@@ -173,7 +173,7 @@ describe('ContentPanel com abas', () => {
 
   it('põe a barra antes do artigo e navega uma vez só', () => {
     const { container } = render(
-      <ContentPanel segments={segs} css="" articleClass="vault-article" slug="v" pagePath="Visões/Lista" tabs={TABS} />,
+      <ContentPanel segments={segs} css="" articleClass="vault-article" slug="v" pagePath="Seleções/Lista" tabs={TABS} />,
     )
     const nav = container.querySelector('nav.vault-tabs')!
     const article = container.querySelector('article.vault-article')!
@@ -182,14 +182,14 @@ describe('ContentPanel com abas', () => {
     expect(nav.contains(article)).toBe(false)
     fireEvent.click(links(container)[0])
     expect(push).toHaveBeenCalledTimes(1)
-    expect(push).toHaveBeenCalledWith('/vault/v/Vis%C3%B5es/Vis%C3%B5es')
+    expect(push).toHaveBeenCalledWith('/vault/v/Sele%C3%A7%C3%B5es/Sele%C3%A7%C3%B5es')
   })
 
   it('re-render com novas `tabs` (refresh) não recria o artigo nem fecha <details>', () => {
     const withDetails: HtmlSegment[] = [
       { type: 'html', html: '<article class="vault-article"><details><summary>s</summary>x</details></article>' } as HtmlSegment,
     ]
-    const props = { segments: withDetails, css: '', articleClass: 'vault-article', slug: 'v', pagePath: 'Visões/Lista' }
+    const props = { segments: withDetails, css: '', articleClass: 'vault-article', slug: 'v', pagePath: 'Seleções/Lista' }
     const { container, rerender } = render(<ContentPanel {...props} tabs={TABS} />)
     const article = container.querySelector('article')!
     const details = container.querySelector('details')!
@@ -203,7 +203,7 @@ describe('ContentPanel com abas', () => {
 
   it('sem `tabs` não há barra', () => {
     const { container } = render(
-      <ContentPanel segments={segs} css="" articleClass="vault-article" slug="v" pagePath="Jogos/B" />,
+      <ContentPanel segments={segs} css="" articleClass="vault-article" slug="v" pagePath="Pasta/B" />,
     )
     expect(container.querySelector('nav.vault-tabs')).toBeNull()
   })

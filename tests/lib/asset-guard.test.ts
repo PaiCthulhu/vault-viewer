@@ -36,7 +36,7 @@ describe('classifyPath', () => {
   })
 
   it('leaves non-asset paths alone', () => {
-    expect(classifyPath('/vault/notes/00_Index')).toEqual({ kind: 'other' })
+    expect(classifyPath('/vault/notes/Home')).toEqual({ kind: 'other' })
     expect(classifyPath('/login')).toEqual({ kind: 'other' })
     expect(classifyPath('/vault-assets')).toEqual({ kind: 'other' })
   })

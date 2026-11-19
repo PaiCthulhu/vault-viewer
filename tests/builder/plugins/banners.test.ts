@@ -10,9 +10,9 @@ describe('renderBanner', () => {
   })
 
   it('gera div.vault-banner com background-image', () => {
-    const html = renderBanner({ cover: 'Imagens/Aldor.png' }, 'Aldor', resolveImage)
+    const html = renderBanner({ cover: 'Midia/Alfa.png' }, 'Alfa', resolveImage)
     expect(html).toContain('class="vault-banner"')
-    expect(html).toContain("url('/vault-assets/myvault/Imagens/Aldor.png')")
+    expect(html).toContain("url('/vault-assets/myvault/Midia/Alfa.png')")
   })
 
   it('aplica cover_y como background-position', () => {
@@ -62,10 +62,10 @@ describe('renderBanner', () => {
   })
 
   it('inclui vault-banner-gradient e vault-banner-title', () => {
-    const html = renderBanner({ cover: 'img.png' }, 'Aldor', resolveImage)
+    const html = renderBanner({ cover: 'img.png' }, 'Alfa', resolveImage)
     expect(html).toContain('class="vault-banner-gradient"')
     expect(html).toContain('class="vault-banner-title"')
-    expect(html).toContain('>Aldor<')
+    expect(html).toContain('>Alfa<')
   })
 })
 
@@ -227,8 +227,12 @@ describe('bannerImageUrl', () => {
   it("escapa ' ( ) & e o que o encodeURI já escapava", () => {
     expect(bannerImageUrl("/v/a'b.png")).toBe('/v/a%27b.png')
     expect(bannerImageUrl('/v/Image (1).png')).toBe('/v/Image%20%281%29.png')
-    expect(bannerImageUrl('/v/a&#39;b.png')).toBe('/v/a%26#39;b.png')
+    expect(bannerImageUrl('/v/a&#39;b.png')).toBe('/v/a%26%2339;b.png')
     expect(bannerImageUrl('/v/a"b\\c\nd\re<f.png')).toBe('/v/a%22b%5Cc%0Ad%0De%3Cf.png')
+  })
+
+  it('# e ? no nome da capa saem codificados (senão viram fragmento e query da URL)', () => {
+    expect(bannerImageUrl('/v/Capa #1?.png')).toBe('/v/Capa%20%231%3F.png')
   })
 
   it('surrogate solto vira U+FFFD em vez de lançar', () => {

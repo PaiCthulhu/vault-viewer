@@ -137,8 +137,8 @@ describe('runRebuild', () => {
 
   it('passa cada caminho de first como argumento próprio do spawn', async () => {
     const s = makeSpawn()
-    const a = runRebuild('f1', { spawnFn: s.spawnFn, first: ['Jogos/A b', 'X'] })
-    expect(s.calls[0].args.slice(-6)).toEqual(['--first', 'Jogos/A b', '--first', 'X', '--vault', 'f1'])
+    const a = runRebuild('f1', { spawnFn: s.spawnFn, first: ['Pasta/A b', 'X'] })
+    expect(s.calls[0].args.slice(-6)).toEqual(['--first', 'Pasta/A b', '--first', 'X', '--vault', 'f1'])
     s.finish(0)
     await a
   })

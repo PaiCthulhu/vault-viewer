@@ -1,7 +1,7 @@
 import type { ChipColor } from '../lib/property-color'
 
 export interface PageMeta {
-  path: string                         // e.g. "Personalidades/Aldor" — forward slashes
+  path: string                         // e.g. "Exemplares/Alfa" — forward slashes
   title: string                        // filename sem .md
   frontmatter: Record<string, unknown> // parsed YAML completo
   allFields: Record<string, unknown>   // idêntico a frontmatter (todos os campos)

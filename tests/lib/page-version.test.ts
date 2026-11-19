@@ -10,7 +10,7 @@ let root: string
 
 function page(over: Partial<PageMeta> = {}): PageMeta {
   return {
-    path: 'Jogos/Foo', title: 'Foo', frontmatter: {}, allFields: {},
+    path: 'Pasta/Foo', title: 'Foo', frontmatter: {}, allFields: {},
     html: '<p>a</p>', outlinks: [], tags: [], css: '', ...over,
   }
 }
@@ -42,42 +42,42 @@ describe('pageVersion', () => {
 describe('currentPageVersion', () => {
   it('bate com pageVersion da página lida', () => {
     const content = JSON.stringify(page())
-    writePage('Jogos/Foo', content)
-    expect(currentPageVersion('v', 'Jogos/Foo')).toBe(pageVersion(JSON.parse(content)))
+    writePage('Pasta/Foo', content)
+    expect(currentPageVersion('v', 'Pasta/Foo')).toBe(pageVersion(JSON.parse(content)))
   })
 
   it('regravar com o mesmo conteúdo e mtime novo mantém a versão', () => {
     const content = JSON.stringify(page())
-    writePage('Jogos/Foo', content, 1_000_000)
-    const a = currentPageVersion('v', 'Jogos/Foo')
-    writePage('Jogos/Foo', content, 2_000_000)
-    expect(currentPageVersion('v', 'Jogos/Foo')).toBe(a)
+    writePage('Pasta/Foo', content, 1_000_000)
+    const a = currentPageVersion('v', 'Pasta/Foo')
+    writePage('Pasta/Foo', content, 2_000_000)
+    expect(currentPageVersion('v', 'Pasta/Foo')).toBe(a)
   })
 
   it('mudança de conteúdo com mtime novo muda a versão', () => {
-    writePage('Jogos/Foo', JSON.stringify(page()), 1_000_000)
-    const a = currentPageVersion('v', 'Jogos/Foo')
-    writePage('Jogos/Foo', JSON.stringify(page({ html: '<p>novo</p>' })), 2_000_000)
-    const b = currentPageVersion('v', 'Jogos/Foo')
+    writePage('Pasta/Foo', JSON.stringify(page()), 1_000_000)
+    const a = currentPageVersion('v', 'Pasta/Foo')
+    writePage('Pasta/Foo', JSON.stringify(page({ html: '<p>novo</p>' })), 2_000_000)
+    const b = currentPageVersion('v', 'Pasta/Foo')
     expect(b).not.toBe(a)
     expect(b).toBe(pageVersion(page({ html: '<p>novo</p>' })))
   })
 
   it('JSON que não parseia dá null', () => {
-    writePage('Jogos/Foo', '{ quebrado')
-    expect(currentPageVersion('v', 'Jogos/Foo')).toBeNull()
+    writePage('Pasta/Foo', '{ quebrado')
+    expect(currentPageVersion('v', 'Pasta/Foo')).toBeNull()
   })
 
   it('página de pasta', () => {
     const tree = [{
-      name: 'Jogos', path: null, folderPath: 'Jogos', isFolder: true, tags: [],
-      children: [{ name: 'Foo', path: 'Jogos/Foo', folderPath: null, isFolder: false, children: [], tags: [] }],
+      name: 'Pasta', path: null, folderPath: 'Pasta', isFolder: true, tags: [],
+      children: [{ name: 'Foo', path: 'Pasta/Foo', folderPath: null, isFolder: false, children: [], tags: [] }],
     }]
     fs.mkdirSync(path.join(root, 'data', 'v'), { recursive: true })
     fs.writeFileSync(path.join(root, 'data', 'v', 'tree.json'), JSON.stringify(tree))
-    const folder = getFolderPage('v', 'Jogos')!
+    const folder = getFolderPage('v', 'Pasta')!
     expect(folder).not.toBeNull()
-    expect(currentPageVersion('v', 'Jogos')).toBe(pageVersion(folder))
+    expect(currentPageVersion('v', 'Pasta')).toBe(pageVersion(folder))
   })
 
   it('inexistente dá null', () => {

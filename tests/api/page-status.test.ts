@@ -25,7 +25,7 @@ vi.mock('@/lib/pending-page', () => ({ pageStatus: (...a: unknown[]) => pageStat
 
 import { GET } from '@/app/api/vault/[slug]/page-status/route'
 
-function call(slug: string, qs = '?path=Jogos/Nova') {
+function call(slug: string, qs = '?path=Pasta/Nova') {
   const req = new NextRequest(`http://localhost/api/vault/${slug}/page-status${qs}`)
   return GET(req, { params: Promise.resolve({ slug }) })
 }
@@ -61,6 +61,6 @@ describe('GET page-status', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ state: 'pending' })
     expect(res.headers.get('Cache-Control')).toBe('no-store')
-    expect(pageStatus).toHaveBeenCalledWith({ slug: 'v', path: 'x' }, 'Jogos/Nova')
+    expect(pageStatus).toHaveBeenCalledWith({ slug: 'v', path: 'x' }, 'Pasta/Nova')
   })
 })

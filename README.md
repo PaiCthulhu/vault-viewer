@@ -137,7 +137,7 @@ Then edit it **or** add vaults from the admin UI (step 6).
       "name": "My Vault",                 // display name
       "path": "C:\\Users\\me\\My Vault",  // absolute path to the vault folder on the server
       "description": "Notes about things.",
-      "homePage": "00_Index",             // filename (or title) of the landing page
+      "homePage": "Home",                 // filename (or title) of the landing page
       "coverImage": "assets/banner.png",  // relative path to the card image (or null)
       "titleProperty": "title",           // optional: frontmatter property to use as page title
       "coverProperty": "cover",           // optional: frontmatter property holding the banner (cover/banner)

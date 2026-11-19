@@ -35,7 +35,7 @@ function note(p: string) {
   fs.mkdirSync(path.dirname(f), { recursive: true })
   fs.writeFileSync(f, '# x')
 }
-const T = () => noteFor(vault, 'Jogos/Nova')!.t
+const T = () => noteFor(vault, 'Pasta/Nova')!.t
 const idx = (ms: number) =>
   writeIndex({ builtAt: new Date(ms).toISOString(), startedAt: new Date(ms).toISOString() })
 
@@ -45,7 +45,7 @@ beforeEach(() => {
   fs.mkdirSync(vaultDir, { recursive: true })
   vault = { slug: 'v', name: 'v', path: vaultDir, description: '', homePage: '', coverImage: null }
   vi.spyOn(process, 'cwd').mockReturnValue(root)
-  note('Jogos/Nova')
+  note('Pasta/Nova')
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -53,7 +53,7 @@ afterEach(() => {
 })
 
 describe('safePagePath', () => {
-  it('aceita caminho comum', () => expect(safePagePath('Jogos/Foo')).toBe(true))
+  it('aceita caminho comum', () => expect(safePagePath('Pasta/Foo')).toBe(true))
   it.each(['../x', 'a\\b', 'a//b', '.obsidian/x', 'a/.oculta', '', 'a:b', 'a?b', 'a"b', 'a<b', 'a|b', 'a*b', 'ab'])('recusa %j', p => {
     expect(safePagePath(p)).toBe(false)
   })
@@ -61,7 +61,7 @@ describe('safePagePath', () => {
 
 describe('noteFor', () => {
   it('acha .md e .canvas', () => {
-    expect(noteFor(vault, 'Jogos/Nova')!.t).toBeGreaterThan(0)
+    expect(noteFor(vault, 'Pasta/Nova')!.t).toBeGreaterThan(0)
     fs.writeFileSync(path.join(vaultDir, 'Mapa.canvas'), '{}')
     expect(noteFor(vault, 'Mapa')).not.toBeNull()
   })
@@ -86,7 +86,7 @@ describe('noteFor', () => {
     expect(noteFor(vault, 'Privado /Segredo')).toBeNull()
   })
   it('acha a nota com caixa diferente', () => {
-    expect(noteFor(vault, 'jogos/nova')).not.toBeNull()
+    expect(noteFor(vault, 'pasta/nova')).not.toBeNull()
   })
   it('não acha nota pelo caminho de uma junção', () => {
     note('Real/Dentro')
@@ -102,25 +102,25 @@ describe('noteFor', () => {
     expect(noteFor(vault, 'Atalho/Dentro')).toBeNull()
   })
   it('nada dentro de _comments/ da raiz é página, em qualquer caixa e profundidade', () => {
-    note('_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9')
+    note('_comments/Pasta/Nova/2026-11-16 153012 ana-k3f9')
     fs.writeFileSync(path.join(vaultDir, '_comments', 'Mapa.canvas'), '{}')
-    expect(noteFor(vault, '_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9')).toBeNull()
-    expect(noteFor(vault, '_COMMENTS/Jogos/Nova/2026-11-16 153012 ana-k3f9')).toBeNull()
+    expect(noteFor(vault, '_comments/Pasta/Nova/2026-11-16 153012 ana-k3f9')).toBeNull()
+    expect(noteFor(vault, '_COMMENTS/Pasta/Nova/2026-11-16 153012 ana-k3f9')).toBeNull()
     expect(noteFor(vault, '_comments/Mapa')).toBeNull()
   })
   it('_comments fora da raiz e _comments.md na raiz continuam sendo notas', () => {
-    note('Jogos/_comments/x')
+    note('Pasta/_comments/x')
     note('_comments')
-    expect(noteFor(vault, 'Jogos/_comments/x')).not.toBeNull()
+    expect(noteFor(vault, 'Pasta/_comments/x')).not.toBeNull()
     expect(noteFor(vault, '_comments')).not.toBeNull()
   })
   it('com .md e .canvas de mesmo nome usa o maior t', () => {
-    const md = noteFor(vault, 'Jogos/Nova')!.t
-    const canvas = path.join(vaultDir, 'Jogos', 'Nova.canvas')
+    const md = noteFor(vault, 'Pasta/Nova')!.t
+    const canvas = path.join(vaultDir, 'Pasta', 'Nova.canvas')
     fs.writeFileSync(canvas, '{}')
     const futuro = new Date(Math.min(md + 60_000, Date.now() - 1000))
     fs.utimesSync(canvas, futuro, futuro)
-    const t = noteFor(vault, 'Jogos/Nova')!.t
+    const t = noteFor(vault, 'Pasta/Nova')!.t
     expect(t).toBeGreaterThanOrEqual(md)
     expect(t).toBe(Math.max(md, noteTime(fs.statSync(canvas))))
   })
@@ -145,7 +145,7 @@ describe('isScannedPath', () => {
     note('Pub/Ok')
     const ig = loadVaultIgnore(vaultDir)
     const scanned = new Set(scanVault(vaultDir, ig).map(f => f.relativePath + '.md'))
-    for (const rel of ['Privado/Segredo.md', '.oculta/x.md', 'Pub/Ok.md', 'Jogos/Nova.md']) {
+    for (const rel of ['Privado/Segredo.md', '.oculta/x.md', 'Pub/Ok.md', 'Pasta/Nova.md']) {
       expect(isScannedPath(rel, ig)).toBe(scanned.has(rel))
     }
   })
@@ -181,58 +181,58 @@ describe('isPending', () => {
   it('(a) build rodando que começou depois da nota espera sem pedir build', () => {
     const t = T(); idx(t - 10_000)
     const d = deps(state({ running: { startedAt: t + 1000 } }))
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(true)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, d)).toBe(true)
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('(b) parado com index velho: só pede build com trigger', () => {
     const t = T(); idx(t - 10_000)
     const d = deps(state())
-    expect(isPending(vault, 'Jogos/Nova', { trigger: false }, d)).toBe(true)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: false }, d)).toBe(true)
     expect(d.requestBuild).not.toHaveBeenCalled()
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(true)
-    expect(d.requestBuild).toHaveBeenCalledWith('v', ['Jogos/Nova'])
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, d)).toBe(true)
+    expect(d.requestBuild).toHaveBeenCalledWith('v', ['Pasta/Nova'])
   })
   it('(b) build rodando que começou antes da nota pede build', () => {
     const t = T(); idx(t - 10_000)
     const d = deps(state({ running: { startedAt: t - 1000 } }))
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(true)
-    expect(d.requestBuild).toHaveBeenCalledWith('v', ['Jogos/Nova'])
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, d)).toBe(true)
+    expect(d.requestBuild).toHaveBeenCalledWith('v', ['Pasta/Nova'])
   })
   it('(c) build extra na fila espera sem pedir build', () => {
     const t = T(); idx(t + 5000)
     const d = deps(state({ queued: true, running: { startedAt: t - 1000 } }))
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(true)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, d)).toBe(true)
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('build que falhou não provoca laço', () => {
     const t = T(); idx(t - 10_000)
     const d = deps(state({ lastAttemptStartedAt: t + 1000 }))
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(false)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, d)).toBe(false)
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('build que terminou sem gerar a página não é pendente', () => {
     const t = T(); idx(t + 1000)
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, deps(state()))).toBe(false)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, deps(state()))).toBe(false)
   })
   it('index antigo só com builtAt é usado', () => {
     const t = T(); writeIndex({ builtAt: new Date(t + 1000).toISOString() })
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, deps(state()))).toBe(false)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, deps(state()))).toBe(false)
   })
   it('nota com mtime no futuro não provoca build em laço', () => {
     const futuro = new Date(Date.now() + 3_600_000)
-    fs.utimesSync(path.join(vaultDir, 'Jogos', 'Nova.md'), futuro, futuro)
+    fs.utimesSync(path.join(vaultDir, 'Pasta', 'Nova.md'), futuro, futuro)
     // o utimesSync põe o ctime em "agora": o index fica depois dele para isolar o mtime futuro
     idx(Date.now() + 1000)
     const d = deps(state())
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true }, d)).toBe(false)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true }, d)).toBe(false)
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('arquivo de _comments/ nunca é pendente nem pede build', () => {
-    note('_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9')
+    note('_comments/Pasta/Nova/2026-11-16 153012 ana-k3f9')
     const d = deps(state())
-    expect(isPending(vault, '_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9', { trigger: true }, d)).toBe(false)
+    expect(isPending(vault, '_comments/Pasta/Nova/2026-11-16 153012 ana-k3f9', { trigger: true }, d)).toBe(false)
     expect(d.requestBuild).not.toHaveBeenCalled()
-    expect(pageStatus(vault, '_comments/Jogos/Nova/2026-11-16 153012 ana-k3f9', d)).toBe('missing')
+    expect(pageStatus(vault, '_comments/Pasta/Nova/2026-11-16 153012 ana-k3f9', d)).toBe('missing')
   })
   it('sem nota devolve false', () => {
     expect(isPending(vault, 'Nao/Existe', { trigger: true }, deps(state()))).toBe(false)
@@ -240,10 +240,10 @@ describe('isPending', () => {
   it('página existente: JSON mais novo que a nota nunca é pendente', () => {
     const t = T(); idx(t - 10_000)
     const d = deps(state())
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true, pageJsonMtimeMs: t + 1 }, d)).toBe(false)
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true, pageJsonMtimeMs: t + 1 }, d)).toBe(false)
     expect(d.requestBuild).not.toHaveBeenCalled()
-    expect(isPending(vault, 'Jogos/Nova', { trigger: true, pageJsonMtimeMs: t - 1 }, d)).toBe(true)
-    expect(d.requestBuild).toHaveBeenCalledWith('v', ['Jogos/Nova'])
+    expect(isPending(vault, 'Pasta/Nova', { trigger: true, pageJsonMtimeMs: t - 1 }, d)).toBe(true)
+    expect(d.requestBuild).toHaveBeenCalledWith('v', ['Pasta/Nova'])
   })
 })
 
@@ -256,48 +256,48 @@ describe('pageStatus', () => {
   it('nunca dispara build no ramo (b), com e sem JSON', () => {
     const t = T(); idx(t - 10_000)
     const d = deps(state())
-    expect(pageStatus(vault, 'Jogos/Nova', d)).toBe('pending')
-    writePageJson('Jogos/Nova', '{}', t - 5000)
-    expect(pageStatus(vault, 'Jogos/Nova', d)).toBe('pending')
+    expect(pageStatus(vault, 'Pasta/Nova', d)).toBe('pending')
+    writePageJson('Pasta/Nova', '{}', t - 5000)
+    expect(pageStatus(vault, 'Pasta/Nova', d)).toBe('pending')
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('JSON mais novo que a nota é ready', () => {
     const t = T(); idx(t - 10_000)
-    writePageJson('Jogos/Nova', '{}', t + 5000)
+    writePageJson('Pasta/Nova', '{}', t + 5000)
     const d = deps(state())
-    expect(pageStatus(vault, 'Jogos/Nova', d)).toBe('ready')
+    expect(pageStatus(vault, 'Pasta/Nova', d)).toBe('ready')
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('JSON velho com build rodando depois da nota é pending', () => {
     const t = T(); idx(t - 10_000)
-    writePageJson('Jogos/Nova', '{}', t - 5000)
+    writePageJson('Pasta/Nova', '{}', t - 5000)
     const d = deps(state({ running: { startedAt: t + 1000 } }))
-    expect(pageStatus(vault, 'Jogos/Nova', d)).toBe('pending')
+    expect(pageStatus(vault, 'Pasta/Nova', d)).toBe('pending')
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('JSON velho com build que falhou é ready', () => {
     const t = T(); idx(t - 10_000)
-    writePageJson('Jogos/Nova', '{}', t - 5000)
+    writePageJson('Pasta/Nova', '{}', t - 5000)
     const d = deps(state({ lastAttemptStartedAt: t + 1000 }))
-    expect(pageStatus(vault, 'Jogos/Nova', d)).toBe('ready')
+    expect(pageStatus(vault, 'Pasta/Nova', d)).toBe('ready')
     expect(d.requestBuild).not.toHaveBeenCalled()
   })
   it('sem JSON: pending com build depois da nota, missing sem pendência', () => {
     const t = T(); idx(t - 10_000)
-    expect(pageStatus(vault, 'Jogos/Nova', deps(state({ running: { startedAt: t + 1000 } })))).toBe('pending')
-    expect(pageStatus(vault, 'Jogos/Nova', deps(state({ lastAttemptStartedAt: t + 1000 })))).toBe('missing')
+    expect(pageStatus(vault, 'Pasta/Nova', deps(state({ running: { startedAt: t + 1000 } })))).toBe('pending')
+    expect(pageStatus(vault, 'Pasta/Nova', deps(state({ lastAttemptStartedAt: t + 1000 })))).toBe('missing')
   })
   it('JSON inválido (parcial) nunca é ready', () => {
     const t = T(); idx(t - 10_000)
-    writePageJson('Jogos/Nova', '{', t + 5000)
-    expect(pageStatus(vault, 'Jogos/Nova', deps(state({ running: { startedAt: t + 1000 } })))).toBe('pending')
-    expect(pageStatus(vault, 'Jogos/Nova', deps(state({ lastAttemptStartedAt: t + 1000 })))).toBe('missing')
+    writePageJson('Pasta/Nova', '{', t + 5000)
+    expect(pageStatus(vault, 'Pasta/Nova', deps(state({ running: { startedAt: t + 1000 } })))).toBe('pending')
+    expect(pageStatus(vault, 'Pasta/Nova', deps(state({ lastAttemptStartedAt: t + 1000 })))).toBe('missing')
   })
 })
 
 describe('provisionalPage', () => {
   it('escapa o título', () => {
-    const page = provisionalPage('Jogos/<b>X&Y')
+    const page = provisionalPage('Pasta/<b>X&Y')
     expect(page.title).toBe('<b>X&Y')
     expect(page.html).toContain('&lt;b&gt;X&amp;Y')
     expect(page.html).not.toContain('<b>')

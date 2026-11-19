@@ -7,9 +7,9 @@ function makePage(path: string, title: string, tags: string[], outlinks: string[
 }
 
 const pages: PageMeta[] = [
-  makePage('Personagens/Aldor', 'Aldor', ['Personagem'], ['Magia/Magus', 'Campanhas/C1']),
-  makePage('Magia/Magus', 'Magus', ['Conceito'], ['Personagens/Aldor']),
-  makePage('Campanhas/C1', 'Campanha 1', [], []),
+  makePage('Exemplares/Alfa', 'Alfa', ['Exemplar'], ['Ensaios/Gama', 'Subpasta/C1']),
+  makePage('Ensaios/Gama', 'Gama', ['Ensaio'], ['Exemplares/Alfa']),
+  makePage('Subpasta/C1', 'Nota C1', [], []),
   makePage('Isolado', 'Nota Isolada', [], []),
 ]
 
@@ -21,16 +21,16 @@ describe('buildGraph', () => {
 
   it('nó tem id=path, label=title, tags', () => {
     const { nodes } = buildGraph(pages)
-    const aldor = nodes.find(n => n.id === 'Personagens/Aldor')
-    expect(aldor).toBeDefined()
-    expect(aldor!.label).toBe('Aldor')
-    expect(aldor!.tags).toContain('Personagem')
+    const alfa = nodes.find(n => n.id === 'Exemplares/Alfa')
+    expect(alfa).toBeDefined()
+    expect(alfa!.label).toBe('Alfa')
+    expect(alfa!.tags).toContain('Exemplar')
   })
 
   it('cria edges para outlinks que existem no vault', () => {
     const { edges } = buildGraph(pages)
-    expect(edges.some(e => e.source === 'Personagens/Aldor' && e.target === 'Magia/Magus')).toBe(true)
-    expect(edges.some(e => e.source === 'Magia/Magus' && e.target === 'Personagens/Aldor')).toBe(true)
+    expect(edges.some(e => e.source === 'Exemplares/Alfa' && e.target === 'Ensaios/Gama')).toBe(true)
+    expect(edges.some(e => e.source === 'Ensaios/Gama' && e.target === 'Exemplares/Alfa')).toBe(true)
   })
 
   it('não cria edges para outlinks não-existentes', () => {

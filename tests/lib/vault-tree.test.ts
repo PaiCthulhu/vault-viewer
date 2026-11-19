@@ -4,9 +4,9 @@ import type { PageSummary } from '../../builder/types'
 
 const pages: PageSummary[] = [
   { path: 'Alpha', title: 'Alpha', file: 'Alpha', tags: [] },
-  { path: 'Personagens/Aldor', title: 'Aldor', file: 'Aldor', tags: ['lore'] },
-  { path: 'Personagens/Ragnar', title: 'Ragnar', file: 'Ragnar', tags: [] },
-  { path: 'Facções/Cavaleiros/Ordem', title: 'Ordem', file: 'Ordem', tags: [] },
+  { path: 'Equipes/Charlie', title: 'Charlie', file: 'Charlie', tags: ['tag-a'] },
+  { path: 'Equipes/Delta', title: 'Delta', file: 'Delta', tags: [] },
+  { path: 'Seleções/Subpasta/Ágata', title: 'Ágata', file: 'Ágata', tags: [] },
 ]
 
 describe('buildTree', () => {
@@ -20,25 +20,25 @@ describe('buildTree', () => {
 
   it('creates folder nodes for path segments', () => {
     const tree = buildTree(pages)
-    const personagens = tree.find(n => n.name === 'Personagens')
-    expect(personagens).toBeDefined()
-    expect(personagens?.isFolder).toBe(true)
-    expect(personagens?.path).toBeNull()
-    expect(personagens?.folderPath).toBe('Personagens')
-    expect(personagens?.children).toHaveLength(2)
+    const equipes = tree.find(n => n.name === 'Equipes')
+    expect(equipes).toBeDefined()
+    expect(equipes?.isFolder).toBe(true)
+    expect(equipes?.path).toBeNull()
+    expect(equipes?.folderPath).toBe('Equipes')
+    expect(equipes?.children).toHaveLength(2)
   })
 
   it('nests folders recursively', () => {
     const tree = buildTree(pages)
-    const faccoes = tree.find(n => n.name === 'Facções')
-    expect(faccoes?.isFolder).toBe(true)
-    expect(faccoes?.folderPath).toBe('Facções')
-    const cavaleiros = faccoes?.children.find(n => n.name === 'Cavaleiros')
-    expect(cavaleiros?.isFolder).toBe(true)
-    expect(cavaleiros?.folderPath).toBe('Facções/Cavaleiros')
-    expect(cavaleiros?.children[0].name).toBe('Ordem')
-    expect(cavaleiros?.children[0].path).toBe('Facções/Cavaleiros/Ordem')
-    expect(cavaleiros?.children[0].folderPath).toBeNull()
+    const selecoes = tree.find(n => n.name === 'Seleções')
+    expect(selecoes?.isFolder).toBe(true)
+    expect(selecoes?.folderPath).toBe('Seleções')
+    const subpasta = selecoes?.children.find(n => n.name === 'Subpasta')
+    expect(subpasta?.isFolder).toBe(true)
+    expect(subpasta?.folderPath).toBe('Seleções/Subpasta')
+    expect(subpasta?.children[0].name).toBe('Ágata')
+    expect(subpasta?.children[0].path).toBe('Seleções/Subpasta/Ágata')
+    expect(subpasta?.children[0].folderPath).toBeNull()
   })
 
   it('sorts folders before files, then alphabetically', () => {
@@ -52,27 +52,27 @@ describe('buildTree', () => {
 describe('buildTree folder notes', () => {
   it('absorbs a same-name child into its folder as the folder page', () => {
     const tree = buildTree([
-      { path: 'Império/Império', title: 'Império', file: 'Império', tags: ['nation'] },
-      { path: 'Império/Cidade', title: 'Cidade', file: 'Cidade', tags: [] },
+      { path: 'Ômega/Ômega', title: 'Ômega', file: 'Ômega', tags: ['tag-b'] },
+      { path: 'Ômega/Gama', title: 'Gama', file: 'Gama', tags: [] },
     ])
-    const folder = tree.find(n => n.name === 'Império')
+    const folder = tree.find(n => n.name === 'Ômega')
     expect(folder).toBeDefined()
     expect(folder?.isFolder).toBe(true)
-    expect(folder?.folderPath).toBe('Império')
+    expect(folder?.folderPath).toBe('Ômega')
     // The folder now points at the folder-note page.
-    expect(folder?.path).toBe('Império/Império')
+    expect(folder?.path).toBe('Ômega/Ômega')
     // The same-name child was removed; only siblings remain.
     expect(folder?.children).toHaveLength(1)
-    expect(folder?.children[0].name).toBe('Cidade')
-    expect(folder?.children.find(c => c.name === 'Império')).toBeUndefined()
+    expect(folder?.children[0].name).toBe('Gama')
+    expect(folder?.children.find(c => c.name === 'Ômega')).toBeUndefined()
   })
 
   it('leaves a folder without a same-name child unchanged', () => {
     const tree = buildTree([
-      { path: 'Personagens/Aldor', title: 'Aldor', file: 'Aldor', tags: [] },
-      { path: 'Personagens/Ragnar', title: 'Ragnar', file: 'Ragnar', tags: [] },
+      { path: 'Equipes/Charlie', title: 'Charlie', file: 'Charlie', tags: [] },
+      { path: 'Equipes/Delta', title: 'Delta', file: 'Delta', tags: [] },
     ])
-    const folder = tree.find(n => n.name === 'Personagens')
+    const folder = tree.find(n => n.name === 'Equipes')
     expect(folder?.isFolder).toBe(true)
     expect(folder?.path).toBeNull()
     expect(folder?.children).toHaveLength(2)
@@ -97,61 +97,61 @@ describe('buildTree folder notes', () => {
 
   it('absorbs a sibling note sitting next to the folder', () => {
     const tree = buildTree([
-      { path: 'Personalidades/Nações', title: 'Nações', file: 'Nações', tags: ['nation'] },
-      { path: 'Personalidades/Nações/Império', title: 'Império', file: 'Império', tags: [] },
+      { path: 'Equipes/Canções', title: 'Canções', file: 'Canções', tags: ['tag-b'] },
+      { path: 'Equipes/Canções/Ômega', title: 'Ômega', file: 'Ômega', tags: [] },
     ])
-    const parent = tree.find(n => n.name === 'Personalidades')
+    const parent = tree.find(n => n.name === 'Equipes')
     expect(parent?.isFolder).toBe(true)
-    const nacoes = parent?.children.find(n => n.name === 'Nações')
+    const cancoes = parent?.children.find(n => n.name === 'Canções')
     // The folder absorbed its sibling note as the folder page.
-    expect(nacoes?.isFolder).toBe(true)
-    expect(nacoes?.folderPath).toBe('Personalidades/Nações')
-    expect(nacoes?.path).toBe('Personalidades/Nações')
-    // The sibling file was removed; only the folder node named "Nações" remains.
-    const namedNacoes = parent?.children.filter(n => n.name === 'Nações')
-    expect(namedNacoes).toHaveLength(1)
-    expect(parent?.children.find(c => c.name === 'Nações' && !c.isFolder)).toBeUndefined()
+    expect(cancoes?.isFolder).toBe(true)
+    expect(cancoes?.folderPath).toBe('Equipes/Canções')
+    expect(cancoes?.path).toBe('Equipes/Canções')
+    // The sibling file was removed; only the folder node named "Canções" remains.
+    const namedCancoes = parent?.children.filter(n => n.name === 'Canções')
+    expect(namedCancoes).toHaveLength(1)
+    expect(parent?.children.find(c => c.name === 'Canções' && !c.isFolder)).toBeUndefined()
     // Folder's own contents are preserved.
-    expect(nacoes?.children).toHaveLength(1)
-    expect(nacoes?.children[0].name).toBe('Império')
+    expect(cancoes?.children).toHaveLength(1)
+    expect(cancoes?.children[0].name).toBe('Ômega')
   })
 
   it('absorbs a sibling note at the root level', () => {
     const tree = buildTree([
-      { path: 'Nações', title: 'Nações', file: 'Nações', tags: [] },
-      { path: 'Nações/Império', title: 'Império', file: 'Império', tags: [] },
+      { path: 'Canções', title: 'Canções', file: 'Canções', tags: [] },
+      { path: 'Canções/Ômega', title: 'Ômega', file: 'Ômega', tags: [] },
     ])
-    const namedNacoes = tree.filter(n => n.name === 'Nações')
-    expect(namedNacoes).toHaveLength(1)
-    const nacoes = namedNacoes[0]
-    expect(nacoes.isFolder).toBe(true)
-    expect(nacoes.path).toBe('Nações')
-    expect(nacoes.folderPath).toBe('Nações')
-    expect(tree.find(n => n.name === 'Nações' && !n.isFolder)).toBeUndefined()
-    expect(nacoes.children).toHaveLength(1)
-    expect(nacoes.children[0].name).toBe('Império')
+    const namedCancoes = tree.filter(n => n.name === 'Canções')
+    expect(namedCancoes).toHaveLength(1)
+    const cancoes = namedCancoes[0]
+    expect(cancoes.isFolder).toBe(true)
+    expect(cancoes.path).toBe('Canções')
+    expect(cancoes.folderPath).toBe('Canções')
+    expect(tree.find(n => n.name === 'Canções' && !n.isFolder)).toBeUndefined()
+    expect(cancoes.children).toHaveLength(1)
+    expect(cancoes.children[0].name).toBe('Ômega')
   })
 
   it('prefers the inside note over a sibling note when both exist', () => {
     const tree = buildTree([
       // sibling note next to the folder
-      { path: 'Parent/Nações', title: 'Nações (sibling)', file: 'Nações', tags: [] },
+      { path: 'Parent/Canções', title: 'Canções (sibling)', file: 'Canções', tags: [] },
       // inside note within the folder
-      { path: 'Parent/Nações/Nações', title: 'Nações (inside)', file: 'Nações', tags: [] },
-      { path: 'Parent/Nações/Outro', title: 'Outro', file: 'Outro', tags: [] },
+      { path: 'Parent/Canções/Canções', title: 'Canções (inside)', file: 'Canções', tags: [] },
+      { path: 'Parent/Canções/Outro', title: 'Outro', file: 'Outro', tags: [] },
     ])
     const parent = tree.find(n => n.name === 'Parent')
-    const nacoesFolder = parent?.children.find(n => n.name === 'Nações' && n.isFolder)
+    const cancoesFolder = parent?.children.find(n => n.name === 'Canções' && n.isFolder)
     // Inside note wins.
-    expect(nacoesFolder?.path).toBe('Parent/Nações/Nações')
-    expect(nacoesFolder?.children).toHaveLength(1)
-    expect(nacoesFolder?.children[0].name).toBe('Outro')
+    expect(cancoesFolder?.path).toBe('Parent/Canções/Canções')
+    expect(cancoesFolder?.children).toHaveLength(1)
+    expect(cancoesFolder?.children[0].name).toBe('Outro')
     // Sibling file is left alone as a normal child of the parent. Its display
     // name is the title (which differs from the filename/folder name).
-    const siblingFile = parent?.children.find(n => !n.isFolder && n.path === 'Parent/Nações')
+    const siblingFile = parent?.children.find(n => !n.isFolder && n.path === 'Parent/Canções')
     expect(siblingFile).toBeDefined()
-    expect(siblingFile?.name).toBe('Nações (sibling)')
-    // Parent therefore has two children: the "Nações" folder and the sibling file.
+    expect(siblingFile?.name).toBe('Canções (sibling)')
+    // Parent therefore has two children: the "Canções" folder and the sibling file.
     expect(parent?.children).toHaveLength(2)
   })
 
@@ -175,28 +175,28 @@ describe('buildTree folder notes', () => {
 
   it('uses the display title as the leaf name even when it differs from the path basename', () => {
     const tree = buildTree([
-      { path: 'Personagens/00_Index', title: 'Minha Coleção', file: '00_Index', tags: [] },
+      { path: 'Equipes/Home', title: 'Minha Coleção', file: 'Home', tags: [] },
     ])
-    const folder = tree.find(n => n.name === 'Personagens')
+    const folder = tree.find(n => n.name === 'Equipes')
     expect(folder?.isFolder).toBe(true)
     const leaf = folder?.children[0]
     // Leaf name reflects the resolved display title, not the filename.
     expect(leaf?.name).toBe('Minha Coleção')
-    expect(leaf?.path).toBe('Personagens/00_Index')
+    expect(leaf?.path).toBe('Equipes/Home')
   })
 
   it('absorbs a folder note matched by path basename even when its title differs', () => {
     const tree = buildTree([
       // Inside note: filename equals folder name, but display title differs.
-      { path: 'Império/Império', title: 'O Grande Império', file: 'Império', tags: ['nation'] },
-      { path: 'Império/Cidade', title: 'Cidade', file: 'Cidade', tags: [] },
+      { path: 'Ômega/Ômega', title: 'O Grande Ômega', file: 'Ômega', tags: ['tag-b'] },
+      { path: 'Ômega/Gama', title: 'Gama', file: 'Gama', tags: [] },
     ])
-    const folder = tree.find(n => n.name === 'Império')
+    const folder = tree.find(n => n.name === 'Ômega')
     expect(folder?.isFolder).toBe(true)
     // Absorbed despite the differing display title.
-    expect(folder?.path).toBe('Império/Império')
+    expect(folder?.path).toBe('Ômega/Ômega')
     expect(folder?.children).toHaveLength(1)
-    expect(folder?.children[0].name).toBe('Cidade')
+    expect(folder?.children[0].name).toBe('Gama')
   })
 })
 
@@ -214,11 +214,11 @@ describe('countTreeFolders', () => {
   })
 
   it('conta a pasta comum e a aninhada', () => {
-    expect(count(['Alpha', 'Personagens/Aldor', 'Personagens/Ragnar', 'Facções/Cavaleiros/Ordem'])).toBe(3)
+    expect(count(['Alpha', 'Equipes/Charlie', 'Equipes/Delta', 'Seleções/Subpasta/Ágata'])).toBe(3)
   })
 
   it('a nota de pasta dentro não vira pasta extra', () => {
-    expect(count(['Império/Império', 'Império/Cidade'])).toBe(1)
+    expect(count(['Ômega/Ômega', 'Ômega/Gama'])).toBe(1)
   })
 
   it('a pasta que só tem a nota de pasta dentro continua contando', () => {
@@ -226,11 +226,11 @@ describe('countTreeFolders', () => {
   })
 
   it('a nota de pasta irmã é absorvida: a pasta conta uma vez só', () => {
-    expect(count(['Nações', 'Nações/Brasil'])).toBe(1)
+    expect(count(['Canções', 'Canções/Ágata'])).toBe(1)
   })
 
   it('as duas convenções na mesma pasta contam uma vez só', () => {
-    expect(count(['Reino/Reino', 'Reino', 'Reino/Vila'])).toBe(1)
+    expect(count(['Cartões/Cartões', 'Cartões', 'Cartões/Gama'])).toBe(1)
   })
 
   it('nota de pasta aninhada: cada nível conta uma vez', () => {
@@ -238,7 +238,7 @@ describe('countTreeFolders', () => {
   })
 
   it('não muda a árvore', () => {
-    const tree = buildTree(['Nações', 'Nações/Brasil', 'A/B/C'].map(pg))
+    const tree = buildTree(['Canções', 'Canções/Ágata', 'A/B/C'].map(pg))
     const before = JSON.stringify(tree)
     countTreeFolders(tree)
     expect(JSON.stringify(tree)).toBe(before)

@@ -28,7 +28,7 @@ export class LinkResolver {
         this.titleToPath.set(key, f.relativePath)
       }
       // Indexa também pelo caminho relativo completo, para wikilinks que incluem
-      // a pasta (ex.: [[02_Will/Saude Pratica e Rotina|alias]]).
+      // a pasta (ex.: [[Pasta A/Nota Exemplo|alias]]).
       this.pathToPath.set(f.relativePath.toLowerCase(), f.relativePath)
     }
   }

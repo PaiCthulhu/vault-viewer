@@ -3,7 +3,7 @@ import { pageCssClasses } from '@/lib/css-classes'
 
 describe('pageCssClasses', () => {
   it('lê a lista do frontmatter', () => {
-    expect(pageCssClasses({ cssclasses: ['codex-wide', 'wide-page'] })).toEqual(['codex-wide', 'wide-page'])
+    expect(pageCssClasses({ cssclasses: ['exemplo-largo', 'wide-page'] })).toEqual(['exemplo-largo', 'wide-page'])
   })
 
   it('aceita string, separada por espaço ou vírgula, como o Obsidian', () => {

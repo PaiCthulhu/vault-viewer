@@ -340,6 +340,12 @@ describe('toPageProperty: imagens, links e URLs (casos antigos)', () => {
     expect(p.locked).toBe('image')
   })
 
+  it('# e ? no nome da imagem saem codificados no src (senão viram fragmento e query)', () => {
+    expect(one('photo', 'assets/a#b?c.png').html).toBe(
+      '<img class="vault-prop-thumb" src="/vault-assets/my-vault/assets/a%23b%3Fc.png" alt="" />',
+    )
+  })
+
   it('wikilink de imagem usa o caminho antes do alias', () => {
     const { ctx, images } = makeCtx()
     const p = toPageProperty('photo', '[[img/x.png|caption]]', ctx)

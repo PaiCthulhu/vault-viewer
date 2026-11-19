@@ -8,14 +8,14 @@ const wrap = async (md: string) => `<p>${md.trim()}</p>`
 
 describe('renderCallouts', () => {
   it('converte um callout básico em div.vault-callout', async () => {
-    const md = `> [!note]+ Runas de Animancia
-> Em seu braço direito fica suas runas.`
+    const md = `> [!note]+ Título do Callout
+> Corpo do callout com texto.`
     const result = await renderCallouts(md, wrap)
     expect(result).toContain('class="vault-callout"')
     expect(result).toContain('data-callout="note"')
-    expect(result).toContain('Runas de Animancia')
+    expect(result).toContain('Título do Callout')
     expect(result).toContain('class="vault-callout-content"')
-    expect(result).toContain('Em seu braço direito')
+    expect(result).toContain('Corpo do callout')
   })
 
   it('usa o tipo capitalizado quando não há título', async () => {
@@ -52,10 +52,10 @@ describe('renderCallouts', () => {
   })
 
   it('título com ## vira <h2 class="vault-callout-heading">', async () => {
-    const md = `> [!note]+ ## Gestalt
+    const md = `> [!note]+ ## Seção X
 > Conteúdo.`
     const result = await renderCallouts(md, wrap)
-    expect(result).toContain('<h2 class="vault-callout-heading">Gestalt</h2>')
+    expect(result).toContain('<h2 class="vault-callout-heading">Seção X</h2>')
   })
 
   it('inclui linha de continuação lazy no conteúdo', async () => {
@@ -85,13 +85,13 @@ linha de continuação lazy sem prefixo.
   })
 
   it('continuação lazy NÃO engole uma cerca de código que inicia um bloco', async () => {
-    // Caso real (Elsiva): um callout dentro de uma coluna é seguido pela cerca
+    // Caso real (uma ficha em colunas): um callout dentro de uma coluna é seguido pela cerca
     // ``` que fecha o col-md. A linha da cerca vem logo após uma linha `>`, mas
     // como inicia um novo bloco ela deve ENCERRAR o callout, não ser engolida.
     const md = [
       '> [!note] 📌',
       '> **Info**',
-      '> **Languages** Common, Elven',
+      '> **Campo** Valor Um, Valor Dois',
       '```',
     ].join('\n')
     const result = await renderCallouts(md, wrap)
@@ -99,7 +99,7 @@ linha de continuação lazy sem prefixo.
     // A cerca permanece como linha de markdown fora do callout.
     expect(result).toContain('```')
     // Não foi absorvida no conteúdo do callout.
-    expect(result).not.toContain('Languages</p>\n```')
+    expect(result).not.toContain('Campo</p>\n```')
   })
 
   it('continuação lazy para em heading e em linha em branco', async () => {
@@ -120,16 +120,16 @@ linha de continuação lazy sem prefixo.
     const md = [
       '> [!note] T',
       '> corpo',
-      '# Demografia',
+      '# Parte Dois',
     ].join('\n')
     const result = await renderCallouts(md, wrap)
     expect(result).toContain('class="vault-callout"')
     // Linha em branco entre o HTML do callout e o heading.
-    expect(result).toMatch(/<\/div>\n\n# Demografia/)
+    expect(result).toMatch(/<\/div>\n\n# Parte Dois/)
     const html = await renderMarkdown(result)
     expect(html).toContain('<h1')
-    expect(html).toContain('Demografia')
-    expect(html).not.toContain('# Demografia')
+    expect(html).toContain('Parte Dois')
+    expect(html).not.toContain('# Parte Dois')
   })
 
   it('nesting (i): callout dentro de col-md — columns extrai primeiro, depois callouts', async () => {
@@ -146,7 +146,7 @@ linha de continuação lazy sem prefixo.
       '===',
       '> [!note] 📌',
       '> **Info**',
-      '> **Languages** Common',
+      '> **Campo** Valor Um',
       '```',
       '```col-md',
       'flexGrow=1',
@@ -166,7 +166,7 @@ linha de continuação lazy sem prefixo.
   })
 
   it('não processa callouts dentro de cercas de código', async () => {
-    // Caso real (Crônicas de Wilfred Triskian): a sintaxe de callout documentada
+    // Caso real (uma nota que documenta a sintaxe): a sintaxe de callout documentada
     // dentro de uma cerca ``` deve permanecer literal, não virar vault-callout.
     const md = [
       '```',
@@ -181,13 +181,13 @@ linha de continuação lazy sem prefixo.
   })
 
   it('callout aninhado em blockquote comum vira vault-blockquote com details', async () => {
-    // Caso real (Aldor/Ficha): blockquote comum cujo conteúdo interno tem um
+    // Caso real (a ficha de uma nota): blockquote comum cujo conteúdo interno tem um
     // callout mais profundo. Sem [!type] em depth 1, antes virava literal.
     const renderInner = async (md: string) => renderCallouts(md, wrap)
     const md = [
       '> some plain quote content',
-      '> > [!note]+ **Reação**',
-      '> > - **Martial Counterspell (Su)** → ...',
+      '> > [!note]+ **Bloco**',
+      '> > - **Habilidade Exemplo (Su)** → ...',
     ].join('\n')
     const result = await renderCallouts(md, renderInner)
     expect(result).toContain('<blockquote class="vault-blockquote">')

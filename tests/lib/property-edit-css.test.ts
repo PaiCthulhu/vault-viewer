@@ -28,16 +28,29 @@ const rules = (body: string): Array<[string, string]> =>
   [...body.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(m => [m[1].trim().replace(/\s+/g, ' '), m[2].trim()])
 
 describe('valor editável no toque', () => {
-  // Sem hover nada diria que o valor abre um editor. O tracejado é só do `.vault-prop-editable`,
-  // que só existe para quem edita: o leitor não vê nada.
-  it('em (hover: none), tracejado embaixo só no .vault-prop-editable, com a cor de borda do bloco', () => {
+  // Sem hover nada diria que o valor abre um editor. O lápis à direita é só do
+  // `.vault-prop-editable`, que só existe para quem edita: o leitor não vê nada.
+  it('em (hover: none), lápis à direita só no .vault-prop-editable, na cor apagada do tema, sem tracejado', () => {
     const bodies = mediaBodies('(hover: none)')
     expect(bodies).toHaveLength(1)
-    const found = rules(bodies[0])
-    expect(found).toHaveLength(1)
-    const [selector, decls] = found[0]
-    expect(selector).toBe('.vault-properties .vault-prop-editable')
-    expect(decls).toContain('border-bottom: 1px dashed var(--border)')
+    const found = new Map(rules(bodies[0]))
+    expect([...found.keys()].sort()).toEqual([
+      '.vault-properties .vault-prop-editable',
+      '.vault-properties .vault-prop-editable::after',
+    ])
+    // O valor abre espaço à direita para o ícone não cobrir o texto.
+    const box = found.get('.vault-properties .vault-prop-editable')!
+    expect(box).toContain('position: relative')
+    expect(box).toMatch(/padding-right: /)
+    const icon = found.get('.vault-properties .vault-prop-editable::after')!
+    expect(icon).toContain("content: ''")
+    expect(icon).toContain('position: absolute')
+    expect(icon).toMatch(/-webkit-mask: url\("data:image\/svg\+xml,/)
+    expect(icon).toMatch(/(^|[;\s])mask: url\("data:image\/svg\+xml,/)
+    expect(icon).toContain('background-color: var(--text-muted)')
+    // O toque passa para o valor: o ícone não é alvo.
+    expect(icon).toContain('pointer-events: none')
+    expect(bodies[0]).not.toContain('dashed')
   })
 
   it('a borda do bloco é a mesma variável', () => {

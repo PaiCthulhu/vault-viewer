@@ -78,7 +78,8 @@ export function imageTarget(value: string): string | null {
 function thumbnail(p: string, ctx: PropertyRenderContext): string {
   let src: string
   try {
-    src = encodeURI(ctx.resolveImage(p))
+    // `#` e `?` também: o `encodeURI` os deixa, e no src eles viram fragmento e query.
+    src = encodeURI(ctx.resolveImage(p)).replace(/[#?]/g, c => (c === '#' ? '%23' : '%3F'))
   } catch {
     // Um surrogate solto no caminho faz o encodeURI lançar URIError: sem isso, uma
     // propriedade derrubaria o build do vault inteiro. Fica o caminho como texto.

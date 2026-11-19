@@ -516,7 +516,7 @@ export function ContentPanel({ segments: incoming, css, articleClass, slug, page
       if (set.size === 0) continue
       const having = cardsHavingKey.get(key) ?? 0
       // Drop identifier-like fields: high unique-value count relative to the
-      // number of cards that have the key (e.g. Líder, Localização, Integrantes).
+      // number of cards that have the key (e.g. a name, a place or a member list).
       if (set.size >= Math.max(8, 0.7 * having)) continue
       // Drop keys where every card has the same single value (useless).
       if (set.size === 1) {

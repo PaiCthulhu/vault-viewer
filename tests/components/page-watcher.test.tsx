@@ -15,7 +15,7 @@ function respond(version: string) {
   return vi.fn(async () => ({ ok: true, json: async () => ({ version, building: false }) }))
 }
 
-const el = (version: string, pagePath = 'Jogos/Foo') =>
+const el = (version: string, pagePath = 'Pasta/Foo') =>
   React.createElement(PageWatcher, { slug: 'v', pagePath, version })
 
 describe('PageWatcher', () => {
@@ -34,7 +34,7 @@ describe('PageWatcher', () => {
   it('consulta a rota com o caminho codificado', async () => {
     const fetchMock = respond('v1')
     vi.stubGlobal('fetch', fetchMock)
-    const p = 'Views/Atualização Pendente #1 %'
+    const p = 'Pasta/Nota Exemplificação #1 %'
     render(el('v1', p))
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]

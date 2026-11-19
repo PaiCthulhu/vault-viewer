@@ -23,7 +23,7 @@ function respond(states: string[]) {
 }
 
 const el = (mode: 'generating' | 'updating') =>
-  React.createElement(PageStatusNotice, { slug: 'v', pagePath: 'Jogos/Fóo bar', mode })
+  React.createElement(PageStatusNotice, { slug: 'v', pagePath: 'Pasta/Fóo bar', mode })
 
 describe('PageStatusNotice', () => {
   beforeEach(() => {
@@ -46,7 +46,7 @@ describe('PageStatusNotice', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
     const url = String((fetchMock.mock.calls[0] as unknown[])[0])
     expect(url).toContain('/api/vault/v/page-status?path=')
-    expect(url).toContain(encodeURIComponent('Jogos/Fóo bar'))
+    expect(url).toContain(encodeURIComponent('Pasta/Fóo bar'))
   })
 
   it('generating mostra giveUp depois de 5 min', async () => {

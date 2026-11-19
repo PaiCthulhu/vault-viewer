@@ -233,7 +233,7 @@ export const ptBR: Record<string, string> = {
   'admin.vaultDetail.path': 'Caminho',
   'admin.vaultDetail.pathHelp': 'Caminho absoluto da pasta do vault no servidor.',
   'admin.vaultDetail.home': 'Página inicial',
-  'admin.vaultDetail.homeHelp': 'Nome do arquivo (ou título) da home. Ex.: 00_Index',
+  'admin.vaultDetail.homeHelp': 'Nome do arquivo (ou título) da home. Ex.: Home',
   'admin.vaultDetail.description': 'Descrição',
   'admin.vaultDetail.cover': 'Imagem de capa',
   'admin.vaultDetail.coverHelp': 'Caminho relativo da imagem dentro do vault (ou vazio).',

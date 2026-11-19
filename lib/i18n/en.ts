@@ -234,7 +234,7 @@ export const en: Record<string, string> = {
   'admin.vaultDetail.path': 'Path',
   'admin.vaultDetail.pathHelp': 'Absolute path to the vault folder on the server.',
   'admin.vaultDetail.home': 'Home page',
-  'admin.vaultDetail.homeHelp': 'Filename (or title) of the home page. E.g.: 00_Index',
+  'admin.vaultDetail.homeHelp': 'Filename (or title) of the home page. E.g.: Home',
   'admin.vaultDetail.description': 'Description',
   'admin.vaultDetail.cover': 'Cover image',
   'admin.vaultDetail.coverHelp': 'Relative path to the image inside the vault (or empty).',

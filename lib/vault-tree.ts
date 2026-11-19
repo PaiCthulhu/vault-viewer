@@ -68,9 +68,9 @@ export function countTreeFolders(nodes: TreeNode[]): number {
 
 // Notion-style folder notes, two conventions:
 //   1. INSIDE  — a folder contains a direct child file whose name equals the
-//      folder's own name (e.g. `Império/Império.md`).
+//      folder's own name (e.g. `Alfa/Alfa.md`).
 //   2. SIBLING — a file sits NEXT TO the folder in the same directory, sharing
-//      its name (e.g. `Personalidades/Nações.md` next to `Personalidades/Nações/`).
+//      its name (e.g. `Notas/Sigma.md` next to `Notas/Sigma/`).
 // In both cases that page becomes the folder's page (the folder stays a folder)
 // and the file node is removed from the listing.
 //

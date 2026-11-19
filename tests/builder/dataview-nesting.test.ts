@@ -26,8 +26,8 @@ function makePage(overrides: Partial<PageMeta> & { path: string; title: string }
 }
 
 const stubs: PageMeta[] = [
-  makePage({ path: 'Nacoes/Ksarshantallas', title: 'Ksarshantallas', frontmatter: { Tags: ['Nação'] }, tags: ['Nação'] }),
-  makePage({ path: 'Nacoes/Outra', title: 'Outra', frontmatter: { Tags: ['Nação'] }, tags: ['Nação'] }),
+  makePage({ path: 'Ensaios/Omicron', title: 'Omicron', frontmatter: { Tags: ['Ícone'] }, tags: ['Ícone'] }),
+  makePage({ path: 'Ensaios/Outra', title: 'Outra', frontmatter: { Tags: ['Ícone'] }, tags: ['Ícone'] }),
 ]
 const current = stubs[0]
 const noopResolve = (p: string) => p
@@ -59,7 +59,7 @@ describe('dataview aninhado (fix do pipeline)', () => {
     const md = [
       '> [!info]+ Páginas relacionadas',
       '> ```dataview',
-      '> TABLE Tags FROM "Nacoes"',
+      '> TABLE Tags FROM "Ensaios"',
       '> ```',
     ].join('\n')
     const html = await renderBody(md)
@@ -80,7 +80,7 @@ describe('dataview aninhado (fix do pipeline)', () => {
       'flexGrow=1',
       '===',
       '```dataview',
-      'TABLE Tags FROM "Nacoes"',
+      'TABLE Tags FROM "Ensaios"',
       '```',
       '```',
       '````',
@@ -94,7 +94,7 @@ describe('dataview aninhado (fix do pipeline)', () => {
   it('dataview de topo continua renderizando (sem regressão)', async () => {
     const css: string[] = []
     const renderBody = makeRenderBody(css)
-    const md = ['```dataview', 'TABLE Tags FROM "Nacoes"', '```'].join('\n')
+    const md = ['```dataview', 'TABLE Tags FROM "Ensaios"', '```'].join('\n')
     const html = await renderBody(md)
     expect(html).toContain('class="dataview-result"')
     expect(html).not.toContain('TABLE Tags FROM')

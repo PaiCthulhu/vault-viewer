@@ -37,11 +37,11 @@ describe('parentRef', () => {
 
 describe('noteFamilyFields', () => {
   it('lê os quatro campos', () => {
-    expect(noteFamilyFields({ note_type: 'tab', parent: '[[A]]', order: 2, tab_label: ' Jogando ' })).toEqual({
+    expect(noteFamilyFields({ note_type: 'tab', parent: '[[A]]', order: 2, tab_label: ' Panorama ' })).toEqual({
       noteType: 'tab',
       parent: 'A',
       order: 2,
-      tabLabel: 'Jogando',
+      tabLabel: 'Panorama',
     })
   })
 
@@ -64,29 +64,29 @@ describe('noteFamilyFields', () => {
 })
 
 describe('resolveFamilies — abas', () => {
-  const mae = note('Visões/Visões', { tab_label: 'Jogando' })
+  const mae = note('Ômega/Ômega', { tab_label: 'Panorama' })
   const notes = [
     mae,
-    tab('Visões/Zerados', '[[Visões/Visões]]', { order: 2 }),
-    tab('Visões/Lista', '[[Visões/Visões]]', { order: 1 }),
-    tab('Visões/Arquivo', '[[Visões/Visões]]'),
+    tab('Ômega/Sumário', '[[Ômega/Ômega]]', { order: 2 }),
+    tab('Ômega/Lista', '[[Ômega/Ômega]]', { order: 1 }),
+    tab('Ômega/Arquivo', '[[Ômega/Ômega]]'),
     note('Outra'),
   ]
 
   it('mãe primeiro (tab_label), depois order crescente, sem order no fim', () => {
     const f = resolveFamilies(notes)
-    expect(f.tabsOf.get('Visões/Visões')).toEqual([
-      { path: 'Visões/Visões', label: 'Jogando' },
-      { path: 'Visões/Lista', label: 'Lista' },
-      { path: 'Visões/Zerados', label: 'Zerados' },
-      { path: 'Visões/Arquivo', label: 'Arquivo' },
+    expect(f.tabsOf.get('Ômega/Ômega')).toEqual([
+      { path: 'Ômega/Ômega', label: 'Panorama' },
+      { path: 'Ômega/Lista', label: 'Lista' },
+      { path: 'Ômega/Sumário', label: 'Sumário' },
+      { path: 'Ômega/Arquivo', label: 'Arquivo' },
     ])
   })
 
   it('cada aba recebe a mesma lista da mãe', () => {
     const f = resolveFamilies(notes)
-    const lista = f.tabsOf.get('Visões/Visões')
-    for (const p of ['Visões/Lista', 'Visões/Zerados', 'Visões/Arquivo']) {
+    const lista = f.tabsOf.get('Ômega/Ômega')
+    for (const p of ['Ômega/Lista', 'Ômega/Sumário', 'Ômega/Arquivo']) {
       expect(f.tabsOf.get(p)).toEqual(lista)
     }
     expect(f.tabsOf.has('Outra')).toBe(false)
@@ -94,7 +94,7 @@ describe('resolveFamilies — abas', () => {
 
   it('abas escondidas, sem página só para comentário', () => {
     const f = resolveFamilies(notes)
-    expect([...f.hidden].sort()).toEqual(['Visões/Arquivo', 'Visões/Lista', 'Visões/Zerados'])
+    expect([...f.hidden].sort()).toEqual(['Ômega/Arquivo', 'Ômega/Lista', 'Ômega/Sumário'])
     expect(f.noPage.size).toBe(0)
   })
 

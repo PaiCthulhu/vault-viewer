@@ -35,7 +35,7 @@ describe('selectFirstPages', () => {
   })
 
   it('explícito sem diferenciar caixa e desconhecido ignorado', () => {
-    expect(selectFirstPages(['jogos/foo', 'nada'], [{ path: 'Jogos/Foo', t: 1 }], null)).toEqual(['Jogos/Foo'])
+    expect(selectFirstPages(['pasta/foo', 'nada'], [{ path: 'Pasta/Foo', t: 1 }], null)).toEqual(['Pasta/Foo'])
   })
 })
 
